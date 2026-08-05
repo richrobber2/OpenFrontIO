@@ -16,6 +16,7 @@ import type { RenderSettings } from "../RenderSettings";
 import { getPaletteSize } from "../utils/ColorUtils";
 import { createMapQuad, createProgram, shaderSrc } from "../utils/GlUtils";
 import { FALLOUT_BIT, OWNER_MASK, TILE_DEFINES } from "../utils/TileCodec";
+import { TileDripQueue } from "../utils/TileDripQueue";
 
 import overlayVertSrc from "../shaders/map-overlay/overlay.vert.glsl?raw";
 import territoryFragSrc from "../shaders/map-overlay/territory.frag.glsl?raw";
@@ -93,17 +94,13 @@ export class TerritoryPass {
     | null = null;
 
   /**
-   * Drip buckets — round-robin staggering of tile updates across render frames.
-   * Each incoming change is hashed by tile ref to a fixed bucket (stable hash
-   * preserves per-tile ordering across ticks). One bucket drains per render
-   * frame, giving a ~bucketCount-frame buffer that smooths over network jitter.
-   *
-   * Each bucket is a flat number[] with interleaved [ref, state, ref, state, …]
-   * pairs — avoids per-tile object allocation on the hot push path.
+   * Round-robin queue of unique pending tile refs. Repeated updates to the same
+   * tile are coalesced until its bucket drains, then the latest value is read
+   * from liveTileState. This prevents MAX-speed simulation from building an
+   * ever-growing duplicate [ref, state] backlog when rendering falls behind.
    */
-  private readonly nBuckets: number;
-  private dripBuckets: number[][] = [];
-  private currentBucket = 0;
+  private readonly dripQueue: TileDripQueue;
+  private liveTileState: Uint16Array | null = null;
 
   constructor(
     gl: WebGL2RenderingContext,
@@ -131,8 +128,10 @@ export class TerritoryPass {
     this.skinAnchorTex = skinAnchorTex;
     this.cpuTileState = new Uint16Array(mapW * mapH);
 
-    this.nBuckets = Math.max(1, settings.tileDrip.bucketCount | 0);
-    for (let i = 0; i < this.nBuckets; i++) this.dripBuckets.push([]);
+    this.dripQueue = new TileDripQueue(
+      mapW * mapH,
+      settings.tileDrip.bucketCount,
+    );
 
     this.program = createProgram(
       gl,
@@ -203,6 +202,7 @@ export class TerritoryPass {
 
   /** Live-game path: snapshot the initial tile state and clear pending drip. */
   setLiveRef(tileState: Uint16Array): void {
+    this.liveTileState = tileState;
     this.cpuTileState.set(tileState);
     this.clearDripBuckets();
     this.scatter.clear();
@@ -224,95 +224,59 @@ export class TerritoryPass {
   }
 
   /**
-   * Live delta: dispatch each changed tile into a round-robin drip bucket.
-   * Stable per-ref hash means repeated updates to the same tile stay in
-   * arrival order in the same bucket — last write wins when drained.
+   * Queue changed refs for staggered upload. A ref appears at most once while
+   * pending; the latest state stays in the long-lived simulation buffer.
    */
   applyLiveDelta(
     tileState: Uint16Array,
     changedTiles: readonly number[],
   ): void {
-    const N = this.nBuckets;
-    const buckets = this.dripBuckets;
+    this.liveTileState = tileState;
     for (let i = 0; i < changedTiles.length; i++) {
-      const ref = changedTiles[i];
-      const b = ((ref * 2654435761) >>> 0) % N;
-      buckets[b].push(ref, tileState[ref]);
+      this.dripQueue.enqueue(changedTiles[i]);
+    }
+  }
+
+  private applyQueuedTile(ref: number): void {
+    const live = this.liveTileState;
+    if (live === null) return;
+
+    const state = live[ref];
+    const prev = this.cpuTileState[ref];
+    if (state === prev) return;
+    if (((prev ^ state) & FALLOUT_BIT) !== 0) {
+      this.falloutTouched = true;
+    }
+    this.cpuTileState[ref] = state;
+    if (this.fullUploadPending) return;
+
+    const x = ref % this.mapW;
+    const y = (ref - x) / this.mapW;
+    this.scatter.push(x, y, state);
+    const prevOwner = prev & OWNER_MASK;
+    const newOwner = state & OWNER_MASK;
+    if (prevOwner !== newOwner) {
+      this.borderPatchConsumer?.(x, y, prevOwner, newOwner);
     }
   }
 
   /** Drain one drip bucket into cpuTileState. Called once per render frame. */
   drainDripBucket(): void {
-    const bucket = this.dripBuckets[this.currentBucket];
-    if (bucket.length > 0) {
-      const ts = this.cpuTileState;
-      const w = this.mapW;
-      const pending = this.fullUploadPending;
-      const borderFn = this.borderPatchConsumer;
-      for (let i = 0; i < bucket.length; i += 2) {
-        const ref = bucket[i];
-        const state = bucket[i + 1];
-        const prev = ts[ref];
-        if (((prev ^ state) & FALLOUT_BIT) !== 0) {
-          this.falloutTouched = true;
-        }
-        ts[ref] = state;
-        if (!pending) {
-          const x = ref % w;
-          const y = (ref - x) / w;
-          this.scatter.push(x, y, state);
-          if (borderFn) {
-            borderFn(x, y, prev & OWNER_MASK, state & OWNER_MASK);
-          }
-        }
-      }
-      bucket.length = 0;
-      this.tilesDirty = true;
-    }
-    this.currentBucket = (this.currentBucket + 1) % this.nBuckets;
+    const count = this.dripQueue.drainNext((ref) => this.applyQueuedTile(ref));
+    if (count > 0) this.tilesDirty = true;
   }
 
   /**
    * Drain every drip bucket immediately. Used during spawn phase and after
-   * seek so tile state pops to current sim state without the 60Hz stagger.
+   * seek so tile state pops to current sim state without the stagger.
    */
   flushAllDripBuckets(): void {
-    let any = false;
-    const ts = this.cpuTileState;
-    const w = this.mapW;
-    const pending = this.fullUploadPending;
-    const borderFn = this.borderPatchConsumer;
-    for (let b = 0; b < this.nBuckets; b++) {
-      const bucket = this.dripBuckets[b];
-      if (bucket.length === 0) continue;
-      any = true;
-      for (let i = 0; i < bucket.length; i += 2) {
-        const ref = bucket[i];
-        const state = bucket[i + 1];
-        const prev = ts[ref];
-        if (((prev ^ state) & FALLOUT_BIT) !== 0) {
-          this.falloutTouched = true;
-        }
-        ts[ref] = state;
-        if (!pending) {
-          const x = ref % w;
-          const y = (ref - x) / w;
-          this.scatter.push(x, y, state);
-          if (borderFn) {
-            borderFn(x, y, prev & OWNER_MASK, state & OWNER_MASK);
-          }
-        }
-      }
-      bucket.length = 0;
-    }
-    if (any) {
-      this.tilesDirty = true;
-    }
+    const count = this.dripQueue.drainAll((ref) => this.applyQueuedTile(ref));
+    if (count > 0) this.tilesDirty = true;
   }
 
   private clearDripBuckets(): void {
-    for (let b = 0; b < this.nBuckets; b++) this.dripBuckets[b].length = 0;
-    this.currentBucket = 0;
+    this.dripQueue.clear();
   }
 
   // ---------------------------------------------------------------------------
