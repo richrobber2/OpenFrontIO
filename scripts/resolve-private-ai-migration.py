@@ -68,6 +68,19 @@ replace_once(
 ''',
 )
 
+replace_once(
+    "src/client/SinglePlayerModal.ts",
+    '''    const trainingUsername = enteredUsername
+      ? enteredUsername
+      : "Codex Trainer";
+''',
+    '''    const trainingUsername =
+      enteredUsername !== undefined && enteredUsername.length > 0
+        ? enteredUsername
+        : "Codex Trainer";
+''',
+)
+
 # Keep the larger mobile top-bar clearance without duplicating an HTML attribute.
 replace_once(
     "src/client/components/PlayPage.ts",
