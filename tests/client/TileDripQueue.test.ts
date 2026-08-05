@@ -17,6 +17,18 @@ describe("TileDripQueue", () => {
     expect(queue.size()).toBe(0);
   });
 
+  test("keeps a high-speed duplicate backlog bounded by unique tiles", () => {
+    const queue = new TileDripQueue(512, 8);
+
+    for (let update = 0; update < 100_000; update++) {
+      queue.enqueue(update % 128);
+    }
+
+    expect(queue.size()).toBe(128);
+    expect(queue.drainAll(() => undefined)).toBe(128);
+    expect(queue.size()).toBe(0);
+  });
+
   test("allows a tile to be queued again after its bucket drains", () => {
     const queue = new TileDripQueue(64, 1);
     const visit = vi.fn();
