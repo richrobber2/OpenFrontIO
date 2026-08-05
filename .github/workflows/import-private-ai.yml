@@ -12,7 +12,7 @@ jobs:
   import:
     runs-on: ubuntu-latest
     env:
-      MIGRATION_URL: "https://sdmntprwestus.oaiusercontent.com/files/00000000-c240-8230-ae23-60cb516f2380/raw?se=2026-08-05T17:04:54Z&sp=r&sv=2026-02-06&sr=b&scid=5e21f994-8ae5-5cc8-a461-e54029e9ca89&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-04T22:12:53Z&ske=2026-08-05T22:12:53Z&sks=b&skv=2026-02-06&sig=bNkjJF3N0aB0ctnRLCCGbv2n5pPv70ujLIcctdGIZvo%3D"
+      MIGRATION_URL: "https://sdmntprwestus3.oaiusercontent.com/files/00000000-f8b4-81fd-a9e1-c4a81504b0d6/raw?se=2026-08-05T17:07:57Z&sp=r&sv=2026-02-06&sr=b&scid=e8a5c19f-b90f-57c5-91a7-d5f712b13247&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-05T13:28:16Z&ske=2026-08-06T13:28:16Z&sks=b&skv=2026-02-06&sig=0Pn/0KFbwenmz08ZPUc%2B4/zpYTr8UgRQVBSbOZUoQMc%3D"
     steps:
       - name: Check out clean fork branch
         uses: actions/checkout@v4
@@ -31,9 +31,8 @@ jobs:
           mkdir -p /tmp/private-ai
           curl --fail --location --retry 3 "$MIGRATION_URL" -o /tmp/private-ai.zip
           unzip -q /tmp/private-ai.zip -d /tmp/private-ai
-          cd /tmp/private-ai
-          sha256sum -c SHA256SUMS
-          git bundle verify private-ai.bundle
+          (cd /tmp/private-ai && sha256sum -c SHA256SUMS)
+          git bundle verify /tmp/private-ai/private-ai.bundle
 
       - name: Apply complete custom delta with three-way merge
         run: |
