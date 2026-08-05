@@ -12,7 +12,7 @@ jobs:
   import:
     runs-on: ubuntu-latest
     env:
-      MIGRATION_URL: "https://sdmntprwestus3.oaiusercontent.com/files/00000000-6de0-81fd-a1a0-88510e1a6507/raw?se=2026-08-05T17:53:28Z&sp=r&sv=2026-02-06&sr=b&scid=62fa27da-07c3-561c-904a-9d7c0699c807&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-04T22:01:28Z&ske=2026-08-05T22:01:28Z&sks=b&skv=2026-02-06&sig=krjBLwlHAChh5Vfx%2B%2BlH0BlOZIbXYpHzlwOMNxVGMiU%3D"
+      MIGRATION_URL: "https://sdmntprwestus3.oaiusercontent.com/files/00000000-070c-81fd-9bb0-3dc95a34e593/raw?se=2026-08-05T17:59:22Z&sp=r&sv=2026-02-06&sr=b&scid=9a45283c-0b89-573e-b071-b8aa6411cec9&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-04T22:12:43Z&ske=2026-08-05T22:12:43Z&sks=b&skv=2026-02-06&sig=%2BRMd7U97sE5Q44bkoe/iy76kbvavi2KrpYApt0QZBgg%3D"
       BASE_COMMIT: "943740de3238c1ca9b8fda24609e74b65d7365a3"
     steps:
       - name: Check out clean fork branch
@@ -43,7 +43,6 @@ jobs:
         run: |
           set -euo pipefail
           git diff --binary "$BASE_COMMIT" legacy/private-main > /tmp/private-ai/full-private-ai.patch
-          echo "Official base: $BASE_COMMIT"
           echo "Complete migration patch size: $(wc -c < /tmp/private-ai/full-private-ai.patch) bytes"
           git diff --shortstat "$BASE_COMMIT" legacy/private-main
 
@@ -53,7 +52,6 @@ jobs:
         run: |
           set -euo pipefail
           git apply --3way --index --whitespace=nowarn /tmp/private-ai/full-private-ai.patch
-          echo "PATCH_APPLIED=true" >> "$GITHUB_ENV"
 
       - name: Resolve known upstream and private overlaps
         if: steps.apply.outcome == 'failure'
@@ -74,10 +72,7 @@ jobs:
 
           if [[ "$actual" != "$expected" ]]; then
             echo "Unexpected conflict set. Refusing an improvised merge."
-            echo "Expected:"
-            printf '%s\n' "$expected"
-            echo "Actual:"
-            printf '%s\n' "$actual"
+            printf 'Expected:\n%s\nActual:\n%s\n' "$expected" "$actual"
             exit 1
           fi
 
@@ -99,7 +94,6 @@ jobs:
 
           git checkout --ours -- .github/workflows/pr-stale.yml
           git add .github/workflows/pr-stale.yml
-
           resolve_union .gitignore
           resolve_union .husky/pre-commit
 
@@ -110,7 +104,7 @@ jobs:
           const upstream = JSON.parse(fs.readFileSync('/tmp/upstream-package.json', 'utf8'));
           const legacy = JSON.parse(fs.readFileSync('/tmp/private-package.json', 'utf8'));
           const result = { ...legacy, ...upstream };
-          const mergedSections = [
+          for (const section of [
             'scripts',
             'dependencies',
             'devDependencies',
@@ -119,8 +113,7 @@ jobs:
             'overrides',
             'engines',
             'lint-staged',
-          ];
-          for (const section of mergedSections) {
+          ]) {
             if (legacy[section] || upstream[section]) {
               result[section] = {
                 ...(legacy[section] ?? {}),
@@ -134,12 +127,10 @@ jobs:
 
           git checkout --ours -- package-lock.json
           git add package-lock.json
-
           resolve_union src/client/ClientGameRunner.ts
           resolve_union src/client/Main.ts
           resolve_union src/client/SinglePlayerModal.ts
           resolve_union src/client/components/PlayPage.ts
-
           python scripts/resolve-private-ai-migration.py
           git add \
             src/client/ClientGameRunner.ts \
@@ -147,23 +138,14 @@ jobs:
             src/client/SinglePlayerModal.ts \
             src/client/components/PlayPage.ts
 
-          if [[ -n "$(git diff --name-only --diff-filter=U)" ]]; then
-            echo "Unresolved paths remain:"
-            git diff --name-only --diff-filter=U
-            exit 1
-          fi
-
+          test -z "$(git diff --name-only --diff-filter=U)"
           npm install --package-lock-only --ignore-scripts
           git add package-lock.json
-          echo "PATCH_APPLIED=true" >> "$GITHUB_ENV"
 
-      - name: Install dependencies
-        if: env.PATCH_APPLIED == 'true'
-        run: npm ci --ignore-scripts
-
-      - name: Format and lint resolved integration files
-        if: env.PATCH_APPLIED == 'true'
+      - name: Install and validate migration
         run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
           npx prettier --write \
             package.json \
             src/client/ClientGameRunner.ts \
@@ -175,10 +157,6 @@ jobs:
             src/client/Main.ts \
             src/client/SinglePlayerModal.ts \
             src/client/components/PlayPage.ts
-
-      - name: Run focused AI validation
-        if: env.PATCH_APPLIED == 'true'
-        run: |
           npx vitest run \
             tests/client/CounterPressureAndTribeOpportunity.test.ts \
             tests/client/ImmediateTribeResponseIntegration.test.ts \
@@ -188,17 +166,9 @@ jobs:
             tests/client/StrategicWeaponsPolicy.test.ts \
             tests/client/VisualAiStrategyIntegration.test.ts \
             tests/client/view/UnitViewOwnership.test.ts
+          npm audit --audit-level=high
 
-      - name: Build production client
-        if: env.PATCH_APPLIED == 'true'
-        run: npm run build-prod
-
-      - name: Audit dependencies
-        if: env.PATCH_APPLIED == 'true'
-        run: npm audit --audit-level=high
-
-      - name: Commit imported delta and remove one-shot workflow
-        if: env.PATCH_APPLIED == 'true'
+      - name: Persist migration branch and remove temporary machinery
         run: |
           set -euo pipefail
           git rm .github/workflows/import-private-ai.yml
