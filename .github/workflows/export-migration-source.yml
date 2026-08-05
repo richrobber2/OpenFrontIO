@@ -1,0 +1,37 @@
+name: Export migrated source
+
+on:
+  push:
+    branches:
+      - migration/import-private-ai
+    paths:
+      - .github/workflows/export-migration-source.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out migration branch
+        uses: actions/checkout@v4
+        with:
+          ref: migration/import-private-ai
+          fetch-depth: 1
+
+      - name: Archive source tree
+        run: |
+          set -euo pipefail
+          git archive --format=zip --output=/tmp/migrated-source.zip HEAD
+          sha256sum /tmp/migrated-source.zip > /tmp/SHA256SUMS
+
+      - name: Upload source artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: migrated-source
+          path: |
+            /tmp/migrated-source.zip
+            /tmp/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 3
