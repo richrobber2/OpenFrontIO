@@ -12,7 +12,7 @@ jobs:
   import:
     runs-on: ubuntu-latest
     env:
-      MIGRATION_URL: "https://sdmntprwestus3.oaiusercontent.com/files/00000000-73b4-81fd-8a8b-0a5ae6ba4814/raw?se=2026-08-05T17:40:17Z&sp=r&sv=2026-02-06&sr=b&scid=ebf6cfda-a36f-5870-a503-7af81070f25c&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-05T11:18:09Z&ske=2026-08-06T11:18:09Z&sks=b&skv=2026-02-06&sig=DgkTMxjuxnBerMYKAcxUeU8xiCoSnwLRjqTp8Kvwn4I%3D"
+      MIGRATION_URL: "https://sdmntprwestus.oaiusercontent.com/files/00000000-bd88-8230-b1d1-0f4c9952842a/raw?se=2026-08-05T17:45:03Z&sp=r&sv=2026-02-06&sr=b&scid=8068bc84-3ce6-50aa-be4c-db9bd5a29e68&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-05T14:23:07Z&ske=2026-08-06T14:23:07Z&sks=b&skv=2026-02-06&sig=JFV2tXgkTUVhVgbIe8VzpW9x4zMsD1vsvSgi5FPliYE%3D"
       BASE_COMMIT: "943740de3238c1ca9b8fda24609e74b65d7365a3"
     steps:
       - name: Check out clean fork branch
@@ -97,15 +97,12 @@ jobs:
             git add "$file"
           }
 
-          # Repository-maintenance policy follows current upstream.
           git checkout --ours -- .github/workflows/pr-stale.yml
           git add .github/workflows/pr-stale.yml
 
-          # Preserve both ignore entries and both pre-commit safeguards.
           resolve_union .gitignore
           resolve_union .husky/pre-commit
 
-          # Merge custom-only commands/packages into current upstream metadata.
           git show :2:package.json > /tmp/upstream-package.json
           git show :3:package.json > /tmp/private-package.json
           node <<'NODE'
@@ -135,15 +132,20 @@ jobs:
           NODE
           git add package.json
 
-          # Keep the modern lockfile as the regeneration base.
           git checkout --ours -- package-lock.json
           git add package-lock.json
 
-          # Preserve both current UI/account work and AI/mobile integration hooks.
           resolve_union src/client/ClientGameRunner.ts
           resolve_union src/client/Main.ts
           resolve_union src/client/SinglePlayerModal.ts
           resolve_union src/client/components/PlayPage.ts
+
+          python scripts/resolve-private-ai-migration.py
+          git add \
+            src/client/ClientGameRunner.ts \
+            src/client/Main.ts \
+            src/client/SinglePlayerModal.ts \
+            src/client/components/PlayPage.ts
 
           if [[ -n "$(git diff --name-only --diff-filter=U)" ]]; then
             echo "Unresolved paths remain:"
@@ -200,6 +202,7 @@ jobs:
         run: |
           set -euo pipefail
           git rm .github/workflows/import-private-ai.yml
+          git rm scripts/resolve-private-ai-migration.py
           git add -A
           git commit -m "Import private AI development onto current upstream"
           git push origin HEAD:migration/import-private-ai
