@@ -12,20 +12,22 @@ jobs:
   import:
     runs-on: ubuntu-latest
     env:
-      MIGRATION_URL: "https://sdmntprwestus.oaiusercontent.com/files/00000000-f918-8230-81e7-dec42a412223/raw?se=2026-08-05T17:24:32Z&sp=r&sv=2026-02-06&sr=b&scid=9559a12c-241e-582b-92a2-930890350cab&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-05T12:17:29Z&ske=2026-08-06T12:17:29Z&sks=b&skv=2026-02-06&sig=fEqNwoNPQEii98kiA55rLGNZNnqOxt9e90q07KAznqc%3D"
+      MIGRATION_URL: "https://sdmntprwestus3.oaiusercontent.com/files/00000000-f64c-81fd-8374-cccde665e594/raw?se=2026-08-05T17:26:02Z&sp=r&sv=2026-02-06&sr=b&scid=ffa1fd56-860b-5f7d-99ed-89f8c69dafbc&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-05T12:17:24Z&ske=2026-08-06T12:17:24Z&sks=b&skv=2026-02-06&sig=b/oQ1cDA1U0yoti3/8UUzS%2BoGUlTxo6%2BsGITNlSgZpE%3D"
       BASE_COMMIT: "943740de3238c1ca9b8fda24609e74b65d7365a3"
     steps:
       - name: Check out clean fork branch
         uses: actions/checkout@v4
         with:
           ref: migration/import-private-ai
-          fetch-depth: 0
-          filter: blob:none
+          fetch-depth: 1
 
-      - name: Configure Git
+      - name: Configure Git and fetch official base
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --no-tags origin "$BASE_COMMIT"
+          git cat-file -e "$BASE_COMMIT^{commit}"
 
       - name: Download and verify migration artifact
         run: |
@@ -40,7 +42,6 @@ jobs:
       - name: Build complete custom delta
         run: |
           set -euo pipefail
-          git cat-file -e "$BASE_COMMIT^{commit}"
           git diff --binary "$BASE_COMMIT" legacy/private-main > /tmp/private-ai/full-private-ai.patch
           echo "Official base: $BASE_COMMIT"
           echo "Complete migration patch size: $(wc -c < /tmp/private-ai/full-private-ai.patch) bytes"
