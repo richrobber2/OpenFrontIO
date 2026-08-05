@@ -186,25 +186,78 @@ replace_once(
     encoding="utf-8",
 )
 
-sam_path = ROOT / "tests/core/executions/SAMLauncherExecution.test.ts"
-sam_text = sam_path.read_text(encoding="utf-8")
-for start, target in [((7, 7), (30, 1)), ((7, 8), (35, 1)), ((7, 9), (70, 1))]:
-    old = f'''    attacker.buildUnit(UnitType.MIRVWarhead, game.ref({start[0]}, {start[1]}), {{
-      targetTile: game.ref({target[0]}, {target[1]}),
-    }});
-'''
-    new = f'''    attacker.buildUnit(UnitType.MIRVWarhead, game.ref({start[0]}, {start[1]}), {{
-      targetTile: game.ref({target[0]}, {target[1]}),
+replace_once(
+    "tests/core/executions/SAMLauncherExecution.test.ts",
+    '''  test("SAM intercepts every MIRV warhead aimed within its local protection radius", () => {
+    const sam = defender.buildUnit(UnitType.SAMLauncher, game.ref(1, 1), {});
+    game.addExecution(new SAMLauncherExecution(defender, null, sam));
+    attacker.buildUnit(UnitType.MIRVWarhead, game.ref(7, 7), {
+      targetTile: game.ref(30, 1),
+    });
+    attacker.buildUnit(UnitType.MIRVWarhead, game.ref(7, 8), {
+      targetTile: game.ref(35, 1),
+    });
+    attacker.buildUnit(UnitType.MIRVWarhead, game.ref(7, 9), {
+      targetTile: game.ref(70, 1),
+    });
+
+    executeTicks(game, 3);
+
+    const survivingTargets = attacker
+      .units(UnitType.MIRVWarhead)
+      .map((warhead) => warhead.targetTile());
+    expect(survivingTargets).toEqual([game.ref(70, 1)]);
+    expect(sam.isInCooldown()).toBe(true);
+  });
+''',
+    '''  test("SAM intercepts every MIRV warhead aimed within its local protection radius", () => {
+    const sam = defender.buildUnit(UnitType.SAMLauncher, game.ref(1, 1), {});
+    sam.increaseLevel();
+    sam.reloadMissile();
+    game.addExecution(new SAMLauncherExecution(defender, null, sam));
+
+    attacker.buildUnit(UnitType.MIRVWarhead, game.ref(7, 7), {
+      targetTile: game.ref(30, 1),
       trajectory: [
-        {{ tile: game.ref({start[0]}, {start[1]}), targetable: true }},
-        {{ tile: game.ref({target[0]}, {target[1]}), targetable: true }},
+        { tile: game.ref(7, 7), targetable: false },
+        { tile: game.ref(10, 7), targetable: false },
+        { tile: game.ref(15, 5), targetable: true },
+        { tile: game.ref(20, 3), targetable: true },
+        { tile: game.ref(25, 2), targetable: true },
+        { tile: game.ref(30, 1), targetable: true },
       ],
-    }});
-'''
-    if sam_text.count(old) != 1:
-        raise SystemExit(f"Missing MIRV fixture {start} -> {target}.")
-    sam_text = sam_text.replace(old, new, 1)
-sam_path.write_text(sam_text, encoding="utf-8")
+    });
+    attacker.buildUnit(UnitType.MIRVWarhead, game.ref(7, 8), {
+      targetTile: game.ref(35, 1),
+      trajectory: [
+        { tile: game.ref(7, 8), targetable: false },
+        { tile: game.ref(11, 7), targetable: false },
+        { tile: game.ref(16, 6), targetable: true },
+        { tile: game.ref(22, 4), targetable: true },
+        { tile: game.ref(29, 2), targetable: true },
+        { tile: game.ref(35, 1), targetable: true },
+      ],
+    });
+    attacker.buildUnit(UnitType.MIRVWarhead, game.ref(7, 9), {
+      targetTile: game.ref(100, 1),
+      trajectory: [
+        { tile: game.ref(7, 9), targetable: false },
+        { tile: game.ref(60, 10), targetable: true },
+        { tile: game.ref(90, 5), targetable: true },
+        { tile: game.ref(100, 1), targetable: true },
+      ],
+    });
+
+    executeTicks(game, 3);
+
+    const survivingTargets = attacker
+      .units(UnitType.MIRVWarhead)
+      .map((warhead) => warhead.targetTile());
+    expect(survivingTargets).toEqual([game.ref(100, 1)]);
+    expect(sam.isInCooldown()).toBe(true);
+  });
+''',
+)
 
 replace_once(
     "tests/perf/client/DefenseOverlayPerf.ts",
