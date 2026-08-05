@@ -26,6 +26,7 @@ import {
 } from "../../types";
 import type { RenderSettings } from "../RenderSettings";
 import { createProgram, shaderSrc } from "../utils/GlUtils";
+import { shouldEmitTradeShipLight } from "../utils/TradeShipLightGrid";
 
 import lightFragSrc from "../shaders/day-night/light.frag.glsl?raw";
 import lightVertSrc from "../shaders/day-night/light.vert.glsl?raw";
@@ -106,6 +107,7 @@ export class PointLightPass {
   private lastUnitsUpdateMs = 0;
   /** Simulation tick duration in ms (Config.msPerTick). */
   private tickIntervalMs: number;
+  private tradeShipLightCells = new Set<number>();
 
   constructor(
     gl: WebGL2RenderingContext,
@@ -183,6 +185,8 @@ export class PointLightPass {
   /** Pack all light-emitting entities into the instance buffer and upload. Called every tick. */
   updateLights(units: Map<number, UnitState>): void {
     let count = 0;
+    let tradeShipLights = 0;
+    this.tradeShipLightCells.clear();
     this.smoothSegs.length = 0;
     this.lastUnitsUpdateMs = performance.now();
 
@@ -192,10 +196,24 @@ export class PointLightPass {
       if (typeIdx === undefined) continue;
       const cfg = this.typeConfigs[typeIdx];
       if (!cfg) continue;
-      if (count >= MAX_LIGHTS) break;
 
       const x = unit.pos % this.mapW;
       const y = (unit.pos - x) / this.mapW;
+      if (unit.unitType === UT_TRADE_SHIP) {
+        if (
+          !shouldEmitTradeShipLight(
+            this.tradeShipLightCells,
+            x,
+            y,
+            this.mapW,
+            tradeShipLights,
+          )
+        ) {
+          continue;
+        }
+        tradeShipLights++;
+      }
+      if (count >= MAX_LIGHTS) break;
       if (SMOOTHED_NUKE_TYPES.has(unit.unitType) && unit.lastPos !== unit.pos) {
         const lx = unit.lastPos % this.mapW;
         const ly = (unit.lastPos - lx) / this.mapW;

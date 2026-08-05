@@ -12,10 +12,32 @@ vi.mock("../../src/server/Logger", () => ({
 describe("PollingLoop", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.stubEnv("GAME_ENV", "prod");
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it("does not start background polling in standalone development", () => {
+    vi.stubEnv("GAME_ENV", "dev");
+    vi.stubEnv("ENABLE_BACKGROUND_POLLING", "");
+    const task = vi.fn(async () => undefined);
+
+    startPolling(task, 100);
+
+    expect(task).not.toHaveBeenCalled();
+  });
+
+  it("allows background polling to be explicitly enabled in development", () => {
+    vi.stubEnv("GAME_ENV", "dev");
+    vi.stubEnv("ENABLE_BACKGROUND_POLLING", "true");
+    const task = vi.fn(async () => undefined);
+
+    startPolling(task, 100);
+
+    expect(task).toHaveBeenCalledTimes(1);
   });
 
   it("should not start the next task until the previous one completes", async () => {

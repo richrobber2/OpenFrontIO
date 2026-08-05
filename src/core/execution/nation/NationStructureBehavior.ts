@@ -18,6 +18,7 @@ import { ConstructionExecution } from "../ConstructionExecution";
 import { UpgradeStructureExecution } from "../UpgradeStructureExecution";
 import { closestTile, closestTwoTiles } from "../Util";
 import { randTerritoryTileArray } from "./NationUtils";
+import { placementTilesExcluding } from "./PlacementTileCache";
 
 /**
  * Configuration for how many structures of each type a nation should build
@@ -915,6 +916,7 @@ export class NationStructureBehavior {
     const game = this.game;
     const borderTiles = this.player.borderTiles();
     const otherUnits = this.player.units(UnitType.MissileSilo);
+    const otherTileSnapshot = new Set(otherUnits.map((unit) => unit.tile()));
     const { borderSpacing, structureSpacing } = this.spacingConstants();
 
     return (tile) => {
@@ -928,8 +930,7 @@ export class NationStructureBehavior {
       w += Math.min(closestBorderDist, borderSpacing);
 
       // Prefer to be away from other structures of the same type
-      const otherTiles: Set<TileRef> = new Set(otherUnits.map((u) => u.tile()));
-      otherTiles.delete(tile);
+      const otherTiles = placementTilesExcluding(otherTileSnapshot, tile);
       const closestOther = closestTwoTiles(game, otherTiles, [tile]);
       if (closestOther !== null) {
         const d = game.manhattanDist(closestOther.x, tile);
@@ -947,13 +948,13 @@ export class NationStructureBehavior {
   private portValue(): (tile: TileRef) => number {
     const game = this.game;
     const otherUnits = this.player.units(UnitType.Port);
+    const otherTileSnapshot = new Set(otherUnits.map((unit) => unit.tile()));
 
     return (tile) => {
       let w = 0;
 
       // Prefer to be as far as possible from other ports
-      const otherTiles: Set<TileRef> = new Set(otherUnits.map((u) => u.tile()));
-      otherTiles.delete(tile);
+      const otherTiles = placementTilesExcluding(otherTileSnapshot, tile);
       const [, closestOtherDist] = closestTile(game, otherTiles, tile);
       w += closestOtherDist;
 
@@ -975,6 +976,7 @@ export class NationStructureBehavior {
     const player = this.player;
     const borderTiles = this.player.borderTiles();
     const otherUnits = player.units(UnitType.Factory);
+    const otherTileSnapshot = new Set(otherUnits.map((unit) => unit.tile()));
     const { borderSpacing, structureSpacing } = this.spacingConstants();
     const stationRange = game.config().trainStationMaxRange();
     const stationRangeSquared = stationRange * stationRange;
@@ -1002,8 +1004,7 @@ export class NationStructureBehavior {
       w += Math.min(closestBorderDist, borderSpacing);
 
       // Prefer to be away from other factories
-      const otherTiles: Set<TileRef> = new Set(otherUnits.map((u) => u.tile()));
-      otherTiles.delete(tile);
+      const otherTiles = placementTilesExcluding(otherTileSnapshot, tile);
       const closestOther = closestTwoTiles(game, otherTiles, [tile]);
       if (closestOther !== null) {
         const d = game.manhattanDist(closestOther.x, tile);
@@ -1192,6 +1193,7 @@ export class NationStructureBehavior {
     const player = this.player;
     const borderTiles = player.borderTiles();
     const otherUnits = player.units(UnitType.City);
+    const otherTileSnapshot = new Set(otherUnits.map((unit) => unit.tile()));
     const { borderSpacing, structureSpacing } = this.spacingConstants();
     const stationRange = game.config().trainStationMaxRange();
     const stationRangeSquared = stationRange * stationRange;
@@ -1216,8 +1218,7 @@ export class NationStructureBehavior {
       const [, closestBorderDist] = closestTile(game, borderTiles, tile);
       w += Math.min(closestBorderDist, borderSpacing);
 
-      const otherTiles: Set<TileRef> = new Set(otherUnits.map((u) => u.tile()));
-      otherTiles.delete(tile);
+      const otherTiles = placementTilesExcluding(otherTileSnapshot, tile);
       const closestOther = closestTwoTiles(game, otherTiles, [tile]);
       if (closestOther !== null) {
         const d = game.manhattanDist(closestOther.x, tile);
@@ -1257,6 +1258,7 @@ export class NationStructureBehavior {
     const player = this.player;
     const borderTiles = player.borderTiles();
     const otherUnits = player.units(UnitType.SAMLauncher);
+    const otherTileSnapshot = new Set(otherUnits.map((unit) => unit.tile()));
     const { borderSpacing, structureSpacing } = this.spacingConstants();
 
     const { difficulty } = game.config().gameConfig();
@@ -1314,8 +1316,7 @@ export class NationStructureBehavior {
       }
 
       // Prefer to be away from other structures of the same type
-      const otherTiles: Set<TileRef> = new Set(otherUnits.map((u) => u.tile()));
-      otherTiles.delete(tile);
+      const otherTiles = placementTilesExcluding(otherTileSnapshot, tile);
       const closestOther = closestTwoTiles(game, otherTiles, [tile]);
       if (closestOther !== null) {
         const d = game.manhattanDist(closestOther.x, tile);

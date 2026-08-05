@@ -33,7 +33,12 @@ import { DynamicInstanceBuffer } from "../DynamicBuffer";
 import type { RenderSettings } from "../RenderSettings";
 import coverageFragSrc from "../shaders/defense-coverage/defense-coverage.frag.glsl?raw";
 import coverageVertSrc from "../shaders/defense-coverage/defense-coverage.vert.glsl?raw";
+import { defensePostBlockBounds } from "../utils/DefenseCoverageInvalidation";
 import { createProgram, createTexture2D, shaderSrc } from "../utils/GlUtils";
+import {
+  sameDefensePosts,
+  type DefensePostPosition,
+} from "../utils/OverlayInvalidation";
 import { TILE_DEFINES } from "../utils/TileCodec";
 
 /** Per-instance data (3 floats): tileX, tileY, ownerID. */
@@ -64,6 +69,7 @@ export class DefenseCoveragePass {
   private vao: WebGLVertexArrayObject;
   private instanceBuf: DynamicInstanceBuffer;
   private count = 0;
+  private lastPostData: number[] = [];
 
   // --- Dirty tracking (block grid) ---
   private blocksX: number;
@@ -76,6 +82,7 @@ export class DefenseCoveragePass {
   private dirtyList: number[] = [];
   /** Above this many dirty blocks, a single full stamp is cheaper. */
   private fullFallback: number;
+  private lastRange: number;
 
   constructor(
     gl: WebGL2RenderingContext,
@@ -95,6 +102,7 @@ export class DefenseCoveragePass {
     this.dirtyBlock = new Uint8Array(this.blocksX * this.blocksY);
     // Past ~half the blocks, one full stamp beats many scissored block draws.
     this.fullFallback = Math.floor((this.blocksX * this.blocksY) / 2);
+    this.lastRange = settings.mapOverlay.defensePostRange;
 
     this.program = createProgram(
       gl,
@@ -158,16 +166,43 @@ export class DefenseCoveragePass {
   }
 
   /** Replace the set of defense posts. No cap. */
-  updateDefensePosts(posts: { x: number; y: number; ownerID: number }[]): void {
+  updateDefensePosts(posts: DefensePostPosition[]): void {
+    const valueCount = posts.length * FLOATS_PER_INSTANCE;
+    if (sameDefensePosts(posts, this.lastPostData)) return;
+
+    const previousCount = this.lastPostData.length / FLOATS_PER_INSTANCE;
+    const comparedCount = Math.max(previousCount, posts.length);
+    for (let i = 0; i < comparedCount; i++) {
+      const off = i * FLOATS_PER_INSTANCE;
+      const post = posts[i];
+      const changed =
+        post === undefined ||
+        this.lastPostData[off] !== post.x ||
+        this.lastPostData[off + 1] !== post.y ||
+        this.lastPostData[off + 2] !== post.ownerID;
+      if (!changed) continue;
+      if (i < previousCount) {
+        this.markPostAreaDirty(
+          this.lastPostData[off],
+          this.lastPostData[off + 1],
+        );
+      }
+      if (post) this.markPostAreaDirty(post.x, post.y);
+    }
+
     this.count = posts.length;
     this.instanceBuf.ensureCapacity(posts.length);
     const f = this.instanceBuf.float32;
+    this.lastPostData.length = valueCount;
     for (let i = 0; i < posts.length; i++) {
       const p = posts[i];
       const off = i * FLOATS_PER_INSTANCE;
       f[off] = p.x;
       f[off + 1] = p.y;
       f[off + 2] = p.ownerID;
+      this.lastPostData[off] = p.x;
+      this.lastPostData[off + 1] = p.y;
+      this.lastPostData[off + 2] = p.ownerID;
     }
     if (posts.length > 0) {
       const gl = this.gl;
@@ -180,9 +215,26 @@ export class DefenseCoveragePass {
         posts.length * FLOATS_PER_INSTANCE,
       );
     }
-    // A post appearing/disappearing affects its whole circle (possibly several
-    // blocks); post-set changes are rare, so just re-stamp the whole map.
-    this.fullDirty = true;
+  }
+
+  private markPostAreaDirty(x: number, y: number): void {
+    const bounds = defensePostBlockBounds(
+      x,
+      y,
+      this.lastRange,
+      this.mapW,
+      this.mapH,
+      BLOCK,
+    );
+    for (let by = bounds.minY; by <= bounds.maxY; by++) {
+      for (let bx = bounds.minX; bx <= bounds.maxX; bx++) {
+        const block = by * this.blocksX + bx;
+        if (this.dirtyBlock[block] === 0) {
+          this.dirtyBlock[block] = 1;
+          this.dirtyList.push(block);
+        }
+      }
+    }
   }
 
   /**
@@ -219,6 +271,11 @@ export class DefenseCoveragePass {
    * left at map size (caller resets before screen draws).
    */
   draw(): void {
+    const range = this.settings.mapOverlay.defensePostRange;
+    if (range !== this.lastRange) {
+      this.lastRange = range;
+      this.fullDirty = true;
+    }
     if (!this.fullDirty && this.dirtyList.length === 0) return;
 
     const gl = this.gl;
@@ -230,7 +287,7 @@ export class DefenseCoveragePass {
     // Shared stamp state (uniforms/textures/VAO don't change between blocks).
     gl.useProgram(this.program);
     gl.uniform2f(this.uMapSize, this.mapW, this.mapH);
-    gl.uniform1f(this.uRange, this.settings.mapOverlay.defensePostRange);
+    gl.uniform1f(this.uRange, range);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.tileTex);
     gl.bindVertexArray(this.vao);

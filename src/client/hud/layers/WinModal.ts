@@ -278,7 +278,14 @@ export class WinModal extends LitElement implements Controller {
     );
   }
 
-  init() {}
+  init() {
+    // The element is shared across matches. A previous death must not leave
+    // either its visible state or its one-shot guard attached to the next game.
+    this.hasShownDeathModal = false;
+    this.isWin = false;
+    this.rand = Math.random();
+    this.hide();
+  }
 
   tick() {
     const myPlayer = this.game.myPlayer();
@@ -290,8 +297,17 @@ export class WinModal extends LitElement implements Controller {
       myPlayer.hasSpawned()
     ) {
       this.hasShownDeathModal = true;
-      this._title = translateText("win_modal.died");
-      this.show();
+      const isAiTraining =
+        localStorage.getItem("openfront.aiTrainingGame") ===
+        this.game.gameID();
+      if (isAiTraining) {
+        // The trainer records the result and starts a new generation itself;
+        // a spectate/exit prompt would only obscure that transition.
+        this.hide();
+      } else {
+        this._title = translateText("win_modal.died");
+        this.show();
+      }
     }
     const updates = this.game.updatesSinceLastTick();
     const winUpdates = updates !== null ? updates[GameUpdateType.Win] : [];

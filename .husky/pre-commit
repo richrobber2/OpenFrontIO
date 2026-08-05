@@ -7,3 +7,5 @@ export PATH="/usr/local/bin:$HOME/.npm-global/bin:$HOME/.nvm/versions/node/$(nod
 
 # Then run lint-staged if tests pass
 npx lint-staged --concurrent false
+npx lint-staged
+npm run perf:coverage -- --staged

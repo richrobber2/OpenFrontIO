@@ -10,6 +10,7 @@ import {
   PlayerCosmeticRefs,
   PlayerRecord,
   ServerMessage,
+  Turn,
 } from "../core/Schemas";
 import { createPartialGameRecord, findClosestBy, replacer } from "../core/Util";
 import {
@@ -67,6 +68,7 @@ import {
 } from "./Transport";
 import { createCanvas } from "./Utils";
 import { WebGLFrameBuilder } from "./WebGLFrameBuilder";
+import { VisualAiTrainer } from "./ai/VisualAiTrainer";
 import { MapLayerController } from "./controllers/MapLayerController";
 import { createRenderer, GameRenderer } from "./hud/GameRenderer";
 import {
@@ -104,6 +106,7 @@ export interface LobbyConfig {
 
 export interface JoinLobbyResult {
   stop: (force?: boolean) => boolean;
+  stopped: Promise<void>;
   prestart: Promise<void>;
   join: Promise<void>;
 }
@@ -129,12 +132,31 @@ export function joinLobby(
   const transport = new Transport(lobbyConfig, eventBus);
 
   let currentGameRunner: ClientGameRunner | null = null;
+  let gameCreationPending = false;
+  let stopRequested = false;
+  let stoppedResolved = false;
+  let resolveStopped: () => void;
+  const stoppedPromise = new Promise<void>((resolve) => {
+    resolveStopped = resolve;
+  });
+  const finishStopWhenReady = () => {
+    if (
+      stopRequested &&
+      !gameCreationPending &&
+      currentGameRunner === null &&
+      !stoppedResolved
+    ) {
+      stoppedResolved = true;
+      resolveStopped();
+    }
+  };
 
   const onconnect = async () => {
     // Drop the tag if the ownership check failed; the server re-checks anyway.
     if (lobbyConfig.clanTagCheck !== undefined) {
       lobbyConfig.playerClanTag = await lobbyConfig.clanTagCheck;
     }
+    if (stopRequested) return;
     // Always send join - server will detect reconnection via persistentID
     console.log(`Joining game lobby ${lobbyConfig.gameID}`);
     transport.joinGame();
@@ -142,6 +164,7 @@ export function joinLobby(
   let terrainLoad: Promise<TerrainMapData> | null = null;
 
   const onmessage = (message: ServerMessage) => {
+    if (stopRequested) return;
     if (message.type === "lobby_info") {
       // Server tells us our assigned clientID
       clientID = message.myClientID;
@@ -171,6 +194,7 @@ export function joinLobby(
       resolveJoin();
       // For multiplayer games, GameStartInfo is not known until game starts.
       lobbyConfig.gameStartInfo = message.gameStartInfo;
+      gameCreationPending = true;
       createClientGame(
         lobbyConfig,
         clientID,
@@ -181,6 +205,10 @@ export function joinLobby(
         terrainMapFileLoader,
       )
         .then((r) => {
+          if (stopRequested) {
+            r.stop();
+            return;
+          }
           currentGameRunner = r;
           r.start();
         })
@@ -188,6 +216,7 @@ export function joinLobby(
           console.error("error creating client game", e);
 
           currentGameRunner = null;
+          if (stopRequested) return;
 
           const startingModal = document.querySelector(
             "game-starting-modal",
@@ -210,6 +239,10 @@ export function joinLobby(
             false,
             "error_modal.connection_error",
           );
+        })
+        .finally(() => {
+          gameCreationPending = false;
+          finishStopWhenReady();
         });
     }
     if (message.type === "error") {
@@ -272,19 +305,23 @@ export function joinLobby(
   transport.connect(onconnect, onmessage);
   return {
     stop: (force: boolean = false) => {
+      if (stopRequested) return true;
       if (!force && currentGameRunner?.shouldPreventWindowClose()) {
         console.log("Player is active, prevent leaving game");
         return false;
       }
       console.log("leaving game");
+      stopRequested = true;
       if (currentGameRunner) {
         currentGameRunner.stop();
         currentGameRunner = null;
       } else {
         transport.leaveGame();
       }
+      finishStopWhenReady();
       return true;
     },
+    stopped: stoppedPromise,
     prestart: prestartPromise,
     join: joinPromise,
   };
@@ -544,12 +581,14 @@ async function createClientGame(
       false, // Layer images loaded off the critical path after game start.
     );
   }
-  // Kick off the font-atlas fetch so it overlaps with worker init; the
-  // render passes need it parsed before createWebGLView runs.
-  const atlasDataLoad = preloadAtlasData();
+  const headlessAiTraining =
+    localStorage.getItem("openfront.headlessAiTraining") === "true";
+  // Kick off the font-atlas fetch so it overlaps with worker init. Headless AI
+  // training deliberately skips it along with every WebGL allocation.
+  const atlasDataLoad = headlessAiTraining ? null : preloadAtlasData();
   const worker = new WorkerClient(lobbyConfig.gameStartInfo, clientID);
   await worker.initialize();
-  await atlasDataLoad;
+  if (atlasDataLoad !== null) await atlasDataLoad;
   const gameView = new GameView(
     worker,
     config,
@@ -560,6 +599,22 @@ async function createClientGame(
     lobbyConfig.gameStartInfo.gameID,
     lobbyConfig.gameStartInfo.players,
   );
+
+  if (headlessAiTraining) {
+    Object.assign(globalThis, { __OPENFRONT_HEADLESS_GAME__: gameView });
+    return new ClientGameRunner(
+      lobbyConfig,
+      clientID,
+      eventBus,
+      null,
+      null,
+      transport,
+      worker,
+      gameView,
+      null,
+      userSettings,
+    );
+  }
 
   // Transparent fullscreen overlay used purely as the pointer-event /
   // bounding-rect target for InputHandler + TransformHandler. The actual
@@ -748,23 +803,49 @@ export class ClientGameRunner {
 
   private lastTickReceiveTime: number = 0;
   private currentTickDelay: number | undefined = undefined;
+  private visualAiTrainer: VisualAiTrainer | null = null;
+
+  /** Replay checkpoints in batches so refresh can paint and accept input. */
+  private replayStartTurns(turns: readonly Turn[]): void {
+    let index = 0;
+    const pump = () => {
+      const end = Math.min(index + 80, turns.length);
+      for (; index < end; index++) {
+        const turn = turns[index];
+        if (turn.turnNumber < this.turnsSeen) continue;
+        while (turn.turnNumber - 1 > this.turnsSeen) {
+          this.worker.sendTurn({ turnNumber: this.turnsSeen, intents: [] });
+          this.turnsSeen++;
+        }
+        this.worker.sendTurn(turn);
+        this.turnsSeen++;
+      }
+      if (index < turns.length && this.isActive) {
+        window.setTimeout(pump, 0);
+      }
+    };
+    pump();
+  }
 
   constructor(
     private lobby: LobbyConfig,
     private clientID: ClientID | undefined,
     private eventBus: EventBus,
-    private renderer: GameRenderer,
-    private input: InputHandler,
+    private renderer: GameRenderer | null,
+    private input: InputHandler | null,
     private transport: Transport,
     private worker: WorkerClient,
     private gameView: GameView,
-    private soundManager: SoundManager,
+    private soundManager: SoundManager | null,
     private userSettings: UserSettings,
     private webglBuilder: WebGLFrameBuilder | null = null,
     private graphicsListenerAbort: AbortController | null = null,
     private disposeRenderer: (() => void) | null = null,
   ) {
     this.lastMessageTime = Date.now();
+    if (localStorage.getItem("openfront.aiTrainingGame") === lobby.gameID) {
+      this.visualAiTrainer = new VisualAiTrainer(gameView, eventBus);
+    }
   }
 
   /**
@@ -815,7 +896,7 @@ export class ClientGameRunner {
   }
 
   public start() {
-    this.soundManager.playBackgroundMusic();
+    this.soundManager?.playBackgroundMusic();
     console.log("starting client game");
 
     this.isActive = true;
@@ -851,8 +932,8 @@ export class ClientGameRunner {
       this.doBreakAllianceUnderCursor.bind(this),
     );
 
-    this.renderer.initialize();
-    this.input.initialize();
+    this.renderer?.initialize();
+    this.input?.initialize();
     this.worker.start((gu: GameUpdateViewData | ErrorUpdate) => {
       if (this.lobby.gameStartInfo === undefined) {
         throw new Error("missing gameStartInfo");
@@ -874,7 +955,8 @@ export class ClientGameRunner {
       });
       this.gameView.update(gu);
       this.webglBuilder?.update(this.gameView);
-      this.renderer.tick();
+      this.renderer?.tick();
+      this.visualAiTrainer?.tick();
 
       // Emit tick metrics event for performance overlay
       this.eventBus.emit(
@@ -885,7 +967,9 @@ export class ClientGameRunner {
       this.currentTickDelay = undefined;
 
       if (gu.updates[GameUpdateType.Win].length > 0) {
-        this.saveGame(gu.updates[GameUpdateType.Win][0]);
+        const winUpdate = gu.updates[GameUpdateType.Win][0];
+        this.visualAiTrainer?.onGameEnd(winUpdate);
+        this.saveGame(winUpdate);
       }
     });
 
@@ -932,20 +1016,7 @@ export class ClientGameRunner {
           goToPlayer();
         }
 
-        for (const turn of message.turns) {
-          if (turn.turnNumber < this.turnsSeen) {
-            continue;
-          }
-          while (turn.turnNumber - 1 > this.turnsSeen) {
-            this.worker.sendTurn({
-              turnNumber: this.turnsSeen,
-              intents: [],
-            });
-            this.turnsSeen++;
-          }
-          this.worker.sendTurn(turn);
-          this.turnsSeen++;
-        }
+        this.replayStartTurns(message.turns);
       }
       if (message.type === "desync") {
         if (this.lobby.gameStartInfo === undefined) {
@@ -1024,7 +1095,14 @@ export class ClientGameRunner {
   }
 
   public stop() {
-    this.soundManager.dispose();
+    this.visualAiTrainer?.stop();
+    this.visualAiTrainer = null;
+    if (
+      localStorage.getItem("openfront.aiTrainingGame") === this.lobby.gameID
+    ) {
+      localStorage.removeItem("openfront.aiTrainingGame");
+    }
+    this.soundManager?.dispose();
     this.graphicsListenerAbort?.abort();
     this.disposeRenderer?.();
     if (!this.isActive) return;
@@ -1043,7 +1121,11 @@ export class ClientGameRunner {
   }
 
   private inputEvent(event: MouseUpEvent) {
-    if (!this.isActive || this.renderer.uiState.ghostStructure !== null) {
+    if (
+      !this.isActive ||
+      this.renderer === null ||
+      this.renderer.uiState.ghostStructure !== null
+    ) {
       return;
     }
     const cell = this.renderer.transformHandler.screenToWorldCoordinates(
@@ -1088,7 +1170,7 @@ export class ClientGameRunner {
   }
 
   private autoUpgradeEvent(event: AutoUpgradeEvent) {
-    if (!this.isActive) {
+    if (!this.isActive || this.renderer === null) {
       return;
     }
 
@@ -1220,6 +1302,7 @@ export class ClientGameRunner {
   }
 
   private doGroundAttackUnderCursor(): void {
+    if (this.renderer === null) return;
     const tile = this.getTileUnderCursor();
     if (tile === null) {
       return;
@@ -1245,7 +1328,11 @@ export class ClientGameRunner {
   }
 
   private doRetaliateAttackMostRecent(): void {
-    if (!this.isActive || this.gameView.inSpawnPhase()) {
+    if (
+      !this.isActive ||
+      this.renderer === null ||
+      this.gameView.inSpawnPhase()
+    ) {
       return;
     }
 
@@ -1334,7 +1421,7 @@ export class ClientGameRunner {
   }
 
   private getTileUnderCursor(): TileRef | null {
-    if (!this.isActive || !this.lastMousePosition) {
+    if (!this.isActive || this.renderer === null || !this.lastMousePosition) {
       return null;
     }
     if (this.gameView.inSpawnPhase()) {
@@ -1356,7 +1443,7 @@ export class ClientGameRunner {
   }
 
   private sendBoatAttackIntent(tile: TileRef) {
-    if (!this.myPlayer) return;
+    if (!this.myPlayer || this.renderer === null) return;
 
     this.eventBus.emit(
       new SendBoatAttackIntentEvent(

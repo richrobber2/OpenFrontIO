@@ -15,7 +15,10 @@ import { HostLobbyModal } from "./HostLobbyModal";
 import { JoinLobbyModal } from "./JoinLobbyModal";
 import { PublicLobbySocket } from "./LobbySocket";
 import { JoinLobbyEvent } from "./Main";
-import { SinglePlayerModal } from "./SinglePlayerModal";
+import {
+  SinglePlayerModal,
+  startAiTrainingFromPage,
+} from "./SinglePlayerModal";
 import { terrainMapFileLoader } from "./TerrainMapFileLoader";
 import { UsernameInput } from "./UsernameInput";
 import {
@@ -34,6 +37,7 @@ export class GameModeSelector extends LitElement {
   @state() private lobbies: PublicGames | null = null;
   @state() private mapAspectRatios: Map<GameMapType, number> = new Map();
   @state() private inputValid: boolean = true;
+  @state() private startingAiTraining = false;
   private serverTimeOffset: number = 0;
   private defaultLobbyTime: number = 0;
 
@@ -137,6 +141,17 @@ export class GameModeSelector extends LitElement {
             "bg-malibu-blue hover:bg-aquarius active:bg-malibu-blue/80 hover:scale-y-105 hover:scale-x-[1.01]",
           )}
         </div>
+        <div class="sm:hidden h-14">
+          ${this.renderSmallActionCard(
+            this.startingAiTraining
+              ? "Starting AI training…"
+              : "Watch AI training",
+            this.startAiTraining,
+            "bg-violet-600 hover:bg-violet-500 active:bg-violet-700 hover:scale-y-105 hover:scale-x-[1.01]",
+            undefined,
+            true,
+          )}
+        </div>
         <!-- Create/ranked/join: mobile only, below solo -->
         <div class="sm:hidden grid grid-cols-3 gap-4 h-14">
           ${this.renderSmallActionCard(
@@ -218,6 +233,17 @@ export class GameModeSelector extends LitElement {
             "bg-malibu-blue hover:bg-aquarius active:bg-malibu-blue/80 hover:scale-y-105 hover:scale-x-[1.01]",
           )}
         </div>
+        <div class="hidden sm:block h-14">
+          ${this.renderSmallActionCard(
+            this.startingAiTraining
+              ? "Starting AI training…"
+              : "Watch AI training",
+            this.startAiTraining,
+            "bg-violet-600 hover:bg-violet-500 active:bg-violet-700 hover:scale-y-105 hover:scale-x-[1.01]",
+            undefined,
+            true,
+          )}
+        </div>
         <!-- Bottom row: create + ranked + join (desktop only) -->
         <div class="hidden sm:grid grid-cols-3 gap-4 h-14">
           ${this.renderSmallActionCard(
@@ -257,6 +283,27 @@ export class GameModeSelector extends LitElement {
     )?.open();
   };
 
+  private startAiTraining = async () => {
+    if (this.startingAiTraining) return;
+    this.startingAiTraining = true;
+    try {
+      await startAiTrainingFromPage();
+    } catch (error) {
+      console.error("Failed to start AI training", error);
+      window.dispatchEvent(
+        new CustomEvent("show-message", {
+          detail: {
+            message: `AI training could not start: ${error instanceof Error ? error.message : "unknown error"}`,
+            color: "red",
+            duration: 5_000,
+          },
+        }),
+      );
+    } finally {
+      this.startingAiTraining = false;
+    }
+  };
+
   private openHostLobby = () => {
     if (!this.validateUsername()) return;
     (document.querySelector("host-lobby-modal") as HostLobbyModal)?.open();
@@ -278,13 +325,16 @@ export class GameModeSelector extends LitElement {
     onClick: () => void,
     bgClass: string = CARD_BG,
     badge?: number,
+    allowInvalidUsername = false,
   ) {
+    const disabled =
+      (!this.inputValid && !allowInvalidUsername) ||
+      (allowInvalidUsername && this.startingAiTraining);
     return html`
       <button
         @click=${onClick}
-        ?disabled=${!this.inputValid}
-        class="relative flex items-center justify-center w-full h-full rounded-lg ${bgClass} transition-all duration-200 text-sm lg:text-base font-medium text-white uppercase tracking-wider text-center ${!this
-          .inputValid
+        ?disabled=${disabled}
+        class="relative flex items-center justify-center w-full h-full rounded-lg ${bgClass} transition-all duration-200 text-sm lg:text-base font-medium text-white uppercase tracking-wider text-center ${disabled
           ? "opacity-50 cursor-not-allowed pointer-events-none"
           : ""}"
       >

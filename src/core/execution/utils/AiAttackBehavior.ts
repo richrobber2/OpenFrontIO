@@ -1056,7 +1056,18 @@ export class AiAttackBehavior {
       this.botAttackTroopsSent += maxTroops;
       return maxTroops;
     }
-    let troops = target.troops() * 4;
+    // Avoid repeatedly overcommitting to a bot that is already being
+    // conquered. Incoming land attacks are shared information, so account for
+    // every active commitment (including attacks from other nations) and only
+    // supply the remaining force needed to reach the normal 4x budget.
+    // Retreating attacks no longer contribute toward taking the target.
+    const committedTroops = target
+      .incomingAttacks()
+      .reduce(
+        (sum, attack) => (attack.retreating() ? sum : sum + attack.troops()),
+        0,
+      );
+    let troops = Math.max(0, target.troops() * 4 - committedTroops);
 
     // Don't send more troops than maxTroops (Keep reserve)
     if (troops > maxTroops) {

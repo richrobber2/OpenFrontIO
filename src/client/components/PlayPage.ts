@@ -27,11 +27,11 @@ export class PlayPage extends LitElement {
           class="lg:hidden fixed left-0 right-0 top-0 z-40 pt-[env(safe-area-inset-top)] bg-surface border-b border-white/10"
         >
           <div
-            class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center h-14 px-2 gap-2"
+            class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center h-16 px-2 gap-2"
           >
             <button
               id="hamburger-btn"
-              class="col-start-1 justify-self-start h-10 shrink-0 aspect-[4/3] flex text-white/90 rounded-md items-center justify-center transition-colors"
+              class="col-start-1 justify-self-start h-11 min-w-12 shrink-0 flex text-white/90 rounded-lg items-center justify-center transition-colors active:bg-white/10"
               data-i18n-aria-label="main.menu"
               aria-expanded="false"
               aria-controls="sidebar-menu"
@@ -69,7 +69,7 @@ export class PlayPage extends LitElement {
                   <button
                     id="crazygames-account-btn"
                     data-page="page-account"
-                    class="nav-menu-item col-start-3 justify-self-end h-10 shrink-0 flex items-center justify-center rounded-full overflow-hidden text-white/90 cursor-pointer"
+                    class="nav-menu-item col-start-3 justify-self-end h-11 min-w-11 shrink-0 flex items-center justify-center rounded-full overflow-hidden text-white/90 cursor-pointer active:bg-white/10"
                     data-i18n-aria-label="main.account"
                     data-i18n-title="main.account"
                   >
@@ -99,7 +99,7 @@ export class PlayPage extends LitElement {
               : html`
                   <div
                     aria-hidden="true"
-                    class="col-start-3 justify-self-end h-10 shrink-0 aspect-[4/3]"
+                    class="col-start-3 justify-self-end h-11 min-w-12 shrink-0"
                   ></div>
                 `}
           </div>
@@ -113,7 +113,7 @@ export class PlayPage extends LitElement {
         >
           <!-- Mobile: spacer for fixed top bar -->
           <div
-            class="lg:hidden h-[calc(env(safe-area-inset-top)+56px)] -mb-4"
+            class="lg:hidden h-[calc(env(safe-area-inset-top)+64px)] -mb-4"
           ></div>
 
           <!-- Left column: news banner + identity row, stacked tight. -->

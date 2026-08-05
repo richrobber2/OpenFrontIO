@@ -1,6 +1,5 @@
 import { Execution, Game, Player } from "../game/Game";
-
-const cancelDelay = 20;
+import { ATTACK_RETREAT_DELAY_TICKS } from "./AttackRetreatRules";
 
 export class RetreatExecution implements Execution {
   private active = true;
@@ -23,7 +22,7 @@ export class RetreatExecution implements Execution {
       this.retreatOrdered = true;
     }
 
-    if (this.mg.ticks() >= this.startTick + cancelDelay) {
+    if (this.mg.ticks() >= this.startTick + ATTACK_RETREAT_DELAY_TICKS) {
       this.player.executeRetreat(this.attackID);
       this.active = false;
     }

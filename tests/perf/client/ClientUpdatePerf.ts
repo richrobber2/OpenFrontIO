@@ -163,6 +163,9 @@ function createGlStub() {
     // WebGLFrameBuilder syncs
     addPlayers: (players: unknown[]) => bump("addPlayers", players.length),
     updatePalette: noop("updatePalette"),
+    updateEffectPalette: noop("updateEffectPalette"),
+    updateSmallPlayerGlow: noop("updateSmallPlayerGlow"),
+    refreshNames: noop("refreshNames"),
     setPlayerSkin: noop("setPlayerSkin"),
     setPlayerSpawn: noop("setPlayerSpawn"),
     setLocalPlayerID: noop("setLocalPlayerID"),

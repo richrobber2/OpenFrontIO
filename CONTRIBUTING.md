@@ -116,6 +116,21 @@ All new features and bug fixes should include relevant tests. We use **Vitest**.
 
 **Note**: All code changes in `src/core` **MUST** be tested to ensure game logic stability.
 
+### Performance evidence
+
+Every runtime-affecting change must include a proportional, repeatable
+performance check. This may be a microbenchmark, budget assertion,
+representative load test, frame/tick timing, allocation measurement,
+payload-size check, or before/after browser profile. Record the workload,
+before/after values, units, and test environment. Prefer reusable scripts under
+`tests/perf/` exposed through an `npm run perf:*` command. Documentation and
+test-only changes may be marked `no runtime impact`.
+
+Run `npm run perf:coverage` to detect changed runtime functions without a
+registered benchmark. `npm run perf:coverage:all` reports file- and
+function-level coverage across the complete runtime tree, including TypeScript,
+JavaScript, shaders, styles, HTML, and runtime JSON.
+
 ## Submitting a Pull Request
 
 1. **Commit your changes** with a clear, present-tense message ("Add feature", not "Added feature"):
@@ -142,6 +157,7 @@ Before submitting, ensure you have:
 - [ ] Added screenshots for any UI changes.
 - [ ] Processed text through `translateText()` and added strings to `en.json`.
 - [ ] Added/Updated tests in the `tests/` directory.
+- [ ] Added and reported proportional performance evidence, or marked the change as having no runtime impact.
 - [ ] Verified that `npm test` passes.
 - [ ] Provided your Discord username in the PR description for communication.
 

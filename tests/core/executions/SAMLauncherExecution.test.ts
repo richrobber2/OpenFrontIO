@@ -106,6 +106,28 @@ describe("SAM", () => {
     expect(attacker.units(UnitType.AtomBomb)).toHaveLength(0);
   });
 
+  test("SAM intercepts every MIRV warhead aimed within its local protection radius", () => {
+    const sam = defender.buildUnit(UnitType.SAMLauncher, game.ref(1, 1), {});
+    game.addExecution(new SAMLauncherExecution(defender, null, sam));
+    attacker.buildUnit(UnitType.MIRVWarhead, game.ref(7, 7), {
+      targetTile: game.ref(30, 1),
+    });
+    attacker.buildUnit(UnitType.MIRVWarhead, game.ref(7, 8), {
+      targetTile: game.ref(35, 1),
+    });
+    attacker.buildUnit(UnitType.MIRVWarhead, game.ref(7, 9), {
+      targetTile: game.ref(70, 1),
+    });
+
+    executeTicks(game, 3);
+
+    const survivingTargets = attacker
+      .units(UnitType.MIRVWarhead)
+      .map((warhead) => warhead.targetTile());
+    expect(survivingTargets).toEqual([game.ref(70, 1)]);
+    expect(sam.isInCooldown()).toBe(true);
+  });
+
   test("sam should only get one nuke at a time", async () => {
     const sam = defender.buildUnit(UnitType.SAMLauncher, game.ref(1, 1), {});
     game.addExecution(new SAMLauncherExecution(defender, null, sam));

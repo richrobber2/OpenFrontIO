@@ -849,11 +849,19 @@ export class Config {
   }
 
   troopIncreaseRate(player: Player | PlayerView): number {
+    return this.projectedTroopIncreaseRate(player, player.troops());
+  }
+
+  projectedTroopIncreaseRate(
+    player: Player | PlayerView,
+    troops: number,
+  ): number {
     const max = this.maxTroops(player);
+    const projectedTroops = Math.max(0, Math.min(max, troops));
 
-    let toAdd = 10 + Math.pow(player.troops(), 0.73) / 4;
+    let toAdd = 10 + Math.pow(projectedTroops, 0.73) / 4;
 
-    const ratio = 1 - player.troops() / max;
+    const ratio = 1 - projectedTroops / max;
     toAdd *= ratio;
 
     if (player.type() === PlayerType.Bot) {
@@ -879,7 +887,7 @@ export class Config {
       }
     }
 
-    return Math.min(player.troops() + toAdd, max) - player.troops();
+    return Math.min(projectedTroops + toAdd, max) - projectedTroops;
   }
 
   goldAdditionRate(player: Player | PlayerView): Gold {

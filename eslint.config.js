@@ -32,6 +32,8 @@ export default [
           allowDefaultProject: [
             "__mocks__/fileMock.js",
             "eslint.config.js",
+            "scripts/check-perf-function-coverage.mjs",
+            "scripts/headless-ai-training*.mjs",
             "scripts/sync-assets.mjs",
             "tests/matchmaking/*.mjs",
           ],

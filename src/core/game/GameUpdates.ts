@@ -56,10 +56,9 @@ export interface GameUpdateViewData {
   packedAttackUpdates?: Float64Array;
   /**
    * Name placement per player. Only present on ticks where the worker
-   * recomputed placements (spawn ticks, the first ticks, every 30th tick,
-   * spawn end) — between those the values wouldn't change, so the record is
-   * omitted instead of re-cloned every tick. Consumers keep the last applied
-   * values.
+   * recomputed placements (spawn ticks, the first ticks, spawn end, and a
+   * staggered periodic batch). The record contains only that tick's delta;
+   * consumers keep the last applied values for every other player.
    */
   playerNameViewData?: Record<string, NameViewData>;
   tickExecutionDuration?: number;

@@ -29,20 +29,26 @@ function serveProprietaryDir(
   resourcesDir: string,
 ): Plugin {
   return {
-    name: "serve-proprietary-dir",
+    name: "serve-public-asset-dirs",
     configureServer(server) {
-      // Must run before Vite's htmlFallback; skip when resources/ has the file
-      // so publicDir keeps precedence.
+      // Serve resources first, then proprietary fallbacks, without declaring a
+      // Vite publicDir. This allows source imports from resources/ without the
+      // noisy "public directory cannot be imported" warning.
       server.middlewares.use((req, res, next) => {
         if (!req.url) return next();
         const rel = decodeURIComponent(
           new URL(req.url, "http://x").pathname,
         ).replace(/^\//, "");
         if (rel.includes("..")) return next();
-        if (fs.existsSync(path.join(resourcesDir, rel))) return next();
-        const filePath = path.join(proprietaryDir, rel);
-        if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile())
-          return next();
+
+        const filePath = [resourcesDir, proprietaryDir]
+          .map((dir) => path.join(dir, rel))
+          .find(
+            (candidate) =>
+              fs.existsSync(candidate) && fs.statSync(candidate).isFile(),
+          );
+        if (!filePath) return next();
+
         const mime = lookupMime(filePath);
         if (mime) res.setHeader("Content-Type", mime);
         res.setHeader("Cache-Control", "no-store");
@@ -196,12 +202,12 @@ export default defineConfig(({ mode }) => {
     },
     root: "./",
     base: "/",
-    publicDir: isProduction ? false : "resources",
+    publicDir: false,
 
     resolve: {
-      tsconfigPaths: true,
       alias: {
         resources: path.resolve(__dirname, "resources"),
+        src: path.resolve(__dirname, "src"),
       },
     },
 

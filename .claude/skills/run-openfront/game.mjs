@@ -42,8 +42,10 @@ export async function startSoloGame(page, opts = {}) {
 export async function waitForGameReady(page, timeout = 180_000) {
   await page.waitForFunction(
     () => {
-      const bm = document.querySelector("build-menu");
-      return bm?.game !== undefined && bm.game.ticks() > 0;
+      const game =
+        globalThis.__OPENFRONT_HEADLESS_GAME__ ??
+        document.querySelector("build-menu")?.game;
+      return game !== undefined && game.ticks() > 0;
     },
     undefined,
     { timeout, polling: 500 },
@@ -54,16 +56,40 @@ export async function waitForGameReady(page, timeout = 180_000) {
 // in-page; live objects can't cross the evaluate boundary).
 export async function gameState(page) {
   return await page.evaluate(() => {
-    const g = document.querySelector("build-menu")?.game;
+    const g =
+      globalThis.__OPENFRONT_HEADLESS_GAME__ ??
+      document.querySelector("build-menu")?.game;
     if (!g) return null;
     const me = g.myPlayer();
     const players = g.players();
+    let learning = null;
+    try {
+      const profile = JSON.parse(
+        localStorage.getItem("openfront.visualAiLearning.v2") ?? "null",
+      );
+      if (profile !== null) {
+        learning = {
+          matches: profile.matches ?? 0,
+          wins: profile.wins ?? 0,
+          eliminations: profile.eliminations ?? 0,
+          revision: profile.saveRevision ?? 0,
+          savedAt: profile.savedAt ?? 0,
+          recentMatchResults: Array.isArray(profile.recentMatchResults)
+            ? profile.recentMatchResults.slice(-20)
+            : [],
+        };
+      }
+    } catch {
+      // A malformed local cache must not stop match monitoring.
+    }
     return {
+      matchUrl: location.href,
       ticks: g.ticks(),
       inSpawnPhase: g.inSpawnPhase(),
       mapSize: { width: g.width(), height: g.height() },
       numPlayers: players.length,
       numAlive: players.filter((p) => p.isAlive()).length,
+      learning,
       myPlayer:
         me === null
           ? null

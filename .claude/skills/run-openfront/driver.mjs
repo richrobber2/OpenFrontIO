@@ -33,13 +33,21 @@ export async function launch({ viewport, rafIntervalMs, args } = {}) {
       : libs;
     env.FONTCONFIG_FILE = path.join(CACHE, "fonts.conf");
   }
-  const browser = await chromium.launch({
-    args: ["--no-sandbox", "--disable-gpu", ...(args ?? [])],
-    env,
-  });
-  const context = await browser.newContext({
-    viewport: viewport ?? { width: 1400, height: 1000 },
-  });
+  const browser = process.env.OPENFRONT_CDP_URL
+    ? await chromium.connectOverCDP(process.env.OPENFRONT_CDP_URL)
+    : await chromium.launch({
+        args: ["--no-sandbox", "--disable-gpu", ...(args ?? [])],
+        env,
+        executablePath: process.env.OPENFRONT_CHROMIUM_PATH || undefined,
+      });
+  const context = process.env.OPENFRONT_CDP_URL
+    ? (browser.contexts()[0] ??
+      (await browser.newContext({
+        viewport: viewport ?? { width: 1400, height: 1000 },
+      })))
+    : await browser.newContext({
+        viewport: viewport ?? { width: 1400, height: 1000 },
+      });
   if (rafIntervalMs) {
     await context.addInitScript((interval) => {
       let last = 0;
@@ -54,7 +62,9 @@ export async function launch({ viewport, rafIntervalMs, args } = {}) {
       window.cancelAnimationFrame = (id) => clearTimeout(id);
     }, rafIntervalMs);
   }
-  const page = await context.newPage();
+  const page = process.env.OPENFRONT_CDP_URL
+    ? (context.pages()[0] ?? (await context.newPage()))
+    : await context.newPage();
   page.on("pageerror", (e) =>
     console.log("PAGEERROR:", e.message.split("\n")[0]),
   );

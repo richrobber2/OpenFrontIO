@@ -17,6 +17,8 @@ import { UserSettings } from "../core/game/UserSettings";
 import "./AccountModal";
 import { adGatekeeper } from "./AdGatekeeper";
 import { loadAdmiral, onAdmiralMeasured } from "./Admiral";
+import { installAiTrainingRestartCleanup } from "./AiTrainingRestartCleanup";
+import "./AiTrainingWakeLock";
 import { getUserMe, invalidateUserMe } from "./Api";
 import { reauthAfterCrazyGamesChange, userAuth } from "./Auth";
 import "./ClanModal";
@@ -54,7 +56,7 @@ import { initNavigation } from "./Navigation";
 import "./NewsModal";
 import "./PlayerProfileModal";
 import { RewardsModal } from "./RewardsModal";
-import "./SinglePlayerModal";
+import { startAiTrainingFromPage } from "./SinglePlayerModal";
 import {
   isSteamLinkHash,
   parseSteamLinkToken,
@@ -149,6 +151,7 @@ declare global {
     userMeResponse: CustomEvent<UserMeResponse | false>;
     "leave-lobby": CustomEvent;
     "game-starting": CustomEvent;
+    "restart-ai-training": CustomEvent;
     "update-game-config": CustomEvent;
   }
 }
@@ -183,6 +186,7 @@ class Client {
   private rewardsModal: RewardsModal;
   private steamLinkModal: SteamLinkModal;
   private mostRecentJoinEvent: number;
+  private aiTrainingRestarting = false;
 
   private turnstileTokenPromise: Promise<{
     token: string;
@@ -306,6 +310,10 @@ class Client {
 
     document.addEventListener("join-lobby", this.handleJoinLobby.bind(this));
     document.addEventListener("leave-lobby", this.handleLeaveLobby.bind(this));
+    document.addEventListener(
+      "restart-ai-training",
+      this.handleRestartAiTraining,
+    );
     document.addEventListener("kick-player", this.handleKickPlayer.bind(this));
     document.addEventListener(
       "toggle_game_start_timer",
@@ -928,7 +936,8 @@ class Client {
 
     this.lobbyHandle = newLobbyHandle;
 
-    this.lobbyHandle.prestart.then(() => {
+    newLobbyHandle.prestart.then(() => {
+      if (this.lobbyHandle !== newLobbyHandle) return;
       // The game is actually starting now (lobby wait is over). Let listeners that stay up
       // through the wait (e.g. the featured-stream panel) hide at this point instead of on join.
       document.dispatchEvent(new CustomEvent("game-starting"));
@@ -997,7 +1006,8 @@ class Client {
       }
     });
 
-    this.lobbyHandle.join.then(() => {
+    newLobbyHandle.join.then(() => {
+      if (this.lobbyHandle !== newLobbyHandle) return;
       this.joinModal?.closeWithoutLeaving();
       this.gameModeSelector.stop();
       incrementGamesPlayed();
@@ -1048,8 +1058,10 @@ class Client {
       return;
     }
     console.log("leaving lobby, cancelling game");
-    this.lobbyHandle.stop(true);
+    const lobbyHandle = this.lobbyHandle;
+    lobbyHandle.stop(true);
     this.lobbyHandle = null;
+    await lobbyHandle.stopped;
     this.currentUrl = null;
 
     try {
@@ -1096,6 +1108,36 @@ class Client {
         event.detail.mode === "2v2" ? "/?requeue=2v2" : "/?requeue";
     }
   }
+  private handleRestartAiTraining = async () => {
+    if (this.aiTrainingRestarting) return;
+    this.aiTrainingRestarting = true;
+    try {
+      const deathModal = document.querySelector("win-modal") as
+        | (HTMLElement & { hide?: () => void })
+        | null;
+      deathModal?.hide?.();
+      await this.handleLeaveLobby();
+      // Force the normal navigation lifecycle before creating the next game.
+      // Starting directly from the old game page can leave stale lobby/game
+      // elements mounted and cause the next training match to reuse them.
+      window.showPage?.("page-play");
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 100));
+      await startAiTrainingFromPage();
+    } catch (error) {
+      console.error("Failed to restart AI training", error);
+      window.dispatchEvent(
+        new CustomEvent("show-message", {
+          detail: {
+            message: `AI training could not restart: ${error instanceof Error ? error.message : "unknown error"}`,
+            color: "red",
+            duration: 5_000,
+          },
+        }),
+      );
+    } finally {
+      this.aiTrainingRestarting = false;
+    }
+  };
 
   private handleOpenMatchmaking(
     event: CustomEvent<{ mode?: "1v1" | "2v2" } | undefined>,
@@ -1182,6 +1224,7 @@ const bootstrap = () => {
   // Prevent Safari's page-level pinch-zoom, which ignores `user-scalable=no`
   // on iOS and can softlock the HUD. See issue #2330.
   installSafariPinchZoomBlocker();
+  installAiTrainingRestartCleanup();
 
   initLayout();
   new Client().initialize();

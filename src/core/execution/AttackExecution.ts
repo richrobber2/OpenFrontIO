@@ -14,9 +14,9 @@ import {
 import { GameMap, TileRef } from "../game/GameMap";
 import { PseudoRandom } from "../PseudoRandom";
 import { assertNever } from "../Util";
+import { ATTACK_RETREAT_MALUS_PERCENT } from "./AttackRetreatRules";
 import { FlatBinaryHeap } from "./utils/FlatBinaryHeap"; // adjust path if needed
 
-const malusForRetreat = 25;
 export class AttackExecution implements Execution {
   private active: boolean = true;
   private toConquer = new FlatBinaryHeap();
@@ -237,7 +237,7 @@ export class AttackExecution implements Execution {
 
     if (this.attack.retreated()) {
       if (targetIsPlayer) {
-        this.retreat(malusForRetreat);
+        this.retreat(ATTACK_RETREAT_MALUS_PERCENT);
       } else {
         this.retreat();
       }

@@ -19,12 +19,14 @@ import { DynamicInstanceBuffer } from "../DynamicBuffer";
 import type { RenderSettings } from "../RenderSettings";
 import { createProgram } from "../utils/GlUtils";
 import { samRange } from "../utils/NukeTrajectory";
+import { sameNumberSet } from "../utils/OverlayInvalidation";
+import {
+  computeUncoveredArcs,
+  type SAMCircle,
+} from "../utils/SamRadiusGeometry";
 
 import fragSrc from "../shaders/sam-radius/sam-radius.frag.glsl?raw";
 import vertSrc from "../shaders/sam-radius/sam-radius.vert.glsl?raw";
-
-const TWO_PI = Math.PI * 2;
-const EPS = 1e-9;
 
 // Per-instance: x, y, radius, r, g, b, arcStart, arcEnd
 const FLOATS_PER_INSTANCE = 8;
@@ -33,110 +35,6 @@ const FLOATS_PER_INSTANCE = 8;
 const COLOR_SELF = [0, 1, 0]; // green
 const COLOR_ALLY = [1, 1, 0]; // yellow
 const COLOR_ENEMY = [1, 0, 0]; // red
-
-interface SAMCircle {
-  x: number;
-  y: number;
-  radius: number;
-  color: number[];
-  group: number; // alliance group: 0 = friendly, 1 = enemy
-}
-
-type Interval = [number, number];
-
-// ---------------------------------------------------------------------------
-// Circle union geometry
-// ---------------------------------------------------------------------------
-
-function normalizeAngle(a: number): number {
-  while (a < 0) a += TWO_PI;
-  while (a >= TWO_PI) a -= TWO_PI;
-  return a;
-}
-
-function mergeIntervals(intervals: Interval[]): Interval[] {
-  if (intervals.length === 0) return [];
-
-  // Split wrapping intervals, then merge
-  const flat: Interval[] = [];
-  for (const [s, e] of intervals) {
-    const ns = normalizeAngle(s);
-    const ne = normalizeAngle(e);
-    if (ne < ns) {
-      flat.push([ns, TWO_PI]);
-      flat.push([0, ne]);
-    } else {
-      flat.push([ns, ne]);
-    }
-  }
-  flat.sort((a, b) => a[0] - b[0]);
-
-  const merged: Interval[] = [];
-  let cur: Interval = [flat[0][0], flat[0][1]];
-  for (let i = 1; i < flat.length; i++) {
-    const it = flat[i];
-    if (it[0] <= cur[1] + EPS) {
-      cur[1] = Math.max(cur[1], it[1]);
-    } else {
-      merged.push(cur);
-      cur = [it[0], it[1]];
-    }
-  }
-  merged.push(cur);
-  return merged;
-}
-
-/** Compute the uncovered arc intervals for circle `a` given all circles. */
-function computeUncoveredArcs(a: SAMCircle, circles: SAMCircle[]): Interval[] {
-  const covered: Interval[] = [];
-
-  for (const b of circles) {
-    if (a === b) continue;
-    if (a.group !== b.group) continue;
-
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const d = Math.hypot(dx, dy);
-
-    // a fully inside b → no visible arcs
-    if (d + a.radius <= b.radius + EPS) return [];
-
-    // No overlap
-    if (d >= a.radius + b.radius - EPS) continue;
-
-    // Coincident centers
-    if (d <= EPS) {
-      if (b.radius >= a.radius) return [];
-      continue;
-    }
-
-    // Angular span on a covered by b (law of cosines)
-    const cosPhi =
-      (a.radius * a.radius + d * d - b.radius * b.radius) / (2 * a.radius * d);
-    const phi = Math.acos(Math.max(-1, Math.min(1, cosPhi)));
-    const theta = Math.atan2(dy, dx);
-    covered.push([theta - phi, theta + phi]);
-  }
-
-  const merged = mergeIntervals(covered);
-
-  // Subtract covered from [0, 2π)
-  if (merged.length === 0) return [[0, TWO_PI]];
-
-  const uncovered: Interval[] = [];
-  let cursor = 0;
-  for (const [s, e] of merged) {
-    if (s > cursor + EPS) uncovered.push([cursor, s]);
-    cursor = Math.max(cursor, e);
-  }
-  if (cursor < TWO_PI - EPS) uncovered.push([cursor, TWO_PI]);
-
-  return uncovered;
-}
-
-// ---------------------------------------------------------------------------
-// Pass
-// ---------------------------------------------------------------------------
 
 export class SAMRadiusPass {
   private gl: WebGL2RenderingContext;
@@ -169,6 +67,7 @@ export class SAMRadiusPass {
   private colorMode: "perspective" | "owner" = "perspective";
   private allianceClusters: Map<number, number> = new Map();
   private lastStructures: Map<number, UnitState> | null = null;
+  private structuresDirty = true;
 
   constructor(
     gl: WebGL2RenderingContext,
@@ -251,12 +150,14 @@ export class SAMRadiusPass {
 
   /** Update ally set (player smallIDs allied with local player). */
   setAllies(allies: Set<number>): void {
+    if (sameNumberSet(allies, this.allies)) return;
     this.allies = allies;
     this.rebuild();
   }
 
   setPaletteData(data: Float32Array): void {
     this.paletteData = data;
+    if (this.colorMode === "owner") this.rebuild();
   }
 
   setColorMode(mode: "perspective" | "owner"): void {
@@ -267,15 +168,28 @@ export class SAMRadiusPass {
 
   setAllianceClusters(clusters: Map<number, number>): void {
     this.allianceClusters = clusters;
+    if (this.colorMode === "owner") this.rebuild();
   }
 
   private rebuild(): void {
-    if (this.lastStructures) this.updateStructures(this.lastStructures);
+    this.structuresDirty = true;
+    if (this.visible && this.lastStructures) {
+      this.buildInstances(this.lastStructures);
+    }
   }
 
   /** Call with current structures to update SAM positions/radii/colors. */
   updateStructures(structures: Map<number, UnitState>): void {
     this.lastStructures = structures;
+    this.structuresDirty = true;
+    // Radius union construction is O(n²). Keep the latest state while hidden,
+    // then rebuild once if the player opens the SAM overlay.
+    if (!this.visible) return;
+    this.buildInstances(structures);
+  }
+
+  private buildInstances(structures: Map<number, UnitState>): void {
+    this.structuresDirty = false;
     const w = this.mapW;
     const ownerMode = this.colorMode === "owner";
 
@@ -361,7 +275,11 @@ export class SAMRadiusPass {
 
   /** Show/hide based on whether build mode is active. */
   setVisible(visible: boolean): void {
+    if (visible === this.visible) return;
     this.visible = visible;
+    if (visible && this.structuresDirty && this.lastStructures) {
+      this.buildInstances(this.lastStructures);
+    }
   }
 
   draw(cameraMatrix: Float32Array): void {
