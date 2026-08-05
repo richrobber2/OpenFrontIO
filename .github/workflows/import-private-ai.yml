@@ -12,7 +12,7 @@ jobs:
   import:
     runs-on: ubuntu-latest
     env:
-      MIGRATION_URL: "https://sdmntprwestus3.oaiusercontent.com/files/00000000-e7f0-81fd-8297-4134e21a1f1d/raw?se=2026-08-05T17:31:45Z&sp=r&sv=2026-02-06&sr=b&scid=511fe5b9-95db-5de9-a1a5-73fdefb909f1&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-05T12:50:04Z&ske=2026-08-06T12:50:04Z&sks=b&skv=2026-02-06&sig=NsuL3vTjqp5vZng5%2BhLuntKlE1D4TgebUqoNoSJrwb0%3D"
+      MIGRATION_URL: "https://sdmntprwestus3.oaiusercontent.com/files/00000000-73b4-81fd-8a8b-0a5ae6ba4814/raw?se=2026-08-05T17:40:17Z&sp=r&sv=2026-02-06&sr=b&scid=ebf6cfda-a36f-5870-a503-7af81070f25c&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-05T11:18:09Z&ske=2026-08-06T11:18:09Z&sks=b&skv=2026-02-06&sig=DgkTMxjuxnBerMYKAcxUeU8xiCoSnwLRjqTp8Kvwn4I%3D"
       BASE_COMMIT: "943740de3238c1ca9b8fda24609e74b65d7365a3"
     steps:
       - name: Check out clean fork branch
@@ -55,46 +55,124 @@ jobs:
           git apply --3way --index --whitespace=nowarn /tmp/private-ai/full-private-ai.patch
           echo "PATCH_APPLIED=true" >> "$GITHUB_ENV"
 
-      - name: Package exact conflict stages
+      - name: Resolve known upstream and private overlaps
         if: steps.apply.outcome == 'failure'
         run: |
           set -euo pipefail
-          root=/tmp/migration-conflicts
-          mkdir -p "$root/base" "$root/upstream" "$root/private" "$root/merged"
-          git diff --name-only --diff-filter=U > "$root/conflicts.txt"
-          printf '%s\n' "$BASE_COMMIT" > "$root/selected-base.txt"
 
-          while IFS= read -r file; do
-            [[ -n "$file" ]] || continue
-            for dir in base upstream private merged; do
-              mkdir -p "$root/$dir/$(dirname "$file")"
-            done
-            git show ":1:$file" > "$root/base/$file" || true
-            git show ":2:$file" > "$root/upstream/$file" || true
-            git show ":3:$file" > "$root/private/$file" || true
-            git checkout --conflict=diff3 -- "$file"
-            cp "$file" "$root/merged/$file"
-          done < "$root/conflicts.txt"
+          actual=$(git diff --name-only --diff-filter=U | sort)
+          expected=$(printf '%s\n' \
+            '.github/workflows/pr-stale.yml' \
+            '.gitignore' \
+            '.husky/pre-commit' \
+            'package-lock.json' \
+            'package.json' \
+            'src/client/ClientGameRunner.ts' \
+            'src/client/Main.ts' \
+            'src/client/SinglePlayerModal.ts' \
+            'src/client/components/PlayPage.ts' | sort)
 
-          echo "Captured conflicts:"
-          cat "$root/conflicts.txt"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "Unexpected conflict set. Refusing an improvised merge."
+            echo "Expected:"
+            printf '%s\n' "$expected"
+            echo "Actual:"
+            printf '%s\n' "$actual"
+            exit 1
+          fi
 
-      - name: Upload conflict diagnostics
-        if: steps.apply.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: private-ai-conflicts
-          path: /tmp/migration-conflicts
-          if-no-files-found: error
-          retention-days: 7
+          resolve_union() {
+            local file="$1"
+            local key
+            key=$(printf '%s' "$file" | sha256sum | cut -d' ' -f1)
+            mkdir -p "/tmp/union-$key"
+            git show ":2:$file" > "/tmp/union-$key/upstream"
+            git show ":1:$file" > "/tmp/union-$key/base"
+            git show ":3:$file" > "/tmp/union-$key/private"
+            git merge-file --union \
+              "/tmp/union-$key/upstream" \
+              "/tmp/union-$key/base" \
+              "/tmp/union-$key/private" || true
+            cp "/tmp/union-$key/upstream" "$file"
+            git add "$file"
+          }
 
-      - name: Stop for deliberate conflict resolution
-        if: steps.apply.outcome == 'failure'
-        run: exit 1
+          # Repository-maintenance policy follows current upstream.
+          git checkout --ours -- .github/workflows/pr-stale.yml
+          git add .github/workflows/pr-stale.yml
+
+          # Preserve both ignore entries and both pre-commit safeguards.
+          resolve_union .gitignore
+          resolve_union .husky/pre-commit
+
+          # Merge custom-only commands/packages into current upstream metadata.
+          git show :2:package.json > /tmp/upstream-package.json
+          git show :3:package.json > /tmp/private-package.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const upstream = JSON.parse(fs.readFileSync('/tmp/upstream-package.json', 'utf8'));
+          const legacy = JSON.parse(fs.readFileSync('/tmp/private-package.json', 'utf8'));
+          const result = { ...legacy, ...upstream };
+          const mergedSections = [
+            'scripts',
+            'dependencies',
+            'devDependencies',
+            'optionalDependencies',
+            'peerDependencies',
+            'overrides',
+            'engines',
+            'lint-staged',
+          ];
+          for (const section of mergedSections) {
+            if (legacy[section] || upstream[section]) {
+              result[section] = {
+                ...(legacy[section] ?? {}),
+                ...(upstream[section] ?? {}),
+              };
+            }
+          }
+          fs.writeFileSync('package.json', `${JSON.stringify(result, null, 2)}\n`);
+          NODE
+          git add package.json
+
+          # Keep the modern lockfile as the regeneration base.
+          git checkout --ours -- package-lock.json
+          git add package-lock.json
+
+          # Preserve both current UI/account work and AI/mobile integration hooks.
+          resolve_union src/client/ClientGameRunner.ts
+          resolve_union src/client/Main.ts
+          resolve_union src/client/SinglePlayerModal.ts
+          resolve_union src/client/components/PlayPage.ts
+
+          if [[ -n "$(git diff --name-only --diff-filter=U)" ]]; then
+            echo "Unresolved paths remain:"
+            git diff --name-only --diff-filter=U
+            exit 1
+          fi
+
+          npm install --package-lock-only --ignore-scripts
+          git add package-lock.json
+          echo "PATCH_APPLIED=true" >> "$GITHUB_ENV"
 
       - name: Install dependencies
         if: env.PATCH_APPLIED == 'true'
         run: npm ci --ignore-scripts
+
+      - name: Format and lint resolved integration files
+        if: env.PATCH_APPLIED == 'true'
+        run: |
+          npx prettier --write \
+            package.json \
+            src/client/ClientGameRunner.ts \
+            src/client/Main.ts \
+            src/client/SinglePlayerModal.ts \
+            src/client/components/PlayPage.ts
+          npx eslint \
+            src/client/ClientGameRunner.ts \
+            src/client/Main.ts \
+            src/client/SinglePlayerModal.ts \
+            src/client/components/PlayPage.ts
 
       - name: Run focused AI validation
         if: env.PATCH_APPLIED == 'true'
