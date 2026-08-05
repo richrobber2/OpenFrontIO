@@ -1,6 +1,6 @@
 name: Apply upstream compatibility adaptation
 
-# One-shot validation workflow. Source-only commit restores workflow files.
+# One-shot validation workflow. The source-only commit restores workflows.
 on:
   push:
     branches:
