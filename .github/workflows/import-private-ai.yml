@@ -1,0 +1,85 @@
+name: Import private AI history
+
+on:
+  push:
+    branches:
+      - migration/import-private-ai
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    env:
+      MIGRATION_URL: "https://sdmntprwestus.oaiusercontent.com/files/00000000-c240-8230-ae23-60cb516f2380/raw?se=2026-08-05T17:04:54Z&sp=r&sv=2026-02-06&sr=b&scid=5e21f994-8ae5-5cc8-a461-e54029e9ca89&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-04T22:12:53Z&ske=2026-08-05T22:12:53Z&sks=b&skv=2026-02-06&sig=bNkjJF3N0aB0ctnRLCCGbv2n5pPv70ujLIcctdGIZvo%3D"
+    steps:
+      - name: Check out clean fork branch
+        uses: actions/checkout@v4
+        with:
+          ref: migration/import-private-ai
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Download and verify migration artifact
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/private-ai
+          curl --fail --location --retry 3 "$MIGRATION_URL" -o /tmp/private-ai.zip
+          unzip -q /tmp/private-ai.zip -d /tmp/private-ai
+          cd /tmp/private-ai
+          sha256sum -c SHA256SUMS
+          git bundle verify private-ai.bundle
+
+      - name: Apply complete custom delta with three-way merge
+        run: |
+          set -uo pipefail
+          git fetch /tmp/private-ai/private-ai.bundle 'refs/remotes/origin/main:refs/remotes/legacy/private-main'
+          if git apply --3way --index --whitespace=nowarn /tmp/private-ai/private-ai.patch; then
+            echo "PATCH_APPLIED=true" >> "$GITHUB_ENV"
+          else
+            echo "PATCH_APPLIED=false" >> "$GITHUB_ENV"
+            echo "Unmerged paths:"
+            git diff --name-only --diff-filter=U | tee /tmp/private-ai/conflicts.txt
+            echo "Status:"
+            git status --short
+            exit 1
+          fi
+
+      - name: Install dependencies
+        if: env.PATCH_APPLIED == 'true'
+        run: npm ci --ignore-scripts
+
+      - name: Run focused AI validation
+        if: env.PATCH_APPLIED == 'true'
+        run: |
+          npx vitest run \
+            tests/client/CounterPressureAndTribeOpportunity.test.ts \
+            tests/client/ImmediateTribeResponseIntegration.test.ts \
+            tests/client/WildernessExpansionPolicy.test.ts \
+            tests/client/WildernessExpansionIntegration.test.ts \
+            tests/client/OverseasExpansionPolicy.test.ts \
+            tests/client/StrategicWeaponsPolicy.test.ts \
+            tests/client/VisualAiStrategyIntegration.test.ts \
+            tests/client/view/UnitViewOwnership.test.ts
+
+      - name: Build production client
+        if: env.PATCH_APPLIED == 'true'
+        run: npm run build:prod
+
+      - name: Audit dependencies
+        if: env.PATCH_APPLIED == 'true'
+        run: npm audit --audit-level=high
+
+      - name: Commit imported delta and remove one-shot workflow
+        if: env.PATCH_APPLIED == 'true'
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/import-private-ai.yml
+          git add -A
+          git commit -m "Import private AI development onto current upstream"
+          git push origin HEAD:migration/import-private-ai
