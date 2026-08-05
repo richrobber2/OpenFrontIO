@@ -12,13 +12,15 @@ jobs:
   import:
     runs-on: ubuntu-latest
     env:
-      MIGRATION_URL: "https://sdmntprsouthcentralus.oaiusercontent.com/files/00000000-2204-81f7-bcf0-9042f216b27d/raw?se=2026-08-05T17:17:25Z&sp=r&sv=2026-02-06&sr=b&scid=5d025b2d-a124-5fa1-aad7-536e0d74e9cb&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-05T13:28:45Z&ske=2026-08-06T13:28:45Z&sks=b&skv=2026-02-06&sig=F6pxkEGmFjX/C1dpzpB3a9OBNhZSaTk/j7U4cflPnVI%3D"
+      MIGRATION_URL: "https://sdmntprwestus.oaiusercontent.com/files/00000000-f918-8230-81e7-dec42a412223/raw?se=2026-08-05T17:24:32Z&sp=r&sv=2026-02-06&sr=b&scid=9559a12c-241e-582b-92a2-930890350cab&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-05T12:17:29Z&ske=2026-08-06T12:17:29Z&sks=b&skv=2026-02-06&sig=fEqNwoNPQEii98kiA55rLGNZNnqOxt9e90q07KAznqc%3D"
+      BASE_COMMIT: "943740de3238c1ca9b8fda24609e74b65d7365a3"
     steps:
       - name: Check out clean fork branch
         uses: actions/checkout@v4
         with:
           ref: migration/import-private-ai
           fetch-depth: 0
+          filter: blob:none
 
       - name: Configure Git
         run: |
@@ -35,55 +37,14 @@ jobs:
           git bundle verify /tmp/private-ai/private-ai.bundle
           git fetch /tmp/private-ai/private-ai.bundle 'refs/remotes/origin/main:refs/remotes/legacy/private-main'
 
-      - name: Find nearest official snapshot and build complete delta
+      - name: Build complete custom delta
         run: |
           set -euo pipefail
-          old_root=$(git rev-list --max-parents=0 legacy/private-main | head -n 1)
-          echo "Private import root: $old_root"
-
-          mapfile -t candidates < <(
-            git rev-list \
-              --after='2026-07-10T00:00:00Z' \
-              --before='2026-07-21T23:59:59Z' \
-              origin/main
-          )
-          if (( ${#candidates[@]} == 0 )); then
-            mapfile -t candidates < <(git rev-list origin/main)
-          fi
-
-          best_commit=""
-          best_score=9223372036854775807
-          : > /tmp/private-ai/base-scores.txt
-          for commit in "${candidates[@]}"; do
-            files=$(git diff --name-only "$commit" "$old_root" | wc -l)
-            lines=$(git diff --numstat "$commit" "$old_root" | awk '
-              { a = ($1 == "-" ? 0 : $1); d = ($2 == "-" ? 0 : $2); total += a + d }
-              END { print total + 0 }
-            ')
-            score=$((files * 100000 + lines))
-            printf '%020d %6d %9d %s %s\n' \
-              "$score" "$files" "$lines" "$commit" \
-              "$(git show -s --format=%cs "$commit")" \
-              >> /tmp/private-ai/base-scores.txt
-            if (( score < best_score )); then
-              best_score=$score
-              best_commit=$commit
-            fi
-          done
-
-          sort -n /tmp/private-ai/base-scores.txt | head -n 10
-          if [[ -z "$best_commit" ]]; then
-            echo "Unable to identify an upstream base snapshot."
-            exit 1
-          fi
-
-          echo "Selected official base: $best_commit"
-          echo "Selected base date: $(git show -s --format=%cI "$best_commit")"
-          echo "BASE_COMMIT=$best_commit" >> "$GITHUB_ENV"
-
-          git diff --binary "$best_commit" legacy/private-main > /tmp/private-ai/full-private-ai.patch
+          git cat-file -e "$BASE_COMMIT^{commit}"
+          git diff --binary "$BASE_COMMIT" legacy/private-main > /tmp/private-ai/full-private-ai.patch
+          echo "Official base: $BASE_COMMIT"
           echo "Complete migration patch size: $(wc -c < /tmp/private-ai/full-private-ai.patch) bytes"
-          git diff --shortstat "$best_commit" legacy/private-main
+          git diff --shortstat "$BASE_COMMIT" legacy/private-main
 
       - name: Apply complete custom delta with three-way merge
         id: apply
@@ -100,7 +61,6 @@ jobs:
           root=/tmp/migration-conflicts
           mkdir -p "$root/base" "$root/upstream" "$root/private" "$root/merged"
           git diff --name-only --diff-filter=U > "$root/conflicts.txt"
-          cp /tmp/private-ai/base-scores.txt "$root/base-scores.txt"
           printf '%s\n' "$BASE_COMMIT" > "$root/selected-base.txt"
 
           while IFS= read -r file; do
