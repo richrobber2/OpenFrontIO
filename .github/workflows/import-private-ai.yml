@@ -4,16 +4,17 @@ on:
   push:
     branches:
       - migration/import-private-ai
+    paths:
+      - .github/workflows/import-private-ai.yml
 
 permissions:
   contents: write
 
 jobs:
   import:
-    if: github.event.head_commit.message == 'ci: persist migrated source without workflow mutations'
     runs-on: ubuntu-latest
     env:
-      MIGRATION_URL: "https://sdmntprwestus3.oaiusercontent.com/files/00000000-ca7c-81fd-8fe8-010aa0957536/raw?se=2026-08-05T18:04:25Z&sp=r&sv=2026-02-06&sr=b&scid=bc13ae0c-1be4-5d04-81c1-2ca3291a9807&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-05T12:17:55Z&ske=2026-08-06T12:17:55Z&sks=b&skv=2026-02-06&sig=UTBmyIJ%2BIyJVqakG8sij5PNjigs7hIBuNzBebL80wmo%3D"
+      MIGRATION_URL: "https://sdmntprwestus3.oaiusercontent.com/files/00000000-0c58-81fd-a104-88d348c97031/raw?se=2026-08-05T18:06:15Z&sp=r&sv=2026-02-06&sr=b&scid=816da1f0-cfc2-5073-b6b8-ef47bc378fb9&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-05T14:23:36Z&ske=2026-08-06T14:23:36Z&sks=b&skv=2026-02-06&sig=ofrLaDsbuUTUFwoz5F2mCbt0p/tVA1fXX0UFn%2BWEzo0%3D"
       BASE_COMMIT: "943740de3238c1ca9b8fda24609e74b65d7365a3"
     steps:
       - name: Check out clean fork branch
