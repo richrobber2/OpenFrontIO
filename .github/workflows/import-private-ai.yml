@@ -12,7 +12,7 @@ jobs:
   import:
     runs-on: ubuntu-latest
     env:
-      MIGRATION_URL: "https://sdmntprwestus3.oaiusercontent.com/files/00000000-f8b4-81fd-a9e1-c4a81504b0d6/raw?se=2026-08-05T17:07:57Z&sp=r&sv=2026-02-06&sr=b&scid=e8a5c19f-b90f-57c5-91a7-d5f712b13247&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-05T13:28:16Z&ske=2026-08-06T13:28:16Z&sks=b&skv=2026-02-06&sig=0Pn/0KFbwenmz08ZPUc%2B4/zpYTr8UgRQVBSbOZUoQMc%3D"
+      MIGRATION_URL: "https://sdmntprsouthcentralus.oaiusercontent.com/files/00000000-4130-81f7-a1fa-8c57319027fd/raw?se=2026-08-05T17:10:38Z&sp=r&sv=2026-02-06&sr=b&scid=5783d39f-88fb-5e11-9b6c-53e74aaeb3e6&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-05T12:17:25Z&ske=2026-08-06T12:17:25Z&sks=b&skv=2026-02-06&sig=wgz6K5vHnTpvz7SBcFR4VhsoufDVEbjlPtYI7w4bWsg%3D"
     steps:
       - name: Check out clean fork branch
         uses: actions/checkout@v4
@@ -33,12 +33,46 @@ jobs:
           unzip -q /tmp/private-ai.zip -d /tmp/private-ai
           (cd /tmp/private-ai && sha256sum -c SHA256SUMS)
           git bundle verify /tmp/private-ai/private-ai.bundle
+          git fetch /tmp/private-ai/private-ai.bundle 'refs/remotes/origin/main:refs/remotes/legacy/private-main'
+
+      - name: Find matching upstream snapshot and build complete delta
+        run: |
+          set -euo pipefail
+          declare -A upstream_by_tree
+          while read -r commit; do
+            tree=$(git show -s --format=%T "$commit")
+            upstream_by_tree["$tree"]="$commit"
+          done < <(git rev-list HEAD)
+
+          old_base=""
+          upstream_base=""
+          while read -r commit; do
+            tree=$(git show -s --format=%T "$commit")
+            if [[ -n "${upstream_by_tree[$tree]:-}" ]]; then
+              old_base="$commit"
+              upstream_base="${upstream_by_tree[$tree]}"
+              break
+            fi
+          done < <(git rev-list legacy/private-main)
+
+          if [[ -z "$old_base" ]]; then
+            echo "No identical snapshot exists between the private history and upstream history."
+            exit 1
+          fi
+
+          echo "Matched private snapshot:  $old_base"
+          echo "Matched upstream snapshot: $upstream_base"
+          echo "OLD_BASE=$old_base" >> "$GITHUB_ENV"
+          echo "UPSTREAM_BASE=$upstream_base" >> "$GITHUB_ENV"
+
+          git diff --binary "$old_base"..legacy/private-main > /tmp/private-ai/full-private-ai.patch
+          echo "Complete migration patch size: $(wc -c < /tmp/private-ai/full-private-ai.patch) bytes"
+          git diff --stat "$old_base"..legacy/private-main | tail -n 20
 
       - name: Apply complete custom delta with three-way merge
         run: |
           set -uo pipefail
-          git fetch /tmp/private-ai/private-ai.bundle 'refs/remotes/origin/main:refs/remotes/legacy/private-main'
-          if git apply --3way --index --whitespace=nowarn /tmp/private-ai/private-ai.patch; then
+          if git apply --3way --index --whitespace=nowarn /tmp/private-ai/full-private-ai.patch; then
             echo "PATCH_APPLIED=true" >> "$GITHUB_ENV"
           else
             echo "PATCH_APPLIED=false" >> "$GITHUB_ENV"
