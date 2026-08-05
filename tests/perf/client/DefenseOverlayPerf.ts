@@ -308,7 +308,7 @@ const iconUnits = new Map(
       pos: id * 101,
       ownerID: id % 72,
       underConstruction: id % 19 === 0,
-      markedForDeletion: id % 97 === 0 ? id : false,
+      markedForDeletion: id % 97 === 0 ? id : (false as const),
     },
   ]),
 );

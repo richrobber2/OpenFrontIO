@@ -1155,12 +1155,14 @@ export class ClientGameRunner {
       if (myPlayer === null) return;
       this.myPlayer = myPlayer;
     }
-    this.myPlayer.actions(tile, [UnitType.TransportShip]).then((actions) => {
+    const myPlayer = this.myPlayer;
+    const attackRatio = this.renderer.uiState.attackRatio;
+    myPlayer.actions(tile, [UnitType.TransportShip]).then((actions) => {
       if (actions.canAttack) {
         this.eventBus.emit(
           new SendAttackIntentEvent(
             this.gameView.owner(tile).id(),
-            this.myPlayer!.troops() * this.renderer.uiState.attackRatio,
+            myPlayer.troops() * attackRatio,
           ),
         );
       } else if (this.canAutoBoat(actions.buildableUnits, tile)) {
@@ -1315,12 +1317,14 @@ export class ClientGameRunner {
       this.myPlayer = myPlayer;
     }
 
-    this.myPlayer.actions(tile, null).then((actions) => {
+    const myPlayer = this.myPlayer;
+    const attackRatio = this.renderer.uiState.attackRatio;
+    myPlayer.actions(tile, null).then((actions) => {
       if (actions.canAttack) {
         this.eventBus.emit(
           new SendAttackIntentEvent(
             this.gameView.owner(tile).id(),
-            this.myPlayer!.troops() * this.renderer.uiState.attackRatio,
+            myPlayer.troops() * attackRatio,
           ),
         );
       }

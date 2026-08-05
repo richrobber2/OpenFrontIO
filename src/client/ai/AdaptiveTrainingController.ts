@@ -93,7 +93,9 @@ export class LearningCheckpointStore<T> {
 
   public list(): LearningCheckpoint<T>[] {
     try {
-      const parsed = JSON.parse(localStorage.getItem(this.options.storageKey) ?? "[]");
+      const parsed = JSON.parse(
+        localStorage.getItem(this.options.storageKey) ?? "[]",
+      );
       return Array.isArray(parsed) ? (parsed as LearningCheckpoint<T>[]) : [];
     } catch {
       return [];
@@ -101,7 +103,8 @@ export class LearningCheckpointStore<T> {
   }
 
   public latest(): LearningCheckpoint<T> | null {
-    return this.list().at(-1) ?? null;
+    const checkpoints = this.list();
+    return checkpoints[checkpoints.length - 1] ?? null;
   }
 
   public best(): LearningCheckpoint<T> | null {
@@ -143,7 +146,8 @@ export class LearningCheckpointStore<T> {
     const checkpoints = this.list();
     const checkpoint =
       id === undefined
-        ? checkpoints.at(-2) ?? checkpoints.at(-1)
+        ? (checkpoints[checkpoints.length - 2] ??
+          checkpoints[checkpoints.length - 1])
         : checkpoints.find((candidate) => candidate.id === id);
     return checkpoint === undefined ? null : structuredClone(checkpoint.state);
   }

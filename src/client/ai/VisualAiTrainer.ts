@@ -3758,18 +3758,15 @@ export class VisualAiTrainer {
             ),
             mapDiagonal,
           );
-          const sourceWaterComponents = new Set(
-            this.game
-              .neighbors(tile)
-              .filter((neighbor) => this.game.isWater(neighbor))
-              .map((neighbor) => this.game.getWaterComponent(neighbor))
-              .filter((component): component is number => component !== null),
-          );
-          const reachablePorts = partnerPorts.filter((partner) =>
-            [...sourceWaterComponents].some((component) =>
-              this.game.hasWaterComponent(partner.tile(), component),
-            ),
-          );
+          // GameView exposes terrain but not the simulation's mutable
+          // water-component graph. Restrict projected trade to ocean shores,
+          // which are guaranteed to be navigable, instead of inventing inland
+          // lake connectivity in the client planner.
+          const reachablePorts = this.game.isOceanShore(tile)
+            ? partnerPorts.filter((partner) =>
+                this.game.isOceanShore(partner.tile()),
+              )
+            : [];
           if (reachablePorts.length === 0) return [];
           const weightedRoutes = reachablePorts.map((partner) => {
             const distance = this.game.manhattanDist(tile, partner.tile());
@@ -4940,7 +4937,9 @@ export class VisualAiTrainer {
           expectedTroopLoss: number;
           affectedTargetTiles: number;
           destroyedStructureValue: number;
-          route: ReturnType<VisualAiTrainer["strategicRouteAssessment"]>;
+          route: NonNullable<
+            ReturnType<VisualAiTrainer["strategicRouteAssessment"]>
+          >;
           reasons: string[];
         }
       | undefined;
@@ -4957,9 +4956,12 @@ export class VisualAiTrainer {
         continue;
       }
 
-      const weaponCandidates = [
-        { kind: "nuke" as const, type: UnitType.AtomBomb },
-        { kind: "nuke" as const, type: UnitType.HydrogenBomb },
+      const weaponCandidates: ReadonlyArray<{
+        kind: "nuke";
+        type: PlayerBuildableUnitType;
+      }> = [
+        { kind: "nuke", type: UnitType.AtomBomb },
+        { kind: "nuke", type: UnitType.HydrogenBomb },
       ];
       const buildables = await player.buildables(
         strikeTile,
@@ -5141,7 +5143,7 @@ export class VisualAiTrainer {
     const source = sourceSilo.tile();
     const path =
       UniversalPathFinding.Parabola(this.game, {
-        increment: this.game.config().defaultNukeSpeed(),
+        increment: this.game.config().nukeSpeed(UnitType.AtomBomb),
         distanceBasedHeight: true,
         directionUp: true,
       }).findPath(source, destination) ?? [];
@@ -7930,9 +7932,20 @@ export class VisualAiTrainer {
   }
 
   private activeGene(gene: "Aggression" | "Caution" | "Naval"): number {
-    return this.learning.candidateActive === 1
-      ? this.learning[`candidate${gene}Gene`]
-      : this.learning[`${gene.toLowerCase()}Gene` as keyof LearningProfile];
+    switch (gene) {
+      case "Aggression":
+        return this.learning.candidateActive === 1
+          ? this.learning.candidateAggressionGene
+          : this.learning.aggressionGene;
+      case "Caution":
+        return this.learning.candidateActive === 1
+          ? this.learning.candidateCautionGene
+          : this.learning.cautionGene;
+      case "Naval":
+        return this.learning.candidateActive === 1
+          ? this.learning.candidateNavalGene
+          : this.learning.navalGene;
+    }
   }
 
   private decayOldLearning(): void {
