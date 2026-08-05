@@ -12,7 +12,7 @@ jobs:
   import:
     runs-on: ubuntu-latest
     env:
-      MIGRATION_URL: "https://sdmntprwestus3.oaiusercontent.com/files/00000000-1bbc-81fd-bd95-1273a80ff9ff/raw?se=2026-08-05T17:13:48Z&sp=r&sv=2026-02-06&sr=b&scid=e7076bd2-b54e-5953-9a2b-f736f18722e4&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-04T21:55:48Z&ske=2026-08-05T21:55:48Z&sks=b&skv=2026-02-06&sig=NLSHxCchxgXY/bMPHGDuucJE5mXpjrq0vmV3R4YcyoA%3D"
+      MIGRATION_URL: "https://sdmntprsouthcentralus.oaiusercontent.com/files/00000000-2204-81f7-bcf0-9042f216b27d/raw?se=2026-08-05T17:17:25Z&sp=r&sv=2026-02-06&sr=b&scid=5d025b2d-a124-5fa1-aad7-536e0d74e9cb&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-05T13:28:45Z&ske=2026-08-06T13:28:45Z&sks=b&skv=2026-02-06&sig=F6pxkEGmFjX/C1dpzpB3a9OBNhZSaTk/j7U4cflPnVI%3D"
     steps:
       - name: Check out clean fork branch
         uses: actions/checkout@v4
@@ -86,18 +86,50 @@ jobs:
           git diff --shortstat "$best_commit" legacy/private-main
 
       - name: Apply complete custom delta with three-way merge
+        id: apply
+        continue-on-error: true
         run: |
-          set -uo pipefail
-          if git apply --3way --index --whitespace=nowarn /tmp/private-ai/full-private-ai.patch; then
-            echo "PATCH_APPLIED=true" >> "$GITHUB_ENV"
-          else
-            echo "PATCH_APPLIED=false" >> "$GITHUB_ENV"
-            echo "Unmerged paths:"
-            git diff --name-only --diff-filter=U | tee /tmp/private-ai/conflicts.txt
-            echo "Status:"
-            git status --short
-            exit 1
-          fi
+          set -euo pipefail
+          git apply --3way --index --whitespace=nowarn /tmp/private-ai/full-private-ai.patch
+          echo "PATCH_APPLIED=true" >> "$GITHUB_ENV"
+
+      - name: Package exact conflict stages
+        if: steps.apply.outcome == 'failure'
+        run: |
+          set -euo pipefail
+          root=/tmp/migration-conflicts
+          mkdir -p "$root/base" "$root/upstream" "$root/private" "$root/merged"
+          git diff --name-only --diff-filter=U > "$root/conflicts.txt"
+          cp /tmp/private-ai/base-scores.txt "$root/base-scores.txt"
+          printf '%s\n' "$BASE_COMMIT" > "$root/selected-base.txt"
+
+          while IFS= read -r file; do
+            [[ -n "$file" ]] || continue
+            for dir in base upstream private merged; do
+              mkdir -p "$root/$dir/$(dirname "$file")"
+            done
+            git show ":1:$file" > "$root/base/$file" || true
+            git show ":2:$file" > "$root/upstream/$file" || true
+            git show ":3:$file" > "$root/private/$file" || true
+            git checkout --conflict=diff3 -- "$file"
+            cp "$file" "$root/merged/$file"
+          done < "$root/conflicts.txt"
+
+          echo "Captured conflicts:"
+          cat "$root/conflicts.txt"
+
+      - name: Upload conflict diagnostics
+        if: steps.apply.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: private-ai-conflicts
+          path: /tmp/migration-conflicts
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Stop for deliberate conflict resolution
+        if: steps.apply.outcome == 'failure'
+        run: exit 1
 
       - name: Install dependencies
         if: env.PATCH_APPLIED == 'true'
