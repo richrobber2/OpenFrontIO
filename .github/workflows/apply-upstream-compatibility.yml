@@ -1,0 +1,76 @@
+name: Apply upstream compatibility adaptation
+
+on:
+  push:
+    branches:
+      - migration/import-private-ai
+    paths:
+      - .github/workflows/apply-upstream-compatibility.yml
+
+permissions:
+  contents: write
+
+jobs:
+  compatibility:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out integration branch
+        uses: actions/checkout@v4
+        with:
+          ref: migration/import-private-ai
+          fetch-depth: 1
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Apply deterministic compatibility patch
+        run: python scripts/apply-upstream-compatibility.py
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Format and lint touched source
+        run: |
+          npx prettier --write \
+            src/client/AiTrainingRestartCleanup.ts \
+            src/client/ClientGameRunner.ts \
+            src/client/ai/AdaptiveTrainingController.ts \
+            src/client/ai/VisualAiTrainer.ts \
+            scripts/headless-ai-training-policy.d.mts \
+            tests/core/executions/SAMLauncherExecution.test.ts \
+            tests/perf/client/DefenseOverlayPerf.ts
+          npx eslint \
+            src/client/AiTrainingRestartCleanup.ts \
+            src/client/ClientGameRunner.ts \
+            src/client/ai/AdaptiveTrainingController.ts \
+            src/client/ai/VisualAiTrainer.ts \
+            tests/core/executions/SAMLauncherExecution.test.ts \
+            tests/perf/client/DefenseOverlayPerf.ts
+
+      - name: Build production client and type-check repository
+        run: npm run build-prod
+
+      - name: Run compatibility and strategy tests
+        run: |
+          npx vitest run \
+            tests/client/HeadlessAiTrainingPolicy.test.ts \
+            tests/client/CounterPressureAndTribeOpportunity.test.ts \
+            tests/client/ImmediateTribeResponseIntegration.test.ts \
+            tests/client/WildernessExpansionPolicy.test.ts \
+            tests/client/WildernessExpansionIntegration.test.ts \
+            tests/client/OverseasExpansionPolicy.test.ts \
+            tests/client/StrategicWeaponsPolicy.test.ts \
+            tests/client/VisualAiStrategyIntegration.test.ts \
+            tests/client/view/UnitViewOwnership.test.ts \
+            tests/core/executions/SAMLauncherExecution.test.ts
+
+      - name: Commit source-only compatibility adaptation
+        run: |
+          set -euo pipefail
+          git restore --source=HEAD --staged --worktree .github/workflows
+          git rm scripts/apply-upstream-compatibility.py
+          git add -A
+          git commit -m "Adapt private AI development to current upstream APIs"
+          git push origin HEAD:migration/import-private-ai
