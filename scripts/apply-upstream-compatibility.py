@@ -40,12 +40,13 @@ replace_once(
         );
 ''',
     '''    const myPlayer = this.myPlayer;
+    const attackRatio = this.renderer.uiState.attackRatio;
     myPlayer.actions(tile, [UnitType.TransportShip]).then((actions) => {
       if (actions.canAttack) {
         this.eventBus.emit(
           new SendAttackIntentEvent(
             this.gameView.owner(tile).id(),
-            myPlayer.troops() * this.renderer.uiState.attackRatio,
+            myPlayer.troops() * attackRatio,
           ),
         );
 ''',
@@ -62,12 +63,13 @@ replace_once(
         );
 ''',
     '''    const myPlayer = this.myPlayer;
+    const attackRatio = this.renderer.uiState.attackRatio;
     myPlayer.actions(tile, null).then((actions) => {
       if (actions.canAttack) {
         this.eventBus.emit(
           new SendAttackIntentEvent(
             this.gameView.owner(tile).id(),
-            myPlayer.troops() * this.renderer.uiState.attackRatio,
+            myPlayer.troops() * attackRatio,
           ),
         );
 ''',
