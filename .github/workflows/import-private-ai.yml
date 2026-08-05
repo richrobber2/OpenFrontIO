@@ -12,7 +12,7 @@ jobs:
   import:
     runs-on: ubuntu-latest
     env:
-      MIGRATION_URL: "https://sdmntprsouthcentralus.oaiusercontent.com/files/00000000-4130-81f7-a1fa-8c57319027fd/raw?se=2026-08-05T17:10:38Z&sp=r&sv=2026-02-06&sr=b&scid=5783d39f-88fb-5e11-9b6c-53e74aaeb3e6&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-05T12:17:25Z&ske=2026-08-06T12:17:25Z&sks=b&skv=2026-02-06&sig=wgz6K5vHnTpvz7SBcFR4VhsoufDVEbjlPtYI7w4bWsg%3D"
+      MIGRATION_URL: "https://sdmntprwestus3.oaiusercontent.com/files/00000000-1bbc-81fd-bd95-1273a80ff9ff/raw?se=2026-08-05T17:13:48Z&sp=r&sv=2026-02-06&sr=b&scid=e7076bd2-b54e-5953-9a2b-f736f18722e4&skoid=fadb8e47-d3c7-4c79-a9c3-970d9af3b213&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-08-04T21:55:48Z&ske=2026-08-05T21:55:48Z&sks=b&skv=2026-02-06&sig=NLSHxCchxgXY/bMPHGDuucJE5mXpjrq0vmV3R4YcyoA%3D"
     steps:
       - name: Check out clean fork branch
         uses: actions/checkout@v4
@@ -35,39 +35,55 @@ jobs:
           git bundle verify /tmp/private-ai/private-ai.bundle
           git fetch /tmp/private-ai/private-ai.bundle 'refs/remotes/origin/main:refs/remotes/legacy/private-main'
 
-      - name: Find matching upstream snapshot and build complete delta
+      - name: Find nearest official snapshot and build complete delta
         run: |
           set -euo pipefail
-          declare -A upstream_by_tree
-          while read -r commit; do
-            tree=$(git show -s --format=%T "$commit")
-            upstream_by_tree["$tree"]="$commit"
-          done < <(git rev-list HEAD)
+          old_root=$(git rev-list --max-parents=0 legacy/private-main | head -n 1)
+          echo "Private import root: $old_root"
 
-          old_base=""
-          upstream_base=""
-          while read -r commit; do
-            tree=$(git show -s --format=%T "$commit")
-            if [[ -n "${upstream_by_tree[$tree]:-}" ]]; then
-              old_base="$commit"
-              upstream_base="${upstream_by_tree[$tree]}"
-              break
+          mapfile -t candidates < <(
+            git rev-list \
+              --after='2026-07-10T00:00:00Z' \
+              --before='2026-07-21T23:59:59Z' \
+              origin/main
+          )
+          if (( ${#candidates[@]} == 0 )); then
+            mapfile -t candidates < <(git rev-list origin/main)
+          fi
+
+          best_commit=""
+          best_score=9223372036854775807
+          : > /tmp/private-ai/base-scores.txt
+          for commit in "${candidates[@]}"; do
+            files=$(git diff --name-only "$commit" "$old_root" | wc -l)
+            lines=$(git diff --numstat "$commit" "$old_root" | awk '
+              { a = ($1 == "-" ? 0 : $1); d = ($2 == "-" ? 0 : $2); total += a + d }
+              END { print total + 0 }
+            ')
+            score=$((files * 100000 + lines))
+            printf '%020d %6d %9d %s %s\n' \
+              "$score" "$files" "$lines" "$commit" \
+              "$(git show -s --format=%cs "$commit")" \
+              >> /tmp/private-ai/base-scores.txt
+            if (( score < best_score )); then
+              best_score=$score
+              best_commit=$commit
             fi
-          done < <(git rev-list legacy/private-main)
+          done
 
-          if [[ -z "$old_base" ]]; then
-            echo "No identical snapshot exists between the private history and upstream history."
+          sort -n /tmp/private-ai/base-scores.txt | head -n 10
+          if [[ -z "$best_commit" ]]; then
+            echo "Unable to identify an upstream base snapshot."
             exit 1
           fi
 
-          echo "Matched private snapshot:  $old_base"
-          echo "Matched upstream snapshot: $upstream_base"
-          echo "OLD_BASE=$old_base" >> "$GITHUB_ENV"
-          echo "UPSTREAM_BASE=$upstream_base" >> "$GITHUB_ENV"
+          echo "Selected official base: $best_commit"
+          echo "Selected base date: $(git show -s --format=%cI "$best_commit")"
+          echo "BASE_COMMIT=$best_commit" >> "$GITHUB_ENV"
 
-          git diff --binary "$old_base"..legacy/private-main > /tmp/private-ai/full-private-ai.patch
+          git diff --binary "$best_commit" legacy/private-main > /tmp/private-ai/full-private-ai.patch
           echo "Complete migration patch size: $(wc -c < /tmp/private-ai/full-private-ai.patch) bytes"
-          git diff --stat "$old_base"..legacy/private-main | tail -n 20
+          git diff --shortstat "$best_commit" legacy/private-main
 
       - name: Apply complete custom delta with three-way merge
         run: |
