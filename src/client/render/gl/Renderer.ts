@@ -70,6 +70,7 @@ import {
   hexToRgb,
   MAX_TRAIL_COLORS,
 } from "./utils/ColorUtils";
+import { collectCompletedDefensePosts } from "./utils/DefensePostCollection";
 import { renderDpr } from "./utils/Dpr";
 import {
   createTexture2D,
@@ -191,6 +192,7 @@ export class GPURenderer {
   // Last-uploaded unit/structure maps (selection box + bar pass inputs)
   private lastUnits: Map<number, UnitState> = new Map();
   private lastStructures: Map<number, UnitState> = new Map();
+  private defensePosts: { x: number; y: number; ownerID: number }[] = [];
 
   // Local player relationship data (for SAM radius coloring)
   private localPlayerID = 0;
@@ -922,18 +924,8 @@ export class GPURenderer {
     this.structureLevelPass.updateStructures(units);
     this.samRadiusPass.updateStructures(units);
     this.unitPass.setStructures(units);
-    const posts: { x: number; y: number; ownerID: number }[] = [];
-    const w = this.mapW;
-    for (const u of units.values()) {
-      if (u.unitType === "Defense Post" && !u.underConstruction) {
-        posts.push({
-          x: u.pos % w,
-          y: (u.pos - (u.pos % w)) / w,
-          ownerID: u.ownerID,
-        });
-      }
-    }
-    this.defenseCoveragePass.updateDefensePosts(posts);
+    collectCompletedDefensePosts(units, this.mapW, this.defensePosts);
+    this.defenseCoveragePass.updateDefensePosts(this.defensePosts);
   }
 
   applyDeadUnits(deadUnits: DeadUnitFx[]): void {

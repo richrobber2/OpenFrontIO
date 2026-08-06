@@ -25,6 +25,11 @@ import {
 import { DynamicInstanceBuffer } from "../DynamicBuffer";
 import type { RenderSettings } from "../RenderSettings";
 import { createProgram } from "../utils/GlUtils";
+import {
+  captureStructureLevels,
+  type LevelStructureSnapshot,
+  sameStructureLevels,
+} from "../utils/StructureLevelInvalidation";
 import type { GlyphTables } from "./name-pass/AtlasData";
 import { buildGlyphTables, parseAtlasData } from "./name-pass/AtlasData";
 import { buildGlyphMetricsTex } from "./name-pass/DataTextures";
@@ -152,6 +157,7 @@ export class StructureLevelPass {
   // when the font toggles (digit advances differ between fonts).
   private lastUnits: Map<number, UnitState> | null = null;
   private layoutClassic: boolean | null = null;
+  private levelSnapshot: LevelStructureSnapshot[] = [];
 
   constructor(
     gl: WebGL2RenderingContext,
@@ -305,6 +311,13 @@ export class StructureLevelPass {
   updateStructures(units: Map<number, UnitState>): void {
     this.lastUnits = units;
     const classic = this.settings.structureLevel.classicFont;
+    if (
+      this.layoutClassic === classic &&
+      sameStructureLevels(units, STRUCTURE_TYPES, this.levelSnapshot)
+    ) {
+      return;
+    }
+    captureStructureLevels(units, STRUCTURE_TYPES, this.levelSnapshot);
     this.layoutClassic = classic;
     const glyph = classic ? this.classic.glyph : this.msdf.glyph;
 

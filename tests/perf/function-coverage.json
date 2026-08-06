@@ -1,0 +1,306 @@
+{
+  "src/client/ai/StrategyMath.ts": {
+    "module": "npm run perf:ai",
+    "functions": {
+      "nationFrontPolicy": "npm run perf:ai",
+      "nationLandFrontAllowed": "npm run perf:ai",
+      "shouldRiskDenialRaid": "npm run perf:ai"
+    }
+  },
+  "src/client/ai/ActionOutcomeLearning.ts": {
+    "module": "npm run perf:ai",
+    "functions": {
+      "clampGene": "npm run perf:ai",
+      "normalizeActionReward": "npm run perf:ai",
+      "scoreDelayedActionOutcome": "npm run perf:ai",
+      "scoreCounterfactualActionOutcome": "npm run perf:ai",
+      "applyActionOutcomeLearning": "npm run perf:ai"
+    }
+  },
+  "src/client/ClientGameRunner.ts": {
+    "module": "npm run perf:client",
+    "functions": {
+      "createClientGame": "npm run perf:client",
+      "ClientGameRunner.start": "npm run perf:client",
+      "ClientGameRunner.stop": "npm run perf:client",
+      "ClientGameRunner.inputEvent": "npm run perf:client",
+      "ClientGameRunner.autoUpgradeEvent": "npm run perf:client",
+      "ClientGameRunner.doGroundAttackUnderCursor": "npm run perf:client",
+      "ClientGameRunner.doRetaliateAttackMostRecent": "npm run perf:client",
+      "ClientGameRunner.getTileUnderCursor": "npm run perf:client",
+      "ClientGameRunner.sendBoatAttackIntent": "npm run perf:client"
+    }
+  },
+  "src/client/SinglePlayerModal.ts": {
+    "module": "npm run perf:ai",
+    "functions": {
+      "SinglePlayerModal.renderHeaderSlot": "npm run perf:ai",
+      "SinglePlayerModal.renderBody": "npm run perf:ai",
+      "SinglePlayerModal.startAiTraining": "npm run perf:ai"
+    }
+  },
+  "src/client/ai/SpawnStrategyPolicy.ts": {
+    "module": "npm run perf:spawn-strategy",
+    "functions": {
+      "sampleCoastalAccess": "npm run perf:spawn-strategy",
+      "scoreTrainingSpawn": "npm run perf:spawn-strategy"
+    }
+  },
+  "src/client/ai/AdaptivePortPolicy.ts": {
+    "module": "npm run perf:ai",
+    "functions": {
+      "planAdaptivePortActions": "npm run perf:ai",
+      "rankAdaptiveTradePortOptions": "npm run perf:ai"
+    }
+  },
+  "src/client/ai/AiModule.ts": {
+    "module": "npm run perf:ai",
+    "functions": {
+      "NavalEconomyModule.evaluate": "npm run perf:ai"
+    }
+  },
+  "src/client/ai/AiModuleCoordinator.ts": {
+    "module": "npm run perf:ai",
+    "functions": {}
+  },
+  "src/client/ai/OverseasExpansionPolicy.ts": {
+    "module": "npm run perf:overseas-expansion",
+    "functions": {
+      "overseasExpansionValue": "npm run perf:overseas-expansion",
+      "navalLaunchDelayTicks": "npm run perf:overseas-expansion",
+      "minimumNavalLaunchReserveRatio": "npm run perf:overseas-expansion",
+      "maximumNavalInterceptionRisk": "npm run perf:overseas-expansion",
+      "preferTribeExpansionTargets": "npm run perf:overseas-expansion",
+      "relativeOverseasLaunchTroops": "npm run perf:overseas-expansion",
+      "earlyPortSeizureValue": "npm run perf:overseas-expansion",
+      "prioritizePortLandingTiles": "npm run perf:overseas-expansion",
+      "isNavalRemnantOpportunity": "npm run perf:overseas-expansion",
+      "transportRecallThreshold": "npm run perf:overseas-expansion"
+    }
+  },
+  "src/client/render/gl/utils/TradeShipLightGrid.ts": {
+    "module": "npm run perf:trade-ship-lights",
+    "functions": {
+      "shouldEmitTradeShipLight": "npm run perf:trade-ship-lights"
+    }
+  },
+  "src/client/render/gl/passes/PointLightPass.ts": {
+    "module": "npm run perf:trade-ship-lights",
+    "functions": {
+      "PointLightPass.updateLights": "npm run perf:trade-ship-lights",
+      "PointLightPass.draw": "npm run perf:trade-ship-lights"
+    }
+  },
+  "src/client/render/gl/utils/UnitAtlasClassification.ts": {
+    "module": "npm run perf:trade-ship-render",
+    "functions": {
+      "isMissileAtlasColumn": "npm run perf:trade-ship-render"
+    }
+  },
+  "src/client/render/gl/passes/UnitPass.ts": {
+    "module": "npm run perf:trade-ship-render",
+    "functions": {
+      "UnitPass.emitGround": "npm run perf:trade-ship-render",
+      "UnitPass.updateUnits": "npm run perf:trade-ship-render"
+    }
+  },
+  "src/client/ai/SamPlacementPolicy.ts": {
+    "module": "npm run perf:sam-placement",
+    "functions": {
+      "samPlacementProtectionRadius": "npm run perf:sam-placement",
+      "samStructureValue": "npm run perf:sam-placement",
+      "scoreSamPlacement": "npm run perf:sam-placement"
+    }
+  },
+  "src/core/execution/nation/PlacementTileCache.ts": {
+    "module": "npm run perf:building-placement",
+    "functions": {
+      "placementTilesExcluding": "npm run perf:building-placement"
+    }
+  },
+  "src/core/execution/nation/NationStructureBehavior.ts": {
+    "module": "npm run perf:building-placement",
+    "functions": {
+      "NationStructureBehavior.missileSiloValue": "npm run perf:building-placement",
+      "NationStructureBehavior.portValue": "npm run perf:building-placement",
+      "NationStructureBehavior.factoryValue": "npm run perf:building-placement",
+      "NationStructureBehavior.cityValue": "npm run perf:building-placement",
+      "NationStructureBehavior.samLauncherValue": "npm run perf:building-placement"
+    }
+  },
+  "src/client/ai/FortifyGeometryCache.ts": {
+    "module": "npm run perf:fortify",
+    "functions": {
+      "memoizeTileMetric": "npm run perf:fortify"
+    }
+  },
+  "src/client/ai/NavalCombatPolicy.ts": {
+    "module": "npm run perf:naval-combat",
+    "functions": {
+      "warshipHealthRatio": "npm run perf:naval-combat",
+      "warshipCombatPower": "npm run perf:naval-combat",
+      "fleetCombatPower": "npm run perf:naval-combat",
+      "selectWarshipDeployment": "npm run perf:naval-combat"
+    }
+  },
+  "src/client/ai/VisualAiTrainer.ts": {
+    "module": "npm run perf:fortify",
+    "functions": {
+      "VisualAiTrainer.decide": "npm run perf:ai",
+      "VisualAiTrainer.tryChooseTrainingSpawn": "npm run perf:spawn-strategy",
+      "countStops": "npm run perf:economic-saturation",
+      "VisualAiTrainer.tick": "npm run perf:ai",
+      "VisualAiTrainer.tryConquerTribe": "npm run perf:ai",
+      "VisualAiTrainer.tryBuildStrategicSam": "npm run perf:sam-placement",
+      "VisualAiTrainer.tryLaunchReserveFleet": "npm run perf:overseas-expansion",
+      "VisualAiTrainer.monitorTransportRisk": "npm run perf:overseas-expansion",
+      "VisualAiTrainer.tryBuildDefensePost": "npm run perf:fortify",
+      "VisualAiTrainer.tryNavalControl": "npm run perf:naval-combat",
+      "VisualAiTrainer.tryManageAllianceLifecycle": "npm run perf:ai",
+      "VisualAiTrainer.tryStartDenialAttack": "npm run perf:ai",
+      "VisualAiTrainer.tryStartLandRaid": "npm run perf:ai",
+      "VisualAiTrainer.decayOldLearning": "npm run perf:ai",
+      "VisualAiTrainer.actionsEnabled": "npm run perf:ai",
+      "VisualAiTrainer.choiceAllowed": "npm run perf:ai",
+      "VisualAiTrainer.refreshTrainingControl": "npm run perf:ai",
+      "normalizeLearning": "npm run perf:ai",
+      "VisualAiTrainer.settleActionPredictions": "npm run perf:ai",
+      "VisualAiTrainer.recordActionPrediction": "npm run perf:ai",
+      "VisualAiTrainer.publishTelemetry": "npm run perf:ai",
+      "VisualAiTrainer.onGameEnd": "npm run perf:ai",
+      "VisualAiTrainer.handleTrainingDeath": "npm run perf:ai",
+      "VisualAiTrainer.attack": "npm run perf:ai",
+      "hostileDistance": "npm run perf:fortify",
+      "spacingFromExistingPost": "npm run perf:fortify",
+      "coveredBorderTiles": "npm run perf:fortify",
+      "uniquelyCoveredBorderTiles": "npm run perf:fortify",
+      "protectedStructureValue": "npm run perf:fortify",
+      "protectedStructureCount": "npm run perf:fortify",
+      "nearestStructureDistance": "npm run perf:fortify"
+    }
+  },
+  "src/server/Master.ts": {
+    "module": "npm run perf:ai",
+    "functions": {
+      "<module>": "npm run perf:ai"
+    }
+  },
+  "src/server/VisualAiBrainStore.ts": {
+    "module": "npm run perf:brain-store",
+    "functions": {
+      "<module>": "npm run perf:brain-store",
+      "validActionHistory": "npm run perf:brain-store",
+      "validRecentMatchResults": "npm run perf:brain-store",
+      "validActionRewardBaselines": "npm run perf:brain-store",
+      "validVisualAiBrainProfile": "npm run perf:brain-store",
+      "saveVisualAiBrain": "npm run perf:brain-store"
+    }
+  },
+  "src/client/ai/DecisionTriggerPolicy.ts": {
+    "module": "npm run perf:ai",
+    "functions": {
+      "planAdaptivePlanningCadence": "npm run perf:ai",
+      "shouldTriggerIdleGrowth": "npm run perf:ai",
+      "shouldLaunchDefensiveCounter": "npm run perf:ai",
+      "shouldPreFortifyInfrastructure": "npm run perf:ai",
+      "factoryOpportunityRetryTick": "npm run perf:economic-saturation"
+    }
+  },
+  "src/client/ai/AllianceLifecyclePolicy.ts": {
+    "module": "npm run perf:ai",
+    "functions": {
+      "planAllianceLifecycle": "npm run perf:ai"
+    }
+  },
+  "src/client/ai/EconomicSystemPolicy.ts": {
+    "module": "npm run perf:economic-saturation",
+    "functions": {
+      "planEconomicSystems": "npm run perf:economic-saturation",
+      "capacityEscapeCityBudget": "npm run perf:economic-saturation",
+      "shouldFundFirstPressureFactory": "npm run perf:economic-saturation",
+      "selectFactoryUpgradeCandidates": "npm run perf:economic-saturation"
+    }
+  },
+  "src/client/render/gl/passes/DefenseCoveragePass.ts": {
+    "module": "npm run perf:defense-overlay",
+    "functions": {
+      "DefenseCoveragePass.updateDefensePosts": "npm run perf:defense-overlay",
+      "DefenseCoveragePass.markPostAreaDirty": "npm run perf:defense-overlay",
+      "DefenseCoveragePass.draw": "npm run perf:defense-overlay"
+    }
+  },
+  "src/client/render/gl/utils/DefenseCoverageInvalidation.ts": {
+    "module": "npm run perf:defense-overlay",
+    "functions": {
+      "defensePostBlockBounds": "npm run perf:defense-overlay"
+    }
+  },
+  "src/client/render/gl/Renderer.ts": {
+    "module": "npm run perf:defense-overlay",
+    "functions": {
+      "GPURenderer.updateStructures": "npm run perf:defense-overlay"
+    }
+  },
+  "src/client/render/gl/utils/DefensePostCollection.ts": {
+    "module": "npm run perf:defense-overlay",
+    "functions": {
+      "collectCompletedDefensePosts": "npm run perf:defense-overlay"
+    }
+  },
+  "src/client/render/gl/passes/SamRadiusPass.ts": {
+    "module": "npm run perf:defense-overlay",
+    "functions": {
+      "SAMRadiusPass.setAllies": "npm run perf:defense-overlay",
+      "SAMRadiusPass.rebuild": "npm run perf:defense-overlay",
+      "SAMRadiusPass.updateStructures": "npm run perf:defense-overlay",
+      "SAMRadiusPass.buildInstances": "npm run perf:defense-overlay",
+      "SAMRadiusPass.setVisible": "npm run perf:defense-overlay"
+    }
+  },
+  "src/client/render/gl/passes/StructurePass.ts": {
+    "module": "npm run perf:defense-overlay",
+    "functions": {
+      "StructurePass.draw": "npm run perf:defense-overlay",
+      "StructurePass.updateStructures": "npm run perf:defense-overlay"
+    }
+  },
+  "src/client/render/gl/passes/StructureLevelPass.ts": {
+    "module": "npm run perf:defense-overlay",
+    "functions": {
+      "StructureLevelPass.updateStructures": "npm run perf:defense-overlay"
+    }
+  },
+  "src/client/render/gl/utils/OverlayInvalidation.ts": {
+    "module": "npm run perf:defense-overlay",
+    "functions": {
+      "sameNumberSet": "npm run perf:defense-overlay",
+      "sameDefensePosts": "npm run perf:defense-overlay"
+    }
+  },
+  "src/client/render/gl/utils/SamRadiusGeometry.ts": {
+    "module": "npm run perf:defense-overlay",
+    "functions": {
+      "computeUncoveredArcs": "npm run perf:defense-overlay"
+    }
+  },
+  "src/client/render/gl/utils/StructureShapeUniforms.ts": {
+    "module": "npm run perf:defense-overlay",
+    "functions": {
+      "updateStructureShapeBuffers": "npm run perf:defense-overlay"
+    }
+  },
+  "src/client/render/gl/utils/StructureLevelInvalidation.ts": {
+    "module": "npm run perf:defense-overlay",
+    "functions": {
+      "sameStructureLevels": "npm run perf:defense-overlay",
+      "captureStructureLevels": "npm run perf:defense-overlay"
+    }
+  },
+  "src/client/render/gl/utils/StructureIconInvalidation.ts": {
+    "module": "npm run perf:defense-overlay",
+    "functions": {
+      "sameStructureIcons": "npm run perf:defense-overlay",
+      "captureStructureIcons": "npm run perf:defense-overlay"
+    }
+  }
+}

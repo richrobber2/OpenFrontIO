@@ -1,16 +1,10 @@
-import { Platform } from "./Platform";
-
 export function initLayout() {
   // Wait for play-page component to render before setting up hamburger menu
   customElements.whenDefined("play-page").then(() => {
     const hb = document.getElementById("hamburger-btn");
     const sidebar = document.getElementById("sidebar-menu");
     const backdrop = document.getElementById("mobile-menu-backdrop");
-
-    // Force sidebar visibility style to ensure it's not hidden by other CSS
-    if (sidebar && Platform.isMobileWidth) {
-      sidebar.style.display = "flex";
-    }
+    const compactNavigation = window.matchMedia("(max-width: 1023px)");
 
     if (!hb) {
       console.error("Hamburger button not found");
@@ -34,10 +28,24 @@ export function initLayout() {
       backdrop.classList.toggle("open", open);
       document.documentElement.classList.toggle("overflow-hidden", open);
       hb.setAttribute("aria-expanded", open ? "true" : "false");
+      sidebar.setAttribute("aria-hidden", open ? "false" : "true");
+      backdrop.setAttribute("aria-hidden", open ? "false" : "true");
+      if (open) sidebar.setAttribute("aria-modal", "true");
+      else sidebar.removeAttribute("aria-modal");
     };
 
-    const closeMenu = () => setMenuState(false);
-    const openMenu = () => setMenuState(true);
+    const closeMenu = (restoreFocus = false) => {
+      setMenuState(false);
+      if (restoreFocus) hb.focus({ preventScroll: true });
+    };
+    const openMenu = () => {
+      setMenuState(true);
+      requestAnimationFrame(() =>
+        document.getElementById("mobile-menu-close")?.focus({
+          preventScroll: true,
+        }),
+      );
+    };
 
     const toggle = (e: Event) => {
       e.stopPropagation();
@@ -56,12 +64,12 @@ export function initLayout() {
 
     hb.addEventListener("click", toggle);
 
-    backdrop.addEventListener("click", closeMenu);
+    backdrop.addEventListener("click", () => closeMenu(true));
 
     // Close menu when clicking a menu link or button (Mobile only)
     sidebar.addEventListener("click", (e) => {
       // On desktop, we want the menu to stay open unless explicitly toggled
-      if (!Platform.isMobileWidth) return;
+      if (!compactNavigation.matches) return;
 
       // If the click happened on or inside an anchor/button/menu item, close the menu
       const clickedElement = (e.target as Element).closest
@@ -71,16 +79,22 @@ export function initLayout() {
         : null;
 
       if (clickedElement) {
-        closeMenu();
+        closeMenu(clickedElement.id === "mobile-menu-close");
       }
     });
 
     // Close on Escape (Mobile only)
     document.addEventListener("keydown", (e) => {
-      if (!Platform.isMobileWidth) return;
+      if (!compactNavigation.matches) return;
       if (e.key === "Escape" && sidebar.classList.contains("open")) {
-        closeMenu();
+        closeMenu(true);
       }
     });
+
+    compactNavigation.addEventListener("change", (event) => {
+      if (!event.matches && sidebar.classList.contains("open")) closeMenu();
+    });
+
+    setMenuState(false);
   });
 }

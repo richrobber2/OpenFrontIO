@@ -21,7 +21,10 @@
  *
  * Usage:
  *   npm run perf:game -- [--map world] [--ticks 1800] [--bots 400]
- *                        [--seed perf-default] [--top 30] [--window 1000]
+ *                        [--difficulty impossible] [--seed perf-default]
+ *                        [--interactive] [--checkpoint-every 1000]
+ *                        [--max-minutes 6] [--human-player]
+ *                        [--top 30] [--window 1000]
  *                        [--no-cpu-profile] [--no-exec-profile]
  *                        [--no-gc-profile] [--no-alloc-profile]
  *                        [--footprint] [--snapshot-at 0,2000,12000]
@@ -33,25 +36,36 @@
  * with tests/perf/fullgame/HeapSnapshotSummary.ts.
  */
 import fs from "fs";
+import { createInterface } from "node:readline/promises";
 import v8 from "node:v8";
 import path from "path";
 import { fileURLToPath } from "url";
 import { Config } from "../../../src/core/configuration/Config";
 import { Executor } from "../../../src/core/execution/ExecutionManager";
+import { closestTwoTiles } from "../../../src/core/execution/Util";
 import {
   Difficulty,
   GameMapSize,
   GameMapType,
   GameMode,
   GameType,
+  Player,
+  PlayerInfo,
+  PlayerType,
+  UnitType,
 } from "../../../src/core/game/Game";
 import { createGame } from "../../../src/core/game/GameImpl";
 import { GameUpdateType, HashUpdate } from "../../../src/core/game/GameUpdates";
 import { createNationsForGame } from "../../../src/core/game/NationCreation";
 import { loadTerrainMap } from "../../../src/core/game/TerrainMapLoader";
+import { canBuildTransportShip } from "../../../src/core/game/TransportShipUtils";
 import { GameRunner } from "../../../src/core/GameRunner";
 import { PseudoRandom } from "../../../src/core/PseudoRandom";
-import { GameConfig, GameStartInfo } from "../../../src/core/Schemas";
+import {
+  GameConfig,
+  GameStartInfo,
+  StampedIntent,
+} from "../../../src/core/Schemas";
 import { simpleHash } from "../../../src/core/Util";
 import {
   AllocationSampler,
@@ -94,6 +108,11 @@ interface Options {
   footprint: boolean;
   snapshotAt: number[];
   waterNukes: boolean;
+  difficulty: Difficulty;
+  interactive: boolean;
+  checkpointEvery: number;
+  maxMinutes?: number;
+  humanPlayer: boolean;
 }
 
 function resolveMap(name: string): GameMapType {
@@ -107,6 +126,18 @@ function resolveMap(name: string): GameMapType {
     throw new Error(`unknown map "${name}". Available: ${available}`);
   }
   return GameMapType[key as keyof typeof GameMapType];
+}
+
+function resolveDifficulty(name: string): Difficulty {
+  const difficulty = Object.values(Difficulty).find(
+    (value) => value.toLowerCase() === name.toLowerCase(),
+  );
+  if (difficulty === undefined) {
+    throw new Error(
+      `unknown difficulty "${name}". Available: ${Object.values(Difficulty).join(", ")}`,
+    );
+  }
+  return difficulty;
 }
 
 function parseArgs(argv: string[]): Options {
@@ -125,6 +156,10 @@ function parseArgs(argv: string[]): Options {
     footprint: false,
     snapshotAt: [],
     waterNukes: false,
+    difficulty: Difficulty.Medium,
+    interactive: false,
+    checkpointEvery: 0,
+    humanPlayer: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -142,6 +177,22 @@ function parseArgs(argv: string[]): Options {
         break;
       case "--bots":
         opts.bots = parseInt(next(), 10);
+        break;
+      case "--difficulty":
+        opts.difficulty = resolveDifficulty(next());
+        break;
+      case "--interactive":
+        opts.interactive = true;
+        break;
+      case "--checkpoint-every":
+        opts.checkpointEvery = parseInt(next(), 10);
+        break;
+      case "--max-minutes":
+        opts.maxMinutes = parseInt(next(), 10);
+        break;
+      case "--human-player":
+        opts.humanPlayer = true;
+        opts.interactive = true;
         break;
       case "--nations": {
         const v = next();
@@ -221,7 +272,7 @@ async function main(): Promise<void> {
     gameMapSize: GameMapSize.Normal,
     gameMode: GameMode.FFA,
     gameType: GameType.Public,
-    difficulty: Difficulty.Medium,
+    difficulty: opts.difficulty,
     nations: opts.nations,
     donateGold: false,
     donateTroops: false,
@@ -229,14 +280,17 @@ async function main(): Promise<void> {
     infiniteGold: false,
     infiniteTroops: false,
     instantBuild: false,
-    randomSpawn: false,
+    randomSpawn: opts.humanPlayer,
     waterNukes: opts.waterNukes ? true : undefined,
+    maxTimerValue: opts.maxMinutes,
   };
   const gameStart: GameStartInfo = {
     gameID: opts.seed,
     lobbyCreatedAt: 0,
     config: gameConfig,
-    players: [],
+    players: opts.humanPlayer
+      ? [{ clientID: "codex_client", username: "Codex", clanTag: null }]
+      : [],
   };
 
   console.log(
@@ -257,15 +311,26 @@ async function main(): Promise<void> {
     mapLoader,
   );
   const random = new PseudoRandom(simpleHash(gameStart.gameID));
+  const humans = opts.humanPlayer
+    ? [
+        new PlayerInfo(
+          "Codex",
+          PlayerType.Human,
+          "codex_client",
+          "codex_player",
+          true,
+        ),
+      ]
+    : [];
   const nations = createNationsForGame(
     gameStart,
     terrain.nations,
     terrain.additionalNations,
-    0,
+    humans.length,
     random,
   );
   const game = createGame(
-    [],
+    humans,
     nations,
     terrain.gameMap,
     terrain.miniGameMap,
@@ -323,8 +388,10 @@ async function main(): Promise<void> {
   };
 
   let turnNumber = 0;
+  let pendingIntents: StampedIntent[] = [];
   const runTick = (stats: TickStats): boolean => {
-    runner.addTurn({ turnNumber: turnNumber++, intents: [] });
+    runner.addTurn({ turnNumber: turnNumber++, intents: pendingIntents });
+    pendingIntents = [];
     const tick = game.ticks();
     const start = performance.now();
     const ok = runner.executeNextTick();
@@ -351,6 +418,236 @@ async function main(): Promise<void> {
       `${game.players().filter((p) => p.isAlive()).length} players spawned.`,
   );
 
+  let humanPolicy: "bank" | "expand" | "balanced" | "aggressive" = "bank";
+  let humanAttackFraction = 0.5;
+  let fortifyTargetName: string | null = null;
+  let attackTargetName: string | null = null;
+  const humanPlayer = (): Player | undefined =>
+    game.allPlayers().find((player) => player.clientID() === "codex_client");
+
+  const printAiOutcome = (heading: string): void => {
+    const ranked = game
+      .players()
+      .filter((player) => player.hasSpawned())
+      .sort((a, b) => b.numTilesOwned() - a.numTilesOwned());
+    const aiNations = ranked.filter(
+      (player) => player.type() === PlayerType.Nation,
+    );
+    const nationTiles = aiNations.reduce(
+      (total, player) => total + player.numTilesOwned(),
+      0,
+    );
+    const totalPlayerTiles = ranked.reduce(
+      (total, player) => total + player.numTilesOwned(),
+      0,
+    );
+    console.log(`\n--- ${heading} ---`);
+    console.log(`Nations alive:    ${aiNations.length} / ${nations.length}`);
+    console.log(
+      `Nation territory: ${nationTiles} / ${totalPlayerTiles} player-owned tiles ` +
+        `(${totalPlayerTiles === 0 ? "0.0" : ((nationTiles * 100) / totalPlayerTiles).toFixed(1)}%)`,
+    );
+    const human = humanPlayer();
+    if (human !== undefined) {
+      const humanRank = ranked.findIndex((player) => player === human) + 1;
+      console.log(
+        `Human: ${
+          human.isAlive()
+            ? `rank ${humanRank}, ${human.numTilesOwned()} tiles, ` +
+              `${Math.floor(human.troops())}/${Math.floor(config.maxTroops(human))} troops, ` +
+              `${human.gold()} gold`
+            : "eliminated"
+        }`,
+      );
+      console.log(
+        `Policy: ${humanPolicy} at ${(humanAttackFraction * 100).toFixed(0)}%; ` +
+          `${human.outgoingAttacks().length} outgoing / ${human.incomingAttacks().length} incoming attacks`,
+      );
+      console.log(
+        `Structures: ${human.unitCount(UnitType.City)} cities, ` +
+          `${human.unitCount(UnitType.DefensePost)} defense posts; ` +
+          `alliances: ${
+            human
+              .alliances()
+              .map(
+                (alliance) =>
+                  `${alliance.other(human).name()} (expires ${alliance.expiresAt()})`,
+              )
+              .join(", ") || "none"
+          }`,
+      );
+      const nearby = human
+        .nearby()
+        .filter((player): player is Player => player.isPlayer())
+        .sort((a, b) => a.troops() - b.troops())
+        .slice(0, 6);
+      if (nearby.length > 0) {
+        console.log(
+          `Nearby: ${nearby
+            .map(
+              (player) =>
+                `${player.name()} ${player.numTilesOwned()}t/${Math.floor(player.troops())} troops`,
+            )
+            .join("; ")}`,
+        );
+      }
+    }
+    console.log(
+      table(
+        ["rank", "AI", "alive", "tiles", "troops"],
+        ranked
+          .slice(0, 10)
+          .map((player, index) => [
+            String(index + 1),
+            `${player.name()} (${player.type()})`,
+            player.isAlive() ? "yes" : "no",
+            String(player.numTilesOwned()),
+            String(Math.floor(player.troops())),
+          ]),
+      ),
+    );
+  };
+
+  const reviewer = opts.interactive
+    ? createInterface({ input: process.stdin, output: process.stdout })
+    : null;
+  let reviewPauseMs = 0;
+  const pauseForReview = async (trigger: string): Promise<void> => {
+    printAiOutcome(`trigger: ${trigger} (tick ${game.ticks()})`);
+    const pauseStarted = performance.now();
+    const command = await reviewer?.question(
+      opts.humanPlayer
+        ? "Command: strategy [10-90%], attack|ally|break|extend|fortify <player>, or Enter: "
+        : "Paused for review — press Enter to resume: ",
+    );
+    if (opts.humanPlayer && command?.trim()) {
+      const tokens = command.trim().split(/\s+/);
+      const policy = tokens[0].toLowerCase();
+      const percent = tokens[1];
+      const commandWords = new Set([
+        "attack",
+        "ally",
+        "break",
+        "extend",
+        "fortify",
+        "bank",
+        "expand",
+        "balanced",
+        "aggressive",
+      ]);
+      const commandTarget = (index: number): string => {
+        const end = tokens.findIndex(
+          (token, tokenIndex) =>
+            tokenIndex > index && commandWords.has(token.toLowerCase()),
+        );
+        return tokens.slice(index + 1, end === -1 ? undefined : end).join(" ");
+      };
+      if (
+        policy === "bank" ||
+        policy === "expand" ||
+        policy === "balanced" ||
+        policy === "aggressive"
+      ) {
+        humanPolicy = policy;
+      }
+      const parsedPercent = Number.parseFloat(percent?.replace("%", ""));
+      if (Number.isFinite(parsedPercent)) {
+        humanAttackFraction = Math.min(0.9, Math.max(0.1, parsedPercent / 100));
+      }
+      const allyIndex = tokens.findIndex(
+        (token) => token.toLowerCase() === "ally",
+      );
+      if (allyIndex >= 0 && allyIndex + 1 < tokens.length) {
+        const requestedName = commandTarget(allyIndex);
+        const recipient = game
+          .players()
+          .filter((player) => player.type() === PlayerType.Nation)
+          .find((player) =>
+            player.name().toLowerCase().includes(requestedName.toLowerCase()),
+          );
+        if (recipient !== undefined) {
+          pendingIntents.push({
+            type: "allianceRequest",
+            recipient: recipient.id(),
+            clientID: "codex_client",
+          });
+          console.log(`Queued alliance request to ${recipient.name()}.`);
+        }
+      }
+      const breakIndex = tokens.findIndex(
+        (token) => token.toLowerCase() === "break",
+      );
+      if (breakIndex >= 0 && breakIndex + 1 < tokens.length) {
+        const requestedName = commandTarget(breakIndex);
+        const human = humanPlayer();
+        const alliance = human
+          ?.alliances()
+          .find((candidate) =>
+            candidate
+              .other(human)
+              .name()
+              .toLowerCase()
+              .includes(requestedName.toLowerCase()),
+          );
+        if (human !== undefined && alliance !== undefined) {
+          const recipient = alliance.other(human);
+          pendingIntents.push({
+            type: "breakAlliance",
+            recipient: recipient.id(),
+            clientID: "codex_client",
+          });
+          console.log(`Queued alliance break with ${recipient.name()}.`);
+        }
+      }
+      const extendIndex = tokens.findIndex(
+        (token) => token.toLowerCase() === "extend",
+      );
+      if (extendIndex >= 0 && extendIndex + 1 < tokens.length) {
+        const requestedName = commandTarget(extendIndex);
+        const human = humanPlayer();
+        const alliance = human
+          ?.alliances()
+          .find((candidate) =>
+            candidate
+              .other(human)
+              .name()
+              .toLowerCase()
+              .includes(requestedName.toLowerCase()),
+          );
+        if (human !== undefined && alliance !== undefined) {
+          const recipient = alliance.other(human);
+          pendingIntents.push({
+            type: "allianceExtension",
+            recipient: recipient.id(),
+            clientID: "codex_client",
+          });
+          console.log(`Queued alliance extension with ${recipient.name()}.`);
+        }
+      }
+      const fortifyIndex = tokens.findIndex(
+        (token) => token.toLowerCase() === "fortify",
+      );
+      if (fortifyIndex >= 0 && fortifyIndex + 1 < tokens.length) {
+        fortifyTargetName = commandTarget(fortifyIndex);
+        console.log(`Fortification target set to ${fortifyTargetName}.`);
+      }
+      const attackIndex = tokens.findIndex(
+        (token) => token.toLowerCase() === "attack",
+      );
+      if (attackIndex >= 0 && attackIndex + 1 < tokens.length) {
+        attackTargetName = commandTarget(attackIndex);
+        console.log(`Attack target set to ${attackTargetName}.`);
+      }
+      console.log(
+        `Selected ${humanPolicy} at ${(humanAttackFraction * 100).toFixed(0)}%.`,
+      );
+    }
+    reviewPauseMs += performance.now() - pauseStarted;
+  };
+  if (reviewer !== null) await pauseForReview("spawn complete");
+  // The measured game phase begins below, after the spawn checkpoint.
+  reviewPauseMs = 0;
+
   heapSampler?.closeWindow("spawn");
   recordFootprint(`spawn (tick ${game.ticks() - 1})`);
   if (opts.snapshotAt.includes(0)) {
@@ -370,7 +667,225 @@ async function main(): Promise<void> {
   const gameStart_ = performance.now();
   let heapPeak = 0;
   let windowStartTick = game.ticks();
+  const initialBotCount = game
+    .players()
+    .filter((player) => player.type() === PlayerType.Bot).length;
+  const botMilestones = [0.5, 0.1, 0];
+  let nextBotMilestone = 0;
+  const leaderMilestones = [0.25, 0.5, 0.75];
+  let nextLeaderMilestone = 0;
+  let humanEliminationReported = false;
+
+  const queueHumanAction = (): void => {
+    const human = humanPlayer();
+    if (human === undefined || !human.isAlive()) return;
+
+    const incomingAttackers = new Set(
+      human
+        .incomingAttacks()
+        .filter((attack) => !attack.retreating())
+        .map((attack) => attack.attacker()),
+    );
+    const namedFortifyTarget = fortifyTargetName
+      ? game
+          .players()
+          .find((player) =>
+            player
+              .name()
+              .toLowerCase()
+              .includes(fortifyTargetName!.toLowerCase()),
+          )
+      : undefined;
+    if (namedFortifyTarget !== undefined) {
+      incomingAttackers.add(namedFortifyTarget);
+    }
+
+    // Build defense posts on a selected or active land front before spending
+    // the rest of the economy on cities.
+    let queuedDefense = false;
+    if (
+      incomingAttackers.size > 0 &&
+      human.unitCount(UnitType.DefensePost) < 4
+    ) {
+      for (const border of human.borderTiles()) {
+        const bordersThreat = game
+          .neighbors(border)
+          .some(
+            (neighbor) =>
+              game.hasOwner(neighbor) &&
+              incomingAttackers.has(game.owner(neighbor) as Player),
+          );
+        if (!bordersThreat) continue;
+        const candidates = new Set<number>([border]);
+        for (const neighbor of game.neighbors(border)) {
+          candidates.add(neighbor);
+          for (const inner of game.neighbors(neighbor)) candidates.add(inner);
+        }
+        for (const tile of candidates) {
+          if (
+            game.owner(tile) !== human ||
+            human.canBuild(UnitType.DefensePost, tile) === false
+          ) {
+            continue;
+          }
+          pendingIntents.push({
+            type: "build_unit",
+            unit: UnitType.DefensePost,
+            tile,
+            clientID: "codex_client",
+          });
+          queuedDefense = true;
+          break;
+        }
+        if (queuedDefense) break;
+      }
+    }
+
+    // Spend the human economy through the same construction intent as the UI.
+    // Cities raise the troop cap and prevent a large gold balance from sitting
+    // idle while Impossible nations compound their structure advantage.
+    if (!queuedDefense && human.unitCount(UnitType.City) < 8) {
+      for (const tile of human.tiles()) {
+        if (human.canBuild(UnitType.City, tile) === false) continue;
+        pendingIntents.push({
+          type: "build_unit",
+          unit: UnitType.City,
+          tile,
+          clientID: "codex_client",
+        });
+        break;
+      }
+    }
+
+    if (human.outgoingAttacks().length >= 2) return;
+
+    let hasLandToExpand = false;
+    for (const border of human.borderTiles()) {
+      for (const neighbor of game.neighbors(border)) {
+        if (
+          game.isLand(neighbor) &&
+          !game.isImpassable(neighbor) &&
+          !game.hasOwner(neighbor)
+        ) {
+          hasLandToExpand = true;
+          break;
+        }
+      }
+      if (hasLandToExpand) break;
+    }
+
+    let target: Player | null = null;
+    let targetTerraNullius = false;
+    const retaliation = human
+      .incomingAttacks()
+      .filter((attack) => !attack.retreating())
+      .sort((a, b) => b.troops() - a.troops())[0];
+    if (retaliation !== undefined) {
+      target = retaliation.attacker();
+    } else if (humanPolicy === "bank") {
+      return;
+    } else if (
+      hasLandToExpand &&
+      (humanPolicy === "expand" || humanPolicy === "balanced")
+    ) {
+      targetTerraNullius = true;
+    } else if (humanPolicy !== "expand") {
+      const namedAttackTarget = attackTargetName
+        ? game
+            .players()
+            .find((player) =>
+              player
+                .name()
+                .toLowerCase()
+                .includes(attackTargetName!.toLowerCase()),
+            )
+        : undefined;
+      if (attackTargetName !== null && namedAttackTarget === undefined) return;
+      if (namedAttackTarget !== undefined) {
+        if (
+          namedAttackTarget === human ||
+          human.isFriendly(namedAttackTarget) ||
+          !namedAttackTarget.isAlive()
+        ) {
+          return;
+        }
+        target = namedAttackTarget;
+      }
+      const nearby = human
+        .nearby()
+        .filter(
+          (target): target is Player =>
+            target.isPlayer() &&
+            !human.isFriendly(target) &&
+            human.canAttackPlayer(target),
+        );
+      const candidates = (nearby.length > 0 ? nearby : game.players())
+        .filter(
+          (candidate) =>
+            candidate !== human &&
+            !human.isFriendly(candidate) &&
+            candidate.isAlive(),
+        )
+        .sort((a, b) => {
+          const aDensity = a.troops() / Math.max(1, a.numTilesOwned());
+          const bDensity = b.troops() / Math.max(1, b.numTilesOwned());
+          return aDensity - bDensity;
+        });
+      for (const candidate of target === null ? candidates : []) {
+        if (
+          humanPolicy !== "aggressive" &&
+          candidate.troops() >= human.troops() * 0.8
+        ) {
+          continue;
+        }
+        if (human.sharesBorderWith(candidate)) {
+          target = candidate;
+          break;
+        }
+        const sourceShore = Array.from(human.borderTiles()).filter((tile) =>
+          game.isShore(tile),
+        );
+        const targetShore = Array.from(candidate.borderTiles()).filter((tile) =>
+          game.isShore(tile),
+        );
+        const closest = closestTwoTiles(game, sourceShore, targetShore);
+        if (closest !== null && canBuildTransportShip(game, human, closest.y)) {
+          target = candidate;
+          break;
+        }
+      }
+    }
+    if (!targetTerraNullius && target === null) return;
+
+    const troops = Math.floor(human.troops() * humanAttackFraction);
+    if (target !== null && !human.sharesBorderWith(target)) {
+      const sourceShore = Array.from(human.borderTiles()).filter((tile) =>
+        game.isShore(tile),
+      );
+      const targetShore = Array.from(target.borderTiles()).filter((tile) =>
+        game.isShore(tile),
+      );
+      const closest = closestTwoTiles(game, sourceShore, targetShore);
+      if (closest !== null && canBuildTransportShip(game, human, closest.y)) {
+        pendingIntents.push({
+          type: "boat",
+          dst: closest.y,
+          troops,
+          clientID: "codex_client",
+        });
+      }
+      return;
+    }
+
+    pendingIntents.push({
+      type: "attack",
+      targetID: targetTerraNullius ? game.terraNullius().id() : target!.id(),
+      troops,
+      clientID: "codex_client",
+    });
+  };
   for (let i = 0; i < opts.ticks; i++) {
+    if (opts.humanPlayer && i % 25 === 0) queueHumanAction();
     if (!runTick(gameStats)) {
       console.error(`game errored at tick ${game.ticks()}:\n${fatalError}`);
       process.exitCode = 1;
@@ -387,8 +902,59 @@ async function main(): Promise<void> {
     if (opts.snapshotAt.includes(i + 1)) {
       writeSnapshot(`tick${i + 1}`);
     }
+
+    if (reviewer !== null) {
+      const triggers: string[] = [];
+      const activePlayers = game.players();
+      const botsAlive = activePlayers.filter(
+        (player) => player.type() === PlayerType.Bot,
+      ).length;
+      if (
+        nextBotMilestone < botMilestones.length &&
+        botsAlive <= initialBotCount * botMilestones[nextBotMilestone]
+      ) {
+        triggers.push(`bots at ${botsAlive}/${initialBotCount}`);
+        nextBotMilestone++;
+      }
+
+      const totalPlayerTiles = activePlayers.reduce(
+        (total, player) => total + player.numTilesOwned(),
+        0,
+      );
+      const leaderTiles = activePlayers.reduce(
+        (largest, player) => Math.max(largest, player.numTilesOwned()),
+        0,
+      );
+      const leaderShare =
+        totalPlayerTiles === 0 ? 0 : leaderTiles / totalPlayerTiles;
+      if (
+        nextLeaderMilestone < leaderMilestones.length &&
+        leaderShare >= leaderMilestones[nextLeaderMilestone]
+      ) {
+        triggers.push(
+          `leader reached ${(leaderMilestones[nextLeaderMilestone] * 100).toFixed(0)}% of player territory`,
+        );
+        nextLeaderMilestone++;
+      }
+      if (opts.checkpointEvery > 0 && (i + 1) % opts.checkpointEvery === 0) {
+        triggers.push(`${i + 1}-tick checkpoint`);
+      }
+      if (game.getWinner() !== null) triggers.push("winner declared");
+      const human = humanPlayer();
+      if (
+        !humanEliminationReported &&
+        human !== undefined &&
+        !human.isAlive()
+      ) {
+        triggers.push("human eliminated");
+        humanEliminationReported = true;
+      }
+      if (triggers.length > 0) await pauseForReview(triggers.join(", "));
+      if (game.getWinner() !== null) break;
+    }
   }
-  const gamePhaseMs = performance.now() - gameStart_;
+  reviewer?.close();
+  const gamePhaseMs = performance.now() - gameStart_ - reviewPauseMs;
   const profile = cpuProfiler ? await cpuProfiler.stop() : null;
   const allocProfile = allocSampler ? await allocSampler.stop() : null;
   const gcEvents = gcTracker ? await gcTracker.stop() : null;
@@ -411,6 +977,8 @@ async function main(): Promise<void> {
     `Final hash:       ${lastHash ? `${lastHash.hash} (tick ${lastHash.tick})` : "n/a"}`,
   );
   console.log(`Peak heap:        ${(heapPeak / 1024 / 1024).toFixed(0)} MB`);
+
+  printAiOutcome("AI outcome");
 
   console.log(`\n--- Per-tick wall time (game phase) ---`);
   console.log(

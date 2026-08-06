@@ -117,8 +117,6 @@ export class GameView implements GameMap {
   // The derived structures below only depend on rarely-changing player
   // fields, so they're rebuilt only when one of their inputs arrived this
   // tick (PlayerUpdates are partial — field presence means "changed").
-  /** Names: nameData record applied, or a player was added. */
-  private _namesDirty = true;
   /** Relation matrix: allies/embargoes changed, or a player was added. */
   private _relationsDirty = true;
   /** Alliance clusters: allies changed, or a player was added. */
@@ -334,10 +332,16 @@ export class GameView implements GameMap {
       for (const id in gu.playerNameViewData) {
         const pv = this._players.get(id);
         if (pv !== undefined && pv.state.isAlive) {
-          pv.nameData = gu.playerNameViewData[id];
+          const nameData = gu.playerNameViewData[id];
+          pv.nameData = nameData;
+          this._names.set(id, {
+            playerID: id,
+            x: nameData.x,
+            y: nameData.y,
+            size: nameData.size,
+          });
         }
       }
-      this._namesDirty = true;
     }
 
     // Pass 1: ensure every player exists with up-to-date PlayerState. We need
@@ -374,15 +378,12 @@ export class GameView implements GameMap {
 
       if (existing !== undefined) {
         existing.applyUpdate(pu);
-        const nextNameData = gu.playerNameViewData?.[pu.id];
-        if (nextNameData !== undefined) {
-          existing.nameData = nextNameData;
-        }
       } else {
+        const nameData = gu.playerNameViewData?.[pu.id];
         const player = new PlayerView(
           this,
           pu,
-          gu.playerNameViewData?.[pu.id],
+          nameData,
           // First check human by clientID, then check nation by name.
           // Only match by name for actual Nations — not Bots (tribes) whose
           // random names may coincidentally match a nation name.
@@ -394,11 +395,16 @@ export class GameView implements GameMap {
         );
         this._players.set(pu.id, player);
         this._playerStates.set(pu.smallID!, player.state);
+        this._names.set(pu.id, {
+          playerID: pu.id,
+          x: nameData?.x ?? 0,
+          y: nameData?.y ?? 0,
+          size: nameData?.size ?? 0,
+        });
         const team = player.team();
         if (team !== null) {
           this._teams.set(pu.smallID!, team);
         }
-        this._namesDirty = true;
         this._relationsDirty = true;
         this._clustersDirty = true;
       }
@@ -550,22 +556,6 @@ export class GameView implements GameMap {
       this._unitStates as Map<number, import("../render/types").UnitState>,
       this._trailIdsScratch,
     );
-
-    // Names map — rebuilt only when a placement record arrived or a player
-    // was added (nameData values cannot change between those ticks). Entry
-    // order is irrelevant for the renderer.
-    if (this._namesDirty) {
-      this._namesDirty = false;
-      this._names.clear();
-      for (const p of this._players.values()) {
-        this._names.set(p.id(), {
-          playerID: p.id(),
-          x: p.nameData?.x ?? 0,
-          y: p.nameData?.y ?? 0,
-          size: p.nameData?.size ?? 0,
-        });
-      }
-    }
 
     // FrameEvents — clear arrays, then re-populate from this tick's updates.
     this.buildFrameEvents(gu);

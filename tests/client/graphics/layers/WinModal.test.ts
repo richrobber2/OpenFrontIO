@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { WinModal } from "../../../../src/client/hud/layers/WinModal";
+import { GameView } from "../../../../src/client/view";
+import { EventBus } from "../../../../src/core/EventBus";
 import { RankedType } from "../../../../src/core/game/Game";
 
 vi.mock("../../../../src/client/Utils", () => ({
@@ -22,8 +25,8 @@ vi.mock("../../../../src/client/Api", () => ({
 
 vi.mock("../../../../src/client/Cosmetics", () => ({
   fetchCosmetics: vi.fn(async () => []),
-  handlePurchase: vi.fn(),
-  patternRelationship: vi.fn(() => ({})),
+  purchaseCosmetic: vi.fn(),
+  resolveCosmetics: vi.fn(() => []),
 }));
 
 vi.mock("../../../../src/client/CrazyGamesSDK", () => ({
@@ -74,6 +77,45 @@ describe("WinModal Requeue", () => {
       };
       const isRankedGame = gameConfig.rankedType === RankedType.OneVOne;
       expect(isRankedGame).toBe(false);
+    });
+  });
+
+  describe("AI training death handling", () => {
+    const deadGame = (gameID: string) =>
+      ({
+        gameID: () => gameID,
+        inSpawnPhase: () => false,
+        myPlayer: () => ({ isAlive: () => false, hasSpawned: () => true }),
+        updatesSinceLastTick: () => null,
+      }) as unknown as GameView;
+
+    it("suppresses the death modal for the active training game", () => {
+      const modal = new WinModal();
+      modal.game = deadGame("training-game");
+      modal.eventBus = { emit: vi.fn() } as unknown as EventBus;
+      const show = vi.spyOn(modal, "show").mockResolvedValue();
+      const hide = vi.spyOn(modal, "hide");
+      sessionStorage.setItem("openfront.aiTrainingGame", "training-game");
+
+      modal.init();
+      hide.mockClear();
+      modal.tick();
+
+      expect(show).not.toHaveBeenCalled();
+      expect(hide).toHaveBeenCalledOnce();
+    });
+
+    it("continues showing the death modal for an ordinary game", () => {
+      const modal = new WinModal();
+      modal.game = deadGame("ordinary-game");
+      modal.eventBus = { emit: vi.fn() } as unknown as EventBus;
+      const show = vi.spyOn(modal, "show").mockResolvedValue();
+      sessionStorage.removeItem("openfront.aiTrainingGame");
+
+      modal.init();
+      modal.tick();
+
+      expect(show).toHaveBeenCalledOnce();
     });
   });
 

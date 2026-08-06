@@ -61,6 +61,8 @@ export class LocalServer {
 
   private turnsExecuted = 0;
   private turnStartTime = 0;
+  private readonly resumableAi: boolean;
+  private readonly checkpointKey: string;
 
   private turnCheckInterval: NodeJS.Timeout;
   private clientConnect: () => void;
@@ -70,7 +72,78 @@ export class LocalServer {
     private lobbyConfig: LobbyConfig,
     private isReplay: boolean,
     private eventBus: EventBus,
-  ) {}
+  ) {
+    const gameID = lobbyConfig.gameID;
+    this.resumableAi =
+      !isReplay && localStorage.getItem("openfront.aiTrainingGame") === gameID;
+    this.checkpointKey = `openfront.aiTrainingCheckpoint.${gameID}`;
+  }
+
+  private restoreCheckpoint(): void {
+    if (!this.resumableAi) return;
+    try {
+      const raw = localStorage.getItem(this.checkpointKey);
+      if (!raw) return;
+      const checkpoint = JSON.parse(raw) as {
+        turns?: Turn[];
+        turnCount?: number;
+        startedAt?: number;
+      };
+      if (
+        !Array.isArray(checkpoint.turns) ||
+        (checkpoint.turns.length > 0 && checkpoint.turns.length > 100_000)
+      )
+        return;
+      const turnCount = Math.max(
+        checkpoint.turns.length,
+        Math.min(
+          100_000,
+          Math.floor(checkpoint.turnCount ?? checkpoint.turns.length),
+        ),
+      );
+      const savedTurns = new Map(
+        checkpoint.turns.map((turn) => [turn.turnNumber, turn]),
+      );
+      this.turns = Array.from(
+        { length: turnCount },
+        (_, turnNumber) =>
+          savedTurns.get(turnNumber) ?? { turnNumber, intents: [] },
+      );
+      if (typeof checkpoint.startedAt === "number")
+        this.startedAt = checkpoint.startedAt;
+      console.info(
+        `[LocalServer] restored AI checkpoint at turn ${this.turns.length}`,
+      );
+    } catch (error) {
+      console.warn("Failed to restore AI checkpoint", error);
+    }
+  }
+
+  private saveCheckpoint(): void {
+    if (!this.resumableAi || this.turns.length % 100 !== 0) return;
+    try {
+      // Empty turns dominate long training matches. Their turn numbers are
+      // deterministic, so persist only turns containing intents or hashes and
+      // reconstruct the gaps during restore. This avoids repeatedly allocating
+      // and writing a multi-megabyte JSON document.
+      const meaningfulTurns = this.turns.filter(
+        (turn) => turn.intents.length > 0 || turn.hash !== undefined,
+      );
+      localStorage.setItem(
+        this.checkpointKey,
+        JSON.stringify(
+          {
+            turns: meaningfulTurns,
+            turnCount: this.turns.length,
+            startedAt: this.startedAt,
+          },
+          replacer,
+        ),
+      );
+    } catch (error) {
+      console.warn("Failed to save AI checkpoint", error);
+    }
+  }
 
   public updateCallback(
     clientConnect: () => void,
@@ -128,6 +201,7 @@ export class LocalServer {
     }
 
     this.startedAt = Date.now();
+    this.restoreCheckpoint();
     this.clientConnect();
     if (this.lobbyConfig.gameRecord) {
       this.replayTurns = decompressGameRecord(
@@ -144,7 +218,9 @@ export class LocalServer {
     this.clientMessage({
       type: "start",
       gameStartInfo: this.lobbyConfig.gameStartInfo,
-      turns: [],
+      // Send the durable AI backlog so the worker can rebuild the simulation
+      // after a page reload before the trainer resumes issuing intents.
+      turns: this.turns,
       lobbyCreatedAt: this.lobbyConfig.gameStartInfo.lobbyCreatedAt,
       // Don't send myClientID for replays — viewer has no player identity.
       myClientID: this.lobbyConfig.gameRecord ? undefined : this.clientID,
@@ -258,6 +334,7 @@ export class LocalServer {
     };
     this.turns.push(pastTurn);
     this.intents = [];
+    this.saveCheckpoint();
     this.clientMessage({
       type: "turn",
       turn: pastTurn,
@@ -267,6 +344,7 @@ export class LocalServer {
   public endGame() {
     console.log("local server ending game");
     clearInterval(this.turnCheckInterval);
+    if (this.resumableAi) localStorage.removeItem(this.checkpointKey);
     if (this.isReplay) {
       return;
     }

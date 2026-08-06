@@ -106,6 +106,53 @@ describe("SAM", () => {
     expect(attacker.units(UnitType.AtomBomb)).toHaveLength(0);
   });
 
+  test("SAM intercepts every MIRV warhead aimed within its local protection radius", () => {
+    const sam = defender.buildUnit(UnitType.SAMLauncher, game.ref(1, 1), {});
+    sam.increaseLevel();
+    sam.reloadMissile();
+    game.addExecution(new SAMLauncherExecution(defender, null, sam));
+
+    attacker.buildUnit(UnitType.MIRVWarhead, game.ref(7, 7), {
+      targetTile: game.ref(30, 1),
+      trajectory: [
+        { tile: game.ref(7, 7), targetable: false },
+        { tile: game.ref(10, 7), targetable: false },
+        { tile: game.ref(15, 5), targetable: true },
+        { tile: game.ref(20, 3), targetable: true },
+        { tile: game.ref(25, 2), targetable: true },
+        { tile: game.ref(30, 1), targetable: true },
+      ],
+    });
+    attacker.buildUnit(UnitType.MIRVWarhead, game.ref(7, 8), {
+      targetTile: game.ref(35, 1),
+      trajectory: [
+        { tile: game.ref(7, 8), targetable: false },
+        { tile: game.ref(11, 7), targetable: false },
+        { tile: game.ref(16, 6), targetable: true },
+        { tile: game.ref(22, 4), targetable: true },
+        { tile: game.ref(29, 2), targetable: true },
+        { tile: game.ref(35, 1), targetable: true },
+      ],
+    });
+    attacker.buildUnit(UnitType.MIRVWarhead, game.ref(7, 9), {
+      targetTile: game.ref(100, 1),
+      trajectory: [
+        { tile: game.ref(7, 9), targetable: false },
+        { tile: game.ref(60, 10), targetable: true },
+        { tile: game.ref(90, 5), targetable: true },
+        { tile: game.ref(100, 1), targetable: true },
+      ],
+    });
+
+    executeTicks(game, 3);
+
+    const survivingTargets = attacker
+      .units(UnitType.MIRVWarhead)
+      .map((warhead) => warhead.targetTile());
+    expect(survivingTargets).toEqual([game.ref(100, 1)]);
+    expect(sam.isInCooldown()).toBe(true);
+  });
+
   test("sam should only get one nuke at a time", async () => {
     const sam = defender.buildUnit(UnitType.SAMLauncher, game.ref(1, 1), {});
     game.addExecution(new SAMLauncherExecution(defender, null, sam));

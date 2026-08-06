@@ -45,7 +45,6 @@ import {
   ATTACK_DELTA_INCOMING,
   ATTACK_DELTA_OUTGOING,
   diffPlayerUpdate,
-  packAttackTroopDeltas,
 } from "./GameUpdateUtils";
 import {
   AllianceView,
@@ -136,6 +135,14 @@ export class PlayerImpl implements Player {
   public _outgoingAttacks: Attack[] = [];
   public _outgoingLandAttacks: Attack[] = [];
 
+  // Attack membership changes much less often than attack troop counts. Keep
+  // the wire-shape arrays stable between membership/retreating changes so the
+  // per-player tick loop only scans active attacks instead of allocating and
+  // populating two new arrays every tick. Troop counts are synchronized into
+  // these caches and emitted through packedAttackUpdates by syncAttackUpdates.
+  private outgoingAttackUpdates: AttackUpdate[] = EMPTY_ATTACK_UPDATES;
+  private incomingAttackUpdates: AttackUpdate[] = EMPTY_ATTACK_UPDATES;
+
   public _alliances: MutableAlliance[] = [];
 
   private _spawnTile: TileRef | undefined;
@@ -183,7 +190,25 @@ export class PlayerImpl implements Player {
     statsOut?: number[],
     attackTroopsOut?: number[],
   ): PlayerUpdate | null {
-    const full = this.toFullUpdate();
+    this.outgoingAttackUpdates = this.syncAttackUpdates(
+      this._outgoingAttacks,
+      this.outgoingAttackUpdates,
+      false,
+      ATTACK_DELTA_OUTGOING,
+      attackTroopsOut,
+    );
+    this.incomingAttackUpdates = this.syncAttackUpdates(
+      this._incomingAttacks,
+      this.incomingAttackUpdates,
+      true,
+      ATTACK_DELTA_INCOMING,
+      attackTroopsOut,
+    );
+
+    const full = this.toFullUpdate(
+      this.outgoingAttackUpdates,
+      this.incomingAttackUpdates,
+    );
     const prev = this.lastSentUpdate;
     this.lastSentUpdate = full;
     if (prev === undefined) return full;
@@ -200,26 +225,77 @@ export class PlayerImpl implements Player {
         full.troops!,
       );
     }
-    if (attackTroopsOut !== undefined) {
-      packAttackTroopDeltas(
-        prev.outgoingAttacks,
-        full.outgoingAttacks,
-        full.smallID!,
-        ATTACK_DELTA_OUTGOING,
-        attackTroopsOut,
-      );
-      packAttackTroopDeltas(
-        prev.incomingAttacks,
-        full.incomingAttacks,
-        full.smallID!,
-        ATTACK_DELTA_INCOMING,
-        attackTroopsOut,
-      );
-    }
     return diffPlayerUpdate(prev, full);
   }
 
-  private toFullUpdate(): PlayerUpdate {
+  /**
+   * Reuse an AttackUpdate array while its membership, order and retreating
+   * flags remain stable. A structural change returns a fresh current snapshot
+   * which diffPlayerUpdate sends in full. Otherwise only changed troop counts
+   * are appended to the packed attack buffer and the cached values advance in
+   * place for the next tick.
+   *
+   * Incoming attacks whose attacker has died are omitted, matching
+   * incomingAttacks(), without allocating that method's filtered array.
+   */
+  private syncAttackUpdates(
+    attacks: Attack[],
+    previous: AttackUpdate[],
+    omitDeadAttackers: boolean,
+    direction: number,
+    attackTroopsOut?: number[],
+  ): AttackUpdate[] {
+    let updateIndex = 0;
+    let structureMatches = true;
+
+    for (const attack of attacks) {
+      if (omitDeadAttackers && !attack.attacker().isAlive()) continue;
+      const cached = previous[updateIndex++];
+      if (
+        cached === undefined ||
+        cached.attackerID !== attack.attacker().smallID() ||
+        cached.targetID !== attack.target().smallID() ||
+        cached.id !== attack.id() ||
+        cached.retreating !== attack.retreating()
+      ) {
+        structureMatches = false;
+      }
+    }
+    if (updateIndex !== previous.length) structureMatches = false;
+
+    if (!structureMatches) {
+      const next: AttackUpdate[] = [];
+      for (const attack of attacks) {
+        if (omitDeadAttackers && !attack.attacker().isAlive()) continue;
+        next.push({
+          attackerID: attack.attacker().smallID(),
+          targetID: attack.target().smallID(),
+          troops: attack.troops(),
+          id: attack.id(),
+          retreating: attack.retreating(),
+        });
+      }
+      return next.length === 0 ? EMPTY_ATTACK_UPDATES : next;
+    }
+
+    updateIndex = 0;
+    for (const attack of attacks) {
+      if (omitDeadAttackers && !attack.attacker().isAlive()) continue;
+      const cached = previous[updateIndex];
+      const troops = attack.troops();
+      if (cached.troops !== troops) {
+        attackTroopsOut?.push(this._smallID, direction, updateIndex, troops);
+        cached.troops = troops;
+      }
+      updateIndex++;
+    }
+    return previous;
+  }
+
+  private toFullUpdate(
+    outgoingAttacks: AttackUpdate[],
+    incomingAttacks: AttackUpdate[],
+  ): PlayerUpdate {
     // Empty collections reuse shared singletons (EMPTY_*) so
     // diffPlayerUpdate's reference fast paths hit and nothing is allocated.
     // This runs for every player every tick; most collections are empty for
@@ -275,35 +351,6 @@ export class PlayerImpl implements Player {
       const e = this.outgoingEmojis();
       if (e.length > 0) {
         outgoingEmojis = e;
-      }
-    }
-
-    const outgoingAttacks =
-      this._outgoingAttacks.length === 0
-        ? EMPTY_ATTACK_UPDATES
-        : this._outgoingAttacks.map((a) => {
-            return {
-              attackerID: a.attacker().smallID(),
-              targetID: a.target().smallID(),
-              troops: a.troops(),
-              id: a.id(),
-              retreating: a.retreating(),
-            } satisfies AttackUpdate;
-          });
-
-    let incomingAttacks = EMPTY_ATTACK_UPDATES;
-    if (this._incomingAttacks.length > 0) {
-      const incoming = this.incomingAttacks();
-      if (incoming.length > 0) {
-        incomingAttacks = incoming.map((a) => {
-          return {
-            attackerID: a.attacker().smallID(),
-            targetID: a.target().smallID(),
-            troops: a.troops(),
-            id: a.id(),
-            retreating: a.retreating(),
-          } satisfies AttackUpdate;
-        });
       }
     }
 

@@ -798,7 +798,70 @@ export class SinglePlayerModal extends BaseModal {
     this.teamCount = value;
   }
 
-  private async startGame() {
+  public async startAiTraining(scale?: {
+    nations?: number;
+    tribes?: number;
+    map?: GameMapType;
+  }): Promise<void> {
+    const storedScale = (() => {
+      if (scale !== undefined) {
+        localStorage.setItem(
+          "openfront.aiTrainingScale",
+          JSON.stringify(scale),
+        );
+        return scale;
+      }
+      try {
+        return JSON.parse(
+          localStorage.getItem("openfront.aiTrainingScale") ?? "null",
+        ) as {
+          nations?: number;
+          tribes?: number;
+          map?: GameMapType;
+        } | null;
+      } catch {
+        return null;
+      }
+    })();
+    this.selectedMap = Object.values(GameMapType).includes(
+      storedScale?.map as GameMapType,
+    )
+      ? (storedScale?.map as GameMapType)
+      : GameMapType.World;
+    this.selectedDifficulty = Difficulty.Medium;
+    this.nations = Math.max(2, Math.min(72, storedScale?.nations ?? 72));
+    // Bots are tribes in the simulation. Keep the field tribe-dense so the
+    // trainer has many early gold-and-land targets before nations close in.
+    this.bots = Math.max(0, Math.min(400, storedScale?.tribes ?? 400));
+    this.gameMode = DEFAULT_OPTIONS.gameMode;
+    this.compactMap = DEFAULT_OPTIONS.compactMap;
+    this.useRandomMap = DEFAULT_OPTIONS.useRandomMap;
+    this.teamCount = DEFAULT_OPTIONS.teamCount;
+    // The trainer selects its own legal spawn after it can see tribe and
+    // nation positions, instead of accepting the engine's blind random pick.
+    this.randomSpawn = false;
+    this.maxTimer = DEFAULT_OPTIONS.maxTimer;
+    this.maxTimerValue = DEFAULT_OPTIONS.maxTimerValue;
+    this.infiniteGold = DEFAULT_OPTIONS.infiniteGold;
+    this.infiniteTroops = DEFAULT_OPTIONS.infiniteTroops;
+    this.instantBuild = DEFAULT_OPTIONS.instantBuild;
+    this.disabledUnits = [...DEFAULT_OPTIONS.disabledUnits];
+    this.goldMultiplier = DEFAULT_OPTIONS.goldMultiplier;
+    this.goldMultiplierValue = DEFAULT_OPTIONS.goldMultiplierValue;
+    this.startingGold = DEFAULT_OPTIONS.startingGold;
+    this.startingGoldValue = DEFAULT_OPTIONS.startingGoldValue;
+    this.customAlliances = DEFAULT_OPTIONS.customAlliances;
+    this.customAllianceMinutes = DEFAULT_OPTIONS.customAllianceMinutes;
+    this.waterNukes = DEFAULT_OPTIONS.waterNukes;
+    this.doomsdayClock = DEFAULT_OPTIONS.doomsdayClock;
+    this.doomsdayClockSpeed = DEFAULT_OPTIONS.doomsdayClockSpeed;
+    // Call the current implementation explicitly. During Vite hot updates an
+    // existing custom element can retain its older prototype even though the
+    // launcher module has updated.
+    await SinglePlayerModal.prototype.startGame.call(this, true);
+  }
+
+  private async startGame(aiTraining = false) {
     // Validate and clamp maxTimer setting before starting
     let finalMaxTimerValue: number | undefined = undefined;
     if (this.maxTimer) {
@@ -826,16 +889,30 @@ export class SinglePlayerModal extends BaseModal {
     const clientID = generateID();
     const gameID = generateID();
 
+    if (aiTraining) {
+      // Keep this marker across a tab/page restart so an AI match can be
+      // restored from the LocalServer checkpoint instead of being discarded.
+      localStorage.setItem("openfront.aiTrainingGame", gameID);
+    }
+
     const usernameInput = document.querySelector(
       "username-input",
-    ) as UsernameInput;
+    ) as UsernameInput | null;
 
     // Wait for the one-shot Steam name-seed to settle before reading
     // getUsername(), so a fast single-player start uses the Steam persona
     // rather than the interim generated anon name. Always resolves.
     await usernameInput?.whenSeeded();
 
-    await crazyGamesSDK.requestMidgameAd();
+    const enteredUsername = usernameInput?.getUsername().trim();
+    const trainingUsername =
+      enteredUsername !== undefined && enteredUsername.length > 0
+        ? enteredUsername
+        : "Codex Trainer";
+
+    if (!aiTraining) {
+      await crazyGamesSDK.requestMidgameAd();
+    }
 
     this.dispatchEvent(
       new CustomEvent("join-lobby", {
@@ -846,8 +923,12 @@ export class SinglePlayerModal extends BaseModal {
             players: [
               {
                 clientID,
-                username: usernameInput.getUsername(),
-                clanTag: usernameInput.getClanTag() ?? null,
+                username: aiTraining
+                  ? trainingUsername
+                  : usernameInput?.getUsername()
+                    ? usernameInput.getUsername()
+                    : trainingUsername,
+                clanTag: usernameInput?.getClanTag() ?? null,
                 cosmetics: await getPlayerCosmetics(),
               },
             ],
@@ -926,4 +1007,24 @@ export class SinglePlayerModal extends BaseModal {
       // Leave existing values unchanged so the UI stays consistent
     }
   }
+}
+
+export async function startAiTrainingFromPage(): Promise<void> {
+  await customElements.whenDefined("single-player-modal");
+  const modal = document.querySelector(
+    "single-player-modal",
+  ) as SinglePlayerModal | null;
+  if (modal === null) {
+    throw new Error("Single-player launcher is unavailable");
+  }
+
+  const runtimeMethod = (modal as Partial<SinglePlayerModal>).startAiTraining;
+  const start =
+    typeof runtimeMethod === "function"
+      ? runtimeMethod
+      : SinglePlayerModal.prototype.startAiTraining;
+  if (typeof start !== "function") {
+    throw new Error("AI training launcher did not load; refresh the page");
+  }
+  await start.call(modal);
 }

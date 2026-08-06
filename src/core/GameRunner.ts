@@ -32,6 +32,8 @@ import { PseudoRandom } from "./PseudoRandom";
 import { ClientID, GameStartInfo, Turn } from "./Schemas";
 import { simpleHash } from "./Util";
 
+const NAME_PLACEMENT_REFRESH_TICKS = 30;
+
 export async function createGameRunner(
   gameStart: GameStartInfo,
   clientID: ClientID | undefined,
@@ -95,8 +97,6 @@ export class GameRunner {
   private turns: Turn[] = [];
   private currTurn = 0;
   private isExecuting = false;
-
-  private playerViewData: Record<PlayerID, NameViewData> = {};
 
   constructor(
     public game: Game,
@@ -171,32 +171,41 @@ export class GameRunner {
       return false;
     }
 
-    // Track whether placements were recomputed this tick — the record is
-    // only attached to the update when it could have changed, so the main
-    // thread doesn't structured-clone an identical ~all-players record on
-    // every other tick.
+    // Send only placements calculated this tick. Periodic work is distributed
+    // across the refresh window so hundreds of players do not create a single
+    // simulation and structured-clone spike every 30th tick.
+    const playerNameViewData: Record<PlayerID, NameViewData> = {};
     let viewDataChanged = false;
+    const recordName = (player: Player, data: NameViewData) => {
+      playerNameViewData[player.id()] = data;
+      viewDataChanged = true;
+    };
     if (this.game.inSpawnPhase()) {
       for (const p of this.game.players()) {
         if (p.type() !== PlayerType.Human && p.type() !== PlayerType.Nation) {
           continue;
         }
         if (p.spawnTile() === undefined) continue;
-        this.playerViewData[p.id()] = placeSpawnName(this.game, p);
-        viewDataChanged = true;
+        recordName(p, placeSpawnName(this.game, p));
       }
     }
 
     const spawnJustEnded = wasInSpawnPhase && !this.game.inSpawnPhase();
-    if (
-      spawnJustEnded ||
-      this.game.ticks() < 3 ||
-      this.game.ticks() % 30 === 0
-    ) {
+    if (spawnJustEnded || this.game.ticks() < 3) {
       for (const p of this.game.players()) {
-        this.playerViewData[p.id()] = placeName(this.game, p);
+        recordName(p, placeName(this.game, p));
       }
-      viewDataChanged = true;
+    } else if (!this.game.inSpawnPhase()) {
+      const players = this.game.players();
+      const bucket = this.game.ticks() % NAME_PLACEMENT_REFRESH_TICKS;
+      for (
+        let index = bucket;
+        index < players.length;
+        index += NAME_PLACEMENT_REFRESH_TICKS
+      ) {
+        const player = players[index];
+        recordName(player, placeName(this.game, player));
+      }
     }
 
     const packedTileUpdates = this.game.drainPackedTileUpdates();
@@ -215,7 +224,7 @@ export class GameRunner {
       ...(packedAttackUpdates ? { packedAttackUpdates } : {}),
       ...(packedNukeImpacts ? { packedNukeImpacts } : {}),
       updates: updates,
-      ...(viewDataChanged ? { playerNameViewData: this.playerViewData } : {}),
+      ...(viewDataChanged ? { playerNameViewData } : {}),
       tickExecutionDuration: tickExecutionDuration,
       pendingTurns: pendingTurns ?? 0,
     });

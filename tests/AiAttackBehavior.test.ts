@@ -116,6 +116,25 @@ describe("Ai Attack Behavior", () => {
     expect(bot.outgoingAttacks()).toHaveLength(attacksBefore);
   });
 
+  test("nation bot-attack budget subtracts active committed troops", () => {
+    const target = {
+      troops: () => 1000,
+      incomingAttacks: () => [
+        { troops: () => 2500, retreating: () => false },
+        { troops: () => 500, retreating: () => true },
+      ],
+    } as unknown as Player;
+
+    const troops = (attackBehavior as any).calculateBotAttackTroops(
+      target,
+      10_000,
+    );
+
+    // 4x target troops minus the active 2,500 commitment. The retreating
+    // attack must not count toward conquest.
+    expect(troops).toBe(1500);
+  });
+
   test("nation cannot attack allied player", () => {
     // Create nation
     const nationInfo = new PlayerInfo(

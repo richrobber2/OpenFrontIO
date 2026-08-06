@@ -59,6 +59,7 @@ import {
   WARSHIP_EFFECT_BLOCK,
 } from "../utils/ColorUtils";
 import { createProgram, shaderSrc } from "../utils/GlUtils";
+import { isMissileAtlasColumn } from "../utils/UnitAtlasClassification";
 
 const unitAtlasUrl = assetUrl("atlases/unit-atlas.png");
 
@@ -121,27 +122,6 @@ const FLAG_FLICKER_UNTARGETABLE = 5;
 const TRAIN_ENGINE_COL = UNIT_ORDER.indexOf("TrainEngine");
 const TRAIN_CARRIAGE_COL = UNIT_ORDER.indexOf("TrainCarriage");
 const TRAIN_CARRIAGE_LOADED_COL = UNIT_ORDER.indexOf("TrainCarriageLoaded");
-
-/** Nuke + warhead types — rendered with flickering hot colors */
-const FLICKER_TYPES: ReadonlySet<string> = new Set([
-  UT_ATOM_BOMB,
-  UT_HYDROGEN_BOMB,
-  UT_MIRV,
-  UT_MIRV_WARHEAD,
-  UT_SAM_MISSILE,
-  UT_SHELL,
-]);
-
-/** Missile/projectile types — rendered on top of structures in the layer order.
- *  Ground/sea units (boats, trains) render below structures. */
-const MISSILE_TYPES: ReadonlySet<string> = new Set([
-  UT_ATOM_BOMB,
-  UT_HYDROGEN_BOMB,
-  UT_MIRV,
-  UT_SAM_MISSILE,
-  UT_SHELL,
-  UT_MIRV_WARHEAD,
-]);
 
 /** Values per smoothing segment in the flat `smoothSegs` array:
  *  (instanceIdx, lastX, lastY, x, y). The push site and the read loop must
@@ -404,7 +384,9 @@ export class UnitPass {
     const byteOff = this.groundCount * BYTES_PER_INSTANCE;
     this.groundBuf.uint8[byteOff + 12] = atlasIdx;
     this.groundBuf.uint8[byteOff + 13] = flags;
-    this.groundBuf.uint8[byteOff + 14] = flickerHashByte(x, y);
+    // Ground units never use shader flicker. Avoid hashing every trade ship,
+    // transport, warship, and train carriage in high-unit-count matches.
+    this.groundBuf.uint8[byteOff + 14] = 0;
     this.groundCount++;
   }
 
@@ -458,7 +440,7 @@ export class UnitPass {
         unit.unitType === UT_WARSHIP && unit.retreating;
       const isAngryWarship =
         unit.unitType === UT_WARSHIP && unit.targetUnitId !== null;
-      const isFlicker = FLICKER_TYPES.has(unit.unitType);
+      const isMissile = isMissileAtlasColumn(atlasIdx);
 
       // Enemy trade ships heading to a self/allied port get FLAG_TRADE_FRIENDLY
       // so alt-view renders them yellow instead of red.
@@ -489,12 +471,10 @@ export class UnitPass {
         flags = FLAG_RETREATING;
       } else if (isAngryWarship) {
         flags = FLAG_ANGRY;
-      } else if (isFlicker) {
+      } else if (isMissile) {
         // Untargetable nukes render dimmed so players can tell SAMs can't hit them
         flags = unit.targetable ? FLAG_FLICKER : FLAG_FLICKER_UNTARGETABLE;
       }
-      const isMissile = MISSILE_TYPES.has(unit.unitType);
-
       const x = unit.pos % this.mapW;
       const y = (unit.pos - x) / this.mapW;
 

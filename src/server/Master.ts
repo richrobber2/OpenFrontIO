@@ -13,6 +13,15 @@ import { setNoStoreHeaders } from "./NoStoreHeaders";
 import { renderAppShell } from "./RenderHtml";
 import { ServerEnv } from "./ServerEnv";
 import { applyStaticAssetCacheControl } from "./StaticAssetCache";
+import { readVisualAiBrain, saveVisualAiBrain } from "./VisualAiBrainStore";
+import {
+  readVisualAiTelemetry,
+  saveVisualAiTelemetry,
+} from "./VisualAiTelemetryStore";
+import {
+  readVisualAiTrainingControl,
+  saveVisualAiTrainingControl,
+} from "./VisualAiTrainingControlStore";
 
 const playlist = new MapPlaylist();
 let lobbyService: MasterLobbyService;
@@ -141,6 +150,114 @@ app.get("/api/health", (_req, res) => {
     res.json({ status: "ok" });
   } else {
     res.status(503).json({ status: "unavailable" });
+  }
+});
+
+app.get("/api/ai-training/brain", async (_req, res) => {
+  if (ServerEnv.env() !== GameEnv.Dev) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  try {
+    res.json({ brain: await readVisualAiBrain() });
+  } catch (error) {
+    log.error("Failed to read visual AI brain", error);
+    res.status(500).json({ error: "Could not read AI brain" });
+  }
+});
+
+app.put("/api/ai-training/brain", async (req, res) => {
+  if (ServerEnv.env() !== GameEnv.Dev) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  if (req.get("sec-fetch-site") === "cross-site") {
+    res.status(403).json({ error: "Cross-site request rejected" });
+    return;
+  }
+  try {
+    res.json({ brain: await saveVisualAiBrain(req.body?.profile) });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "Invalid AI brain profile"
+    ) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    log.error("Failed to save visual AI brain", error);
+    res.status(500).json({ error: "Could not save AI brain" });
+  }
+});
+
+app.get("/api/ai-training/control", async (_req, res) => {
+  if (ServerEnv.env() !== GameEnv.Dev) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  try {
+    res.json({ control: await readVisualAiTrainingControl() });
+  } catch (error) {
+    log.error("Failed to read visual AI training control", error);
+    res.status(500).json({ error: "Could not read AI training control" });
+  }
+});
+
+app.put("/api/ai-training/control", async (req, res) => {
+  if (ServerEnv.env() !== GameEnv.Dev) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  if (req.get("sec-fetch-site") === "cross-site") {
+    res.status(403).json({ error: "Cross-site request rejected" });
+    return;
+  }
+  try {
+    res.json({ control: await saveVisualAiTrainingControl(req.body) });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "Invalid AI training control"
+    ) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    log.error("Failed to save visual AI training control", error);
+    res.status(500).json({ error: "Could not save AI training control" });
+  }
+});
+
+app.get("/api/ai-training/telemetry", async (_req, res) => {
+  if (ServerEnv.env() !== GameEnv.Dev) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  try {
+    res.json({ telemetry: await readVisualAiTelemetry() });
+  } catch (error) {
+    log.error("Failed to read visual AI telemetry", error);
+    res.status(500).json({ error: "Could not read AI telemetry" });
+  }
+});
+
+app.post("/api/ai-training/telemetry", async (req, res) => {
+  if (ServerEnv.env() !== GameEnv.Dev) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  if (req.get("sec-fetch-site") === "cross-site") {
+    res.status(403).json({ error: "Cross-site request rejected" });
+    return;
+  }
+  try {
+    res.json({ telemetry: await saveVisualAiTelemetry(req.body) });
+  } catch (error) {
+    if (error instanceof Error && error.message === "Invalid AI telemetry") {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    log.error("Failed to save visual AI telemetry", error);
+    res.status(500).json({ error: "Could not save AI telemetry" });
   }
 });
 

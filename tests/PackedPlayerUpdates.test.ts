@@ -87,6 +87,14 @@ describe("GameRunner payload cadence", () => {
     );
     game.addPlayer(aliceInfo);
     game.addExecution(new SpawnExecution(gameID, aliceInfo, game.ref(10, 10)));
+    const bobInfo = new PlayerInfo(
+      "bob",
+      PlayerType.Human,
+      "bob_client",
+      "bob_id",
+    );
+    game.addPlayer(bobInfo);
+    game.addExecution(new SpawnExecution(gameID, bobInfo, game.ref(20, 20)));
     byTick = new Map();
     const runner = new GameRunner(
       game,
@@ -104,22 +112,29 @@ describe("GameRunner payload cadence", () => {
     };
   });
 
-  test("playerNameViewData is attached only on placement-rebuild ticks", () => {
+  test("playerNameViewData staggers periodic placement deltas across ticks", () => {
     tick(); // 1
     tick(); // 2
     game.endSpawnPhase();
     for (let t = 3; t <= 61; t++) tick();
 
-    // ticks < 3 always rebuild; every 30th tick rebuilds; everything else
-    // omits the record. (The in-tick spawn-end rebuild also sets the flag,
-    // but ending the spawn phase between ticks doesn't exercise it here.)
-    expect(byTick.get(1)!.playerNameViewData).toBeDefined();
+    // Tick 1 has no materialized players yet, so no empty placement record is
+    // sent. Initial populated ticks contain every player. Periodic updates then distribute
+    // players into stable modulo-30 buckets and send only each tick's delta.
+    expect(byTick.get(1)!.playerNameViewData).toBeUndefined();
     expect(byTick.get(2)!.playerNameViewData).toBeDefined();
     expect(byTick.get(4)!.playerNameViewData).toBeUndefined();
     expect(byTick.get(29)!.playerNameViewData).toBeUndefined();
-    expect(byTick.get(30)!.playerNameViewData).toBeDefined();
-    expect(byTick.get(31)!.playerNameViewData).toBeUndefined();
-    expect(byTick.get(60)!.playerNameViewData).toBeDefined();
+    expect(Object.keys(byTick.get(30)!.playerNameViewData!)).toEqual([
+      "alice_id",
+    ]);
+    expect(Object.keys(byTick.get(31)!.playerNameViewData!)).toEqual([
+      "bob_id",
+    ]);
+    expect(byTick.get(32)!.playerNameViewData).toBeUndefined();
+    expect(Object.keys(byTick.get(60)!.playerNameViewData!)).toEqual([
+      "alice_id",
+    ]);
   });
 
   test("stat churn arrives as packedPlayerUpdates quads on the view data", () => {

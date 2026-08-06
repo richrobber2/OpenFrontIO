@@ -1,4 +1,5 @@
 import {
+  Structures,
   Tick,
   TrainType,
   TransportShipState,
@@ -109,12 +110,26 @@ export class UnitView {
   private _warshipState?: WarshipState;
   private _transportShipState?: TransportShipState;
   private _createdAt: Tick;
+  /** Latest owner sent by the worker. Structures may be captured one tick earlier in tile state. */
+  private _wireOwnerID: number;
 
   constructor(
     private gameView: GameView,
     data: UnitUpdate,
   ) {
     this.state = unitStateFromUpdate(data);
+    this._wireOwnerID = data.ownerID;
+    // GameView's owner index and renderer both read state.ownerID directly.
+    // Make that value authoritative for captured structures immediately, while
+    // retaining the worker owner for mobile units and temporary unowned tiles.
+    Object.defineProperty(this.state, "ownerID", {
+      configurable: false,
+      enumerable: true,
+      get: () => this.resolvedOwner().smallID(),
+      set: (ownerID: number) => {
+        this._wireOwnerID = ownerID;
+      },
+    });
     this._warshipState = data.warshipState;
     this._transportShipState = data.transportShipState;
     this.lastPos.push(data.pos);
@@ -217,8 +232,21 @@ export class UnitView {
   tile(): TileRef {
     return this.state.pos;
   }
+  private resolvedOwner(): PlayerView {
+    // Structures are captured with their territory. The tile owner is the
+    // authoritative current owner during the short window before a matching
+    // UnitUpdate reaches the client, so AI and UI logic must not keep treating
+    // a stolen structure as belonging to its former owner.
+    if (Structures.has(this.type()) && this.gameView.hasOwner(this.state.pos)) {
+      const territoryOwner = this.gameView.owner(this.state.pos);
+      if (territoryOwner.isPlayer()) {
+        return territoryOwner as PlayerView;
+      }
+    }
+    return this.gameView.playerBySmallID(this._wireOwnerID)! as PlayerView;
+  }
   owner(): PlayerView {
-    return this.gameView.playerBySmallID(this.state.ownerID)! as PlayerView;
+    return this.resolvedOwner();
   }
   isActive(): boolean {
     return this.state.isActive;

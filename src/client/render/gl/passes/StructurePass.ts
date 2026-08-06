@@ -31,6 +31,12 @@ import {
   STRUCTURES_EFFECT_BLOCK,
 } from "../utils/ColorUtils";
 import { createProgram, shaderSrc } from "../utils/GlUtils";
+import {
+  captureStructureIcons,
+  type IconStructureSnapshot,
+  sameStructureIcons,
+} from "../utils/StructureIconInvalidation";
+import { updateStructureShapeBuffers } from "../utils/StructureShapeUniforms";
 
 import { assetUrl } from "src/core/AssetUrls";
 import structureFragSrc from "../shaders/structure/structure.frag.glsl?raw";
@@ -114,6 +120,10 @@ export class StructurePass {
   private altView = false;
 
   private instanceCount = 0;
+  private shapeScales = new Float32Array(ATLAS_COLS);
+  private iconFills = new Float32Array(ATLAS_COLS);
+  private shapeUniformsInitialized = false;
+  private iconSnapshot: IconStructureSnapshot[] = [];
 
   /** unitType string → atlas column index (0–5) */
   private typeToAtlasCol = new Map<string, number>();
@@ -304,6 +314,10 @@ export class StructurePass {
   }
 
   updateStructures(units: Map<number, UnitState>): void {
+    if (sameStructureIcons(units, this.typeToAtlasCol, this.iconSnapshot)) {
+      return;
+    }
+    captureStructureIcons(units, this.typeToAtlasCol, this.iconSnapshot);
     let count = 0;
 
     for (const unit of units.values()) {
@@ -384,16 +398,17 @@ export class StructurePass {
     gl.uniform1f(this.uScaleFactor, ss.iconScaleFactorZoomedOut);
     gl.uniform1f(this.uIconGrowZoom, ss.iconGrowZoom);
 
-    // Build per-structure uniform arrays from settings, ordered by atlas column
-    const scales = new Float32Array(ATLAS_COLS);
-    const fills = new Float32Array(ATLAS_COLS);
-    for (let i = 0; i < STRUCTURE_ORDER.length; i++) {
-      const cfg = ss.shapes[STRUCTURE_ORDER[i]];
-      scales[i] = cfg?.scale ?? 1.0;
-      fills[i] = cfg?.iconFill ?? 0.6;
+    const shapeUniformsChanged = updateStructureShapeBuffers(
+      STRUCTURE_ORDER,
+      ss.shapes,
+      this.shapeScales,
+      this.iconFills,
+    );
+    if (!this.shapeUniformsInitialized || shapeUniformsChanged) {
+      gl.uniform1fv(this.uShapeScales, this.shapeScales);
+      gl.uniform1fv(this.uIconFills, this.iconFills);
+      this.shapeUniformsInitialized = true;
     }
-    gl.uniform1fv(this.uShapeScales, scales);
-    gl.uniform1fv(this.uIconFills, fills);
 
     gl.uniform1i(
       this.uAltView,

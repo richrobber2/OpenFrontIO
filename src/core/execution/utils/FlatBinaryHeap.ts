@@ -3,17 +3,17 @@ import { TileRef } from "../../game/GameMap";
 /**
  * Lightweight min-heap specialised for (priority:number, tile:TileRef) pairs.
  * - priorities stored in a contiguous Float32Array
- * - tiles stored in a parallel object array
+ * - tiles stored in a parallel Uint32Array
  */
 export class FlatBinaryHeap {
   /** parallel arrays: pri[ i ] is the priority of tiles[ i ] */
   private pri: Float32Array;
-  private tiles: TileRef[];
+  private tiles: Uint32Array;
   private len = 0; // current number of elements
 
   constructor(capacity = 1024) {
     this.pri = new Float32Array(capacity);
-    this.tiles = new Array<TileRef>(capacity);
+    this.tiles = new Uint32Array(capacity);
   }
 
   /** remove every element without reallocating */
@@ -78,6 +78,8 @@ export class FlatBinaryHeap {
     newPri.set(this.pri);
     this.pri = newPri;
 
-    this.tiles.length = newCap;
+    const newTiles = new Uint32Array(newCap);
+    newTiles.set(this.tiles);
+    this.tiles = newTiles;
   }
 }
