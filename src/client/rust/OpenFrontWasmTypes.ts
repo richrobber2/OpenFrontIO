@@ -10,6 +10,7 @@ export const ERROR_MESSAGES: Record<number, string> = {
   5: "traversal mask length does not match the map",
   6: "owner ID exceeds the 12-bit tile-state field",
   7: "upload buffer index is out of range",
+  8: "uploaded tile list length is not divisible by four",
   255: "Rust map invariant failed",
 };
 
@@ -57,6 +58,12 @@ export interface OpenFrontWasmExports extends WebAssembly.Exports {
     handle: number,
     start: number,
     upload: number,
+  ): number;
+  openfront_map_owned_depths(
+    handle: number,
+    upload: number,
+    ownerID: number,
+    maximumDepth: number,
   ): number;
   openfront_result_ptr(): number;
   openfront_result_len(): number;
