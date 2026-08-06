@@ -74,6 +74,14 @@ export class RustMapShadow {
     }
   }
 
+  ownedDepths(
+    starts: Uint32Array,
+    ownerID: number,
+    maximumDepth: number,
+  ): Uint32Array {
+    return this.rustMap.ownedDepths(starts, ownerID, maximumDepth);
+  }
+
   assertFullParity(map: GameMap, checkpoint: string): void {
     this.assertDimensionsAndCounters(map, checkpoint);
     const tileCount = map.width() * map.height();
