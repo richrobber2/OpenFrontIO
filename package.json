@@ -76,6 +76,7 @@
     "@datastructures-js/priority-queue": "^6.3.5",
     "@eslint/compat": "^2.0.5",
     "@eslint/js": "^10.0.1",
+    "@lit-labs/virtualizer": "^2.1.1",
     "@tailwindcss/vite": "^4.2.4",
     "@types/benchmark": "^2.1.5",
     "@types/d3": "^7.4.3",
@@ -107,6 +108,8 @@
     "lit": "^3.3.2",
     "marked": "^18.0.5",
     "mrmime": "^2.0.1",
+    "oxlint": "^1.75.0",
+    "oxlint-tsgolint": "^7.0.2001",
     "pixi-filters": "^6.1.5",
     "pixi.js": "^8.18.1",
     "prettier": "^3.8.3",
@@ -116,13 +119,10 @@
     "tsconfig-paths": "^4.2.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.1",
-    "vite": "^8.0.16",
+    "vite": "7.3.6",
     "vite-plugin-html": "^3.2.2",
     "vitest": "^4.1.5",
-    "vitest-canvas-mock": "^1.1.4",
-    "@lit-labs/virtualizer": "^2.1.1",
-    "oxlint": "^1.75.0",
-    "oxlint-tsgolint": "^7.0.2001"
+    "vitest-canvas-mock": "^1.1.4"
   },
   "dependencies": {
     "@lit-labs/virtualizer": "^2.1.1",
@@ -163,5 +163,8 @@
   "overrides": {
     "sanitize-html": ">=2.17.4"
   },
-  "type": "module"
+  "type": "module",
+  "optionalDependencies": {
+    "@rollup/rollup-android-arm64": "4.62.4"
+  }
 }
