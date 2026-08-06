@@ -16,6 +16,7 @@ on:
       - tests/rust/**
       - scripts/build-rust-wasm.mjs
       - scripts/smoke-rust-wasm.mjs
+      - scripts/test-rust-shadow.mjs
       - .github/workflows/rust.yml
   push:
     paths:
@@ -32,6 +33,7 @@ on:
       - tests/rust/**
       - scripts/build-rust-wasm.mjs
       - scripts/smoke-rust-wasm.mjs
+      - scripts/test-rust-shadow.mjs
       - .github/workflows/rust.yml
 
 permissions:
@@ -70,3 +72,5 @@ jobs:
         run: npx tsc --noEmit
       - name: Run TypeScript and Rust parity harnesses
         run: npx vitest run tests/rust
+      - name: Run headless Rust shadow game
+        run: npx tsx tests/rust/HeadlessShadowGame.ts --ticks 200 --bots 16 --checkpoint-every 50
