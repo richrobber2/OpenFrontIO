@@ -186,6 +186,44 @@ export class OpenFrontWasmModule {
     return result;
   }
 
+  ownedDepths(
+    handle: number,
+    starts: Uint32Array,
+    ownerID: number,
+    maximumDepth: number,
+  ): Uint32Array {
+    const upload = this.uploadU32(starts);
+    let result: Uint32Array;
+    try {
+      result = this.runTileQuery(
+        () =>
+          this.wasm.openfront_map_owned_depths(
+            handle,
+            upload,
+            ownerID,
+            maximumDepth,
+          ),
+        "query owned interior depths",
+      );
+    } finally {
+      this.wasm.openfront_upload_destroy(upload);
+    }
+    return result;
+  }
+
+  private uploadU32(values: Uint32Array): number {
+    const bytes = new Uint8Array(values.length * Uint32Array.BYTES_PER_ELEMENT);
+    const view = new DataView(bytes.buffer);
+    for (let index = 0; index < values.length; index++) {
+      view.setUint32(
+        index * Uint32Array.BYTES_PER_ELEMENT,
+        values[index]!,
+        true,
+      );
+    }
+    return this.upload(bytes);
+  }
+
   private upload(bytes: Uint8Array): number {
     const handle = this.wasm.openfront_upload_create(bytes.byteLength);
     if (handle === 0) this.throwLastError("allocate upload buffer");
