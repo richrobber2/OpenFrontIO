@@ -140,6 +140,59 @@ impl GameMapStore {
 
         Ok(accepted)
     }
+
+    /// Computes the same multi-source owned-land depths used by the AI's
+    /// `interiorBuildCandidates` helper.
+    ///
+    /// Sources are inserted at depth zero in caller order. Expansion uses a
+    /// FIFO queue and cardinal neighbors in north, south, west, east order.
+    /// Source ownership is intentionally not checked because the TypeScript
+    /// helper trusts its border set and only checks ownership for expansion.
+    pub fn owned_depths(
+        &self,
+        starts: &[TileRef],
+        owner_id: u16,
+        maximum_depth: u32,
+    ) -> Result<Vec<(TileRef, u32)>, GameMapError> {
+        let geometry = self.geometry();
+        let mut seen = vec![false; self.tile_count() as usize];
+        let mut queue = Vec::with_capacity(starts.len());
+
+        for start in starts {
+            if !geometry.is_valid_ref(*start) {
+                return Err(GameMapError::InvalidTile { tile: *start });
+            }
+            let index = start.get() as usize;
+            if seen[index] {
+                continue;
+            }
+            seen[index] = true;
+            queue.push((*start, 0));
+        }
+
+        let mut cursor = 0;
+        while cursor < queue.len() {
+            let (current, depth) = queue[cursor];
+            cursor += 1;
+            if depth >= maximum_depth {
+                continue;
+            }
+
+            let neighbors = geometry
+                .neighbors4(current)
+                .expect("queued tiles always have valid geometry");
+            for neighbor in neighbors.as_slice() {
+                let index = neighbor.get() as usize;
+                if seen[index] || self.state(*neighbor)?.owner_id() != owner_id {
+                    continue;
+                }
+                seen[index] = true;
+                queue.push((*neighbor, depth + 1));
+            }
+        }
+
+        Ok(queue)
+    }
 }
 
 #[cfg(test)]
@@ -224,6 +277,60 @@ mod tests {
         let invalid = TileRef::new(map.tile_count());
         assert_eq!(
             map.bfs(invalid, |_, _| true),
+            Err(GameMapError::InvalidTile { tile: invalid })
+        );
+    }
+
+    #[test]
+    fn owned_depths_matches_fifo_multi_source_search() {
+        let mut map = GameMapStore::new(5, 3, vec![land(); 15]).unwrap();
+        for tile in map.tiles().collect::<Vec<_>>() {
+            map.set_owner_id(tile, 7).unwrap();
+        }
+
+        let left = tile(&map, 0, 1);
+        let right = tile(&map, 4, 1);
+        let actual = map.owned_depths(&[left, right, left], 7, 2).unwrap();
+        let expected = vec![
+            (left, 0),
+            (right, 0),
+            (tile(&map, 0, 0), 1),
+            (tile(&map, 0, 2), 1),
+            (tile(&map, 1, 1), 1),
+            (tile(&map, 4, 0), 1),
+            (tile(&map, 4, 2), 1),
+            (tile(&map, 3, 1), 1),
+            (tile(&map, 1, 0), 2),
+            (tile(&map, 1, 2), 2),
+            (tile(&map, 2, 1), 2),
+            (tile(&map, 3, 0), 2),
+            (tile(&map, 3, 2), 2),
+        ];
+
+        assert_eq!(actual, expected);
+        assert_eq!(map.owned_depths(&[left], 7, 0).unwrap(), vec![(left, 0)]);
+    }
+
+    #[test]
+    fn owned_depths_stops_at_owner_barriers_and_validates_sources() {
+        let mut map = GameMapStore::new(4, 1, vec![land(); 4]).unwrap();
+        let first = tile(&map, 0, 0);
+        let second = tile(&map, 1, 0);
+        let barrier = tile(&map, 2, 0);
+        let isolated = tile(&map, 3, 0);
+        map.set_owner_id(first, 7).unwrap();
+        map.set_owner_id(second, 7).unwrap();
+        map.set_owner_id(barrier, 9).unwrap();
+        map.set_owner_id(isolated, 7).unwrap();
+
+        assert_eq!(
+            map.owned_depths(&[first], 7, 10).unwrap(),
+            vec![(first, 0), (second, 1)]
+        );
+
+        let invalid = TileRef::new(map.tile_count());
+        assert_eq!(
+            map.owned_depths(&[invalid], 7, 1),
             Err(GameMapError::InvalidTile { tile: invalid })
         );
     }
