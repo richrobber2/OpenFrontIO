@@ -285,9 +285,8 @@ mod tests {
 
     #[test]
     fn terrain_decodes_flags_and_type_thresholds() {
-        let shore = Terrain::from_byte(
-            TERRAIN_LAND_MASK | TERRAIN_SHORELINE_MASK | TERRAIN_OCEAN_MASK | 9,
-        );
+        let shore =
+            Terrain::from_byte(TERRAIN_LAND_MASK | TERRAIN_SHORELINE_MASK | TERRAIN_OCEAN_MASK | 9);
 
         assert!(shore.is_land());
         assert!(!shore.is_water());

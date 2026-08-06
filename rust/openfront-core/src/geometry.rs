@@ -200,15 +200,9 @@ impl GridGeometry {
     pub fn circle(self, center: TileRef, radius: u32) -> Option<Vec<TileRef>> {
         let center_coord = self.coord(center)?;
         let min_x = center_coord.x.saturating_sub(radius);
-        let max_x = center_coord
-            .x
-            .saturating_add(radius)
-            .min(self.width - 1);
+        let max_x = center_coord.x.saturating_add(radius).min(self.width - 1);
         let min_y = center_coord.y.saturating_sub(radius);
-        let max_y = center_coord
-            .y
-            .saturating_add(radius)
-            .min(self.height - 1);
+        let max_y = center_coord.y.saturating_add(radius).min(self.height - 1);
         let radius_squared = u64::from(radius) * u64::from(radius);
         let mut tiles = Vec::new();
 
@@ -275,10 +269,7 @@ mod tests {
                 tile(grid, 2, 1),
             ]
         );
-        assert_eq!(
-            corner.as_slice(),
-            &[tile(grid, 0, 1), tile(grid, 1, 0)]
-        );
+        assert_eq!(corner.as_slice(), &[tile(grid, 0, 1), tile(grid, 1, 0)]);
     }
 
     #[test]
