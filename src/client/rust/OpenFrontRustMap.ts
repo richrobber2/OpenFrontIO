@@ -78,6 +78,20 @@ export class OpenFrontRustMap {
     return this.module.connectedMask(this.handle, start, accepted);
   }
 
+  ownedDepths(
+    starts: Uint32Array,
+    ownerID: number,
+    maximumDepth: number,
+  ): Uint32Array {
+    this.assertLive();
+    return this.module.ownedDepths(
+      this.handle,
+      starts,
+      ownerID,
+      maximumDepth,
+    );
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.module.destroyMap(this.handle);
