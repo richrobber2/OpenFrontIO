@@ -42,11 +42,7 @@ pub struct GameMapStore {
 impl GameMapStore {
     /// Creates a map from the same one-byte-per-tile terrain representation
     /// consumed by the TypeScript `GameMapImpl` constructor.
-    pub fn new(
-        width: u32,
-        height: u32,
-        terrain_bytes: Vec<u8>,
-    ) -> Result<Self, GameMapError> {
+    pub fn new(width: u32, height: u32, terrain_bytes: Vec<u8>) -> Result<Self, GameMapError> {
         let geometry = GridGeometry::new(width, height)?;
         let expected = geometry.tile_count() as usize;
         let actual = terrain_bytes.len();
@@ -54,10 +50,7 @@ impl GameMapStore {
             return Err(GameMapError::TerrainLengthMismatch { expected, actual });
         }
 
-        let terrain: Vec<Terrain> = terrain_bytes
-            .into_iter()
-            .map(Terrain::from_byte)
-            .collect();
+        let terrain: Vec<Terrain> = terrain_bytes.into_iter().map(Terrain::from_byte).collect();
         let num_land_tiles = terrain.iter().filter(|tile| tile.is_land()).count() as u32;
 
         Ok(Self {
@@ -204,11 +197,7 @@ impl GameMapStore {
         Ok(changed)
     }
 
-    pub fn set_defense_bonus(
-        &mut self,
-        tile: TileRef,
-        value: bool,
-    ) -> Result<(), GameMapError> {
+    pub fn set_defense_bonus(&mut self, tile: TileRef, value: bool) -> Result<(), GameMapError> {
         let index = self.index(tile)?;
         self.state[index].set_defense_bonus(value);
         Ok(())
@@ -257,26 +246,16 @@ impl GameMapStore {
         packed: PackedTile,
     ) -> Result<TileTransition, GameMapError> {
         let index = self.index(tile)?;
-        let transition = apply_packed_update(
-            &mut self.terrain[index],
-            &mut self.state[index],
-            packed,
-        );
+        let transition =
+            apply_packed_update(&mut self.terrain[index], &mut self.state[index], packed);
         adjust_counter(&mut self.num_land_tiles, transition.land_delta);
-        adjust_counter(
-            &mut self.num_tiles_with_fallout,
-            transition.fallout_delta,
-        );
+        adjust_counter(&mut self.num_tiles_with_fallout, transition.fallout_delta);
         Ok(transition)
     }
 
     /// Matches `GameMapImpl.updateTile` by returning only whether terrain
     /// changed while still maintaining the Rust-side counters.
-    pub fn update_tile(
-        &mut self,
-        tile: TileRef,
-        packed: PackedTile,
-    ) -> Result<bool, GameMapError> {
+    pub fn update_tile(&mut self, tile: TileRef, packed: PackedTile) -> Result<bool, GameMapError> {
         Ok(self.apply_packed_tile(tile, packed)?.terrain_changed)
     }
 
@@ -309,9 +288,7 @@ fn adjust_counter(counter: &mut u32, delta: i8) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tile::{
-        FALLOUT_MASK, IMPASSABLE_MAGNITUDE, TERRAIN_LAND_MASK, TERRAIN_OCEAN_MASK,
-    };
+    use crate::tile::{FALLOUT_MASK, IMPASSABLE_MAGNITUDE, TERRAIN_LAND_MASK, TERRAIN_OCEAN_MASK};
 
     fn land(magnitude: u8) -> u8 {
         TERRAIN_LAND_MASK | magnitude
@@ -342,19 +319,18 @@ mod tests {
 
     #[test]
     fn initializes_contiguous_buffers_and_land_count() {
-        let map = GameMapStore::new(
-            2,
-            2,
-            vec![land(1), ocean(), land(IMPASSABLE_MAGNITUDE), 0],
-        )
-        .unwrap();
+        let map =
+            GameMapStore::new(2, 2, vec![land(1), ocean(), land(IMPASSABLE_MAGNITUDE), 0]).unwrap();
 
         assert_eq!(map.tile_count(), 4);
         assert_eq!(map.terrain_buffer().len(), 4);
         assert_eq!(map.state_buffer().len(), 4);
         assert_eq!(map.num_land_tiles(), 2);
         assert_eq!(map.num_tiles_with_fallout(), 0);
-        assert_eq!(map.tiles().collect::<Vec<_>>(), (0..4).map(TileRef::new).collect::<Vec<_>>());
+        assert_eq!(
+            map.tiles().collect::<Vec<_>>(),
+            (0..4).map(TileRef::new).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -374,12 +350,7 @@ mod tests {
 
     #[test]
     fn set_water_updates_land_count_once_and_preserves_impassable_land() {
-        let mut map = GameMapStore::new(
-            2,
-            1,
-            vec![land(4), land(IMPASSABLE_MAGNITUDE)],
-        )
-        .unwrap();
+        let mut map = GameMapStore::new(2, 1, vec![land(4), land(IMPASSABLE_MAGNITUDE)]).unwrap();
         let passable = tile(&map, 0, 0);
         let impassable = tile(&map, 1, 0);
 
