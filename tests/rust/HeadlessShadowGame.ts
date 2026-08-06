@@ -11,6 +11,7 @@ import {
   GameType,
 } from "../../src/core/game/Game";
 import { createGame } from "../../src/core/game/GameImpl";
+import type { GameMap, TileRef } from "../../src/core/game/GameMap";
 import { createNationsForGame } from "../../src/core/game/NationCreation";
 import { loadTerrainMap } from "../../src/core/game/TerrainMapLoader";
 import { GameRunner } from "../../src/core/GameRunner";
@@ -28,12 +29,19 @@ const WASM_PATH = path.join(
   PROJECT_ROOT,
   "resources/wasm/openfront_wasm.wasm",
 );
+const OWNED_DEPTH_LIMIT = 12;
 
 interface Options {
   ticks: number;
   bots: number;
   checkpointEvery: number;
   seed: string;
+}
+
+interface OwnedDepthCheck {
+  ownerID: number;
+  sources: number;
+  reached: number;
 }
 
 function positiveInteger(value: string, flag: string): number {
@@ -79,6 +87,108 @@ function parseArgs(argv: string[]): Options {
   }
 
   return options;
+}
+
+function ownedDepthPairs(
+  map: GameMap,
+  starts: readonly TileRef[],
+  ownerID: number,
+  maximumDepth: number,
+): number[] {
+  const depths = new Map<TileRef, number>();
+  const queue: TileRef[] = [];
+  for (const start of starts) {
+    if (depths.has(start)) continue;
+    depths.set(start, 0);
+    queue.push(start);
+  }
+
+  const neighbors = new Array<TileRef>(4);
+  for (let index = 0; index < queue.length; index++) {
+    const tile = queue[index]!;
+    const depth = depths.get(tile)!;
+    if (depth >= maximumDepth) continue;
+
+    const count = map.neighbors4(tile, neighbors);
+    for (let neighborIndex = 0; neighborIndex < count; neighborIndex++) {
+      const neighbor = neighbors[neighborIndex]!;
+      if (depths.has(neighbor) || map.ownerID(neighbor) !== ownerID) continue;
+      depths.set(neighbor, depth + 1);
+      queue.push(neighbor);
+    }
+  }
+
+  return [...depths.entries()].flatMap(([tile, depth]) => [tile, depth]);
+}
+
+function verifyOwnedDepths(
+  map: GameMap,
+  shadow: RustMapShadow,
+  checkpoint: string,
+): OwnedDepthCheck | null {
+  const tileCount = map.width() * map.height();
+  const ownerCounts = new Map<number, number>();
+  for (let tile = 0; tile < tileCount; tile++) {
+    const ownerID = map.ownerID(tile);
+    if (ownerID === 0) continue;
+    ownerCounts.set(ownerID, (ownerCounts.get(ownerID) ?? 0) + 1);
+  }
+
+  let selectedOwner = 0;
+  let selectedTiles = 0;
+  for (const [ownerID, tiles] of ownerCounts) {
+    if (tiles > selectedTiles) {
+      selectedOwner = ownerID;
+      selectedTiles = tiles;
+    }
+  }
+  if (selectedOwner === 0) return null;
+
+  const borders: TileRef[] = [];
+  const neighbors = new Array<TileRef>(4);
+  for (let tile = 0; tile < tileCount; tile++) {
+    if (map.ownerID(tile) !== selectedOwner) continue;
+    const count = map.neighbors4(tile, neighbors);
+    for (let index = 0; index < count; index++) {
+      if (map.ownerID(neighbors[index]!) !== selectedOwner) {
+        borders.push(tile);
+        break;
+      }
+    }
+  }
+  if (borders.length === 0) return null;
+
+  const expected = ownedDepthPairs(
+    map,
+    borders,
+    selectedOwner,
+    OWNED_DEPTH_LIMIT,
+  );
+  const actual = shadow.ownedDepths(
+    Uint32Array.from(borders),
+    selectedOwner,
+    OWNED_DEPTH_LIMIT,
+  );
+  if (actual.length !== expected.length) {
+    throw new Error(
+      `Rust owned-depth mismatch at ${checkpoint}: result length ` +
+        `${actual.length} !== ${expected.length}`,
+    );
+  }
+  for (let index = 0; index < expected.length; index++) {
+    if (actual[index] !== expected[index]) {
+      throw new Error(
+        `Rust owned-depth mismatch at ${checkpoint}, lane ${index}: ` +
+          `${actual[index]} !== ${expected[index]}`,
+      );
+    }
+  }
+
+  return {
+    ownerID: selectedOwner,
+    sources: borders.length,
+    reached: actual.length / 2,
+  };
 }
 
 async function main(): Promise<void> {
@@ -153,6 +263,7 @@ async function main(): Promise<void> {
   let shadowError: Error | undefined;
   let packedUpdates = 0;
   let ticksWithUpdates = 0;
+  let ownedDepthChecks = 0;
 
   const runner = new GameRunner(
     game,
@@ -191,13 +302,18 @@ async function main(): Promise<void> {
       if (shadowError !== undefined) throw shadowError;
 
       if ((turnNumber + 1) % options.checkpointEvery === 0) {
-        shadow.assertFullParity(
-          game.map(),
-          `full checkpoint ${turnNumber + 1}`,
-        );
+        const checkpoint = `full checkpoint ${turnNumber + 1}`;
+        shadow.assertFullParity(game.map(), checkpoint);
+        const depthCheck = verifyOwnedDepths(game.map(), shadow, checkpoint);
+        if (depthCheck !== null) ownedDepthChecks++;
+        const depthSummary =
+          depthCheck === null
+            ? "no owned-depth territory available"
+            : `owned-depth owner ${depthCheck.ownerID}: ` +
+              `${depthCheck.sources} borders, ${depthCheck.reached} tiles`;
         console.log(
           `Checkpoint ${turnNumber + 1}/${options.ticks}: ` +
-            `${packedUpdates} packed updates verified`,
+            `${packedUpdates} packed updates verified; ${depthSummary}`,
         );
       }
     }
@@ -208,10 +324,16 @@ async function main(): Promise<void> {
         "headless game produced no packed tile updates; shadow test was not meaningful",
       );
     }
+    if (ownedDepthChecks === 0) {
+      throw new Error(
+        "headless game produced no owned territory for the depth query",
+      );
+    }
 
     console.log(
       `Rust shadow game passed: ${options.ticks} ticks, ` +
-        `${packedUpdates} packed updates across ${ticksWithUpdates} ticks.`,
+        `${packedUpdates} packed updates across ${ticksWithUpdates} ticks, ` +
+        `${ownedDepthChecks} owned-depth queries.`,
     );
   } finally {
     shadow.dispose();
