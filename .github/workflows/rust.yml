@@ -11,6 +11,7 @@ on:
       - rust/**
       - src/client/rust/**
       - src/core/game/GameMap.ts
+      - src/core/rust/**
       - tests/rust/**
       - scripts/build-rust-wasm.mjs
       - scripts/smoke-rust-wasm.mjs
@@ -25,6 +26,7 @@ on:
       - rust/**
       - src/client/rust/**
       - src/core/game/GameMap.ts
+      - src/core/rust/**
       - tests/rust/**
       - scripts/build-rust-wasm.mjs
       - scripts/smoke-rust-wasm.mjs
@@ -64,5 +66,5 @@ jobs:
         run: node scripts/smoke-rust-wasm.mjs
       - name: Check TypeScript
         run: npx tsc --noEmit
-      - name: Run TypeScript and Rust parity harness
-        run: npx vitest run tests/rust/GameMapParity.test.ts
+      - name: Run TypeScript and Rust parity harnesses
+        run: npx vitest run tests/rust
