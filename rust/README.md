@@ -48,6 +48,29 @@ ABI:
 The TypeScript implementation remains authoritative while this boundary is
 validated against live games and replay data.
 
+## One-command shadow game
+
+Run a deterministic local headless match with Rust shadow verification:
+
+```sh
+node scripts/test-rust-shadow.mjs
+```
+
+The command builds the WebAssembly module, starts a local headless World match,
+feeds every real packed tile-update batch into Rust, checks touched tiles and
+counters every tick, and performs periodic full-map comparisons. It requires no
+browser, server, account, archived replay, or game ID.
+
+Optional tuning arguments are forwarded to the headless runner:
+
+```sh
+node scripts/test-rust-shadow.mjs \
+  --ticks 600 \
+  --bots 64 \
+  --checkpoint-every 100 \
+  --seed rust-shadow-long
+```
+
 ## Local checks
 
 ```sh
@@ -59,11 +82,12 @@ node scripts/build-rust-wasm.mjs
 node scripts/smoke-rust-wasm.mjs
 npx tsc --noEmit
 npx vitest run tests/rust
+node scripts/test-rust-shadow.mjs
 ```
 
 Rust changes are also checked by `.github/workflows/rust.yml`. The workflow
 builds the actual browser module, runs the raw ABI smoke test, checks TypeScript,
-and executes the deterministic and shadow parity harnesses.
+executes the deterministic parity tests, and runs a short headless shadow game.
 
 ## Build the browser module
 
@@ -105,8 +129,7 @@ batch, and can perform full-map checkpoints. It never changes TypeScript state.
 
 ## Replay shadow mode
 
-Build the WebAssembly module, then pass `--rust-shadow` to the existing replay
-command:
+Archived replay validation remains available for deeper compatibility testing:
 
 ```sh
 node scripts/build-rust-wasm.mjs
@@ -120,6 +143,7 @@ mismatch exits nonzero with the first failing checkpoint and tile or counter.
 
 ## Next slice
 
-Run replay shadow mode across a representative replay corpus, record parity and
-performance results, then add opt-in live-game sampling. Rendering, networking,
-and authoritative simulation remain in TypeScript.
+Use the one-command headless game as the normal development gate, then run replay
+shadow mode across a representative archived corpus before adding opt-in live
+sampling. Rendering, networking, and authoritative simulation remain in
+TypeScript.
