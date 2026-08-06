@@ -9,6 +9,7 @@ dist/
 coverage/
 static/
 tests/perf/output/
+/target/
 
 # Runtime and local data
 /data/
