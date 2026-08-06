@@ -35,8 +35,18 @@ as a second implementation of the entire game.
 - filtered connected-region search
 - exact compatibility with the existing `bfs` method's LIFO insertion order
 
-The TypeScript implementation remains authoritative until parity tests and a
-binding layer allow callers to switch safely.
+`openfront-wasm` exposes the proven core through a dependency-free WebAssembly
+ABI:
+
+- bulk terrain and traversal-mask uploads through linear memory
+- stable map handles and explicit error codes
+- packed tile reads and updates
+- cardinal and diagonal neighbor queries
+- owner and mask based connected-region traversal
+- a typed browser wrapper in `src/client/rust/OpenFrontWasm.ts`
+
+The TypeScript implementation remains authoritative while this boundary is
+validated against live games and replay data.
 
 ## Local checks
 
@@ -44,11 +54,26 @@ binding layer allow callers to switch safely.
 cargo fmt --all --check
 cargo test --workspace
 cargo check --workspace
+cargo check --package openfront-wasm --target wasm32-unknown-unknown
 ```
 
 Rust-only changes are also checked by `.github/workflows/rust.yml`.
 
+## Build the browser module
+
+Install the `wasm32-unknown-unknown` standard library for your Rust toolchain,
+then run:
+
+```sh
+node scripts/build-rust-wasm.mjs
+```
+
+The script writes `resources/wasm/openfront_wasm.wasm`. Vite serves that file at
+`/wasm/openfront_wasm.wasm`, which is the default URL used by
+`OpenFrontWasmModule.load()`.
+
 ## Next slice
 
-Expose the proven geometry, tile, map, and traversal operations through a narrow
-WebAssembly boundary. Rendering and networking remain in TypeScript.
+Add a parity harness that runs the same map update and traversal traces through
+TypeScript and WebAssembly, then compare every packed tile and counter. Rendering
+and networking remain in TypeScript.

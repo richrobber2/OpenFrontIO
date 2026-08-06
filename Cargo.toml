@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["rust/openfront-core"]
+members = ["rust/openfront-core", "rust/openfront-wasm"]
 
 [workspace.package]
 edition = "2021"

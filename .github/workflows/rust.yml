@@ -5,13 +5,19 @@ on:
     paths:
       - Cargo.toml
       - Cargo.lock
+      - .cargo/**
       - rust/**
+      - src/client/rust/**
+      - scripts/build-rust-wasm.mjs
       - .github/workflows/rust.yml
   push:
     paths:
       - Cargo.toml
       - Cargo.lock
+      - .cargo/**
       - rust/**
+      - src/client/rust/**
+      - scripts/build-rust-wasm.mjs
       - .github/workflows/rust.yml
 
 permissions:
@@ -25,7 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install Rust
-        run: rustup toolchain install stable --profile minimal --component rustfmt
+        run: rustup toolchain install stable --profile minimal --component rustfmt --target wasm32-unknown-unknown
       - name: Select Rust
         run: rustup default stable
       - name: Check formatting
@@ -34,3 +40,5 @@ jobs:
         run: cargo test --workspace
       - name: Check workspace
         run: cargo check --workspace
+      - name: Check WebAssembly target
+        run: cargo check --package openfront-wasm --target wasm32-unknown-unknown

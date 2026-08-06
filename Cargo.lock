@@ -5,3 +5,10 @@ version = 3
 [[package]]
 name = "openfront-core"
 version = "0.1.0"
+
+[[package]]
+name = "openfront-wasm"
+version = "0.1.0"
+dependencies = [
+ "openfront-core",
+]
