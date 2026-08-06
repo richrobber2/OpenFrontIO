@@ -12,6 +12,7 @@ on:
       - src/client/rust/**
       - src/core/game/GameMap.ts
       - src/core/rust/**
+      - tests/replay/**
       - tests/rust/**
       - scripts/build-rust-wasm.mjs
       - scripts/smoke-rust-wasm.mjs
@@ -27,6 +28,7 @@ on:
       - src/client/rust/**
       - src/core/game/GameMap.ts
       - src/core/rust/**
+      - tests/replay/**
       - tests/rust/**
       - scripts/build-rust-wasm.mjs
       - scripts/smoke-rust-wasm.mjs

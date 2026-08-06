@@ -61,9 +61,9 @@ npx tsc --noEmit
 npx vitest run tests/rust
 ```
 
-Rust-only changes are also checked by `.github/workflows/rust.yml`. The workflow
-builds the actual browser module and runs the raw ABI smoke test after native and
-Wasm target checks pass.
+Rust changes are also checked by `.github/workflows/rust.yml`. The workflow
+builds the actual browser module, runs the raw ABI smoke test, checks TypeScript,
+and executes the deterministic and shadow parity harnesses.
 
 ## Build the browser module
 
@@ -103,8 +103,23 @@ initializes Rust from an authoritative `GameMap`, consumes `GameImpl`'s exact
 `[tile, packedValue]` update pairs, checks touched tiles and counters after each
 batch, and can perform full-map checkpoints. It never changes TypeScript state.
 
+## Replay shadow mode
+
+Build the WebAssembly module, then pass `--rust-shadow` to the existing replay
+command:
+
+```sh
+node scripts/build-rust-wasm.mjs
+npm run replay:game -- <gameID-or-record.json> --rust-shadow
+```
+
+The replay remains authoritative in TypeScript. Rust consumes the real packed
+map-update stream, checks touched tiles and counters after every tick, and checks
+the full map at recorded hash checkpoints and after the final turn. A Rust
+mismatch exits nonzero with the first failing checkpoint and tile or counter.
+
 ## Next slice
 
-Wire `RustMapShadow` into the replay command behind an opt-in flag, run it across
-a representative replay corpus, then add opt-in live-game sampling. Rendering,
-networking, and authoritative simulation remain in TypeScript.
+Run replay shadow mode across a representative replay corpus, record parity and
+performance results, then add opt-in live-game sampling. Rendering, networking,
+and authoritative simulation remain in TypeScript.
