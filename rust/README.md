@@ -55,9 +55,14 @@ cargo fmt --all --check
 cargo test --workspace
 cargo check --workspace
 cargo check --package openfront-wasm --target wasm32-unknown-unknown
+node scripts/build-rust-wasm.mjs
+node scripts/smoke-rust-wasm.mjs
+npx tsc --noEmit
 ```
 
-Rust-only changes are also checked by `.github/workflows/rust.yml`.
+Rust-only changes are also checked by `.github/workflows/rust.yml`. The workflow
+builds the actual browser module and runs the raw ABI smoke test after native and
+Wasm target checks pass.
 
 ## Build the browser module
 
@@ -71,6 +76,16 @@ node scripts/build-rust-wasm.mjs
 The script writes `resources/wasm/openfront_wasm.wasm`. Vite serves that file at
 `/wasm/openfront_wasm.wasm`, which is the default URL used by
 `OpenFrontWasmModule.load()`.
+
+Run the generated binary through Node without browser or TypeScript mocks:
+
+```sh
+node scripts/smoke-rust-wasm.mjs
+```
+
+The smoke test instantiates the module, writes terrain and traversal masks into
+linear memory, exercises map mutation and query exports, checks packed state and
+counters, and validates invalid-handle error reporting.
 
 ## Next slice
 

@@ -9,6 +9,7 @@ on:
       - rust/**
       - src/client/rust/**
       - scripts/build-rust-wasm.mjs
+      - scripts/smoke-rust-wasm.mjs
       - .github/workflows/rust.yml
   push:
     paths:
@@ -18,6 +19,7 @@ on:
       - rust/**
       - src/client/rust/**
       - scripts/build-rust-wasm.mjs
+      - scripts/smoke-rust-wasm.mjs
       - .github/workflows/rust.yml
 
 permissions:
@@ -42,3 +44,7 @@ jobs:
         run: cargo check --workspace
       - name: Check WebAssembly target
         run: cargo check --package openfront-wasm --target wasm32-unknown-unknown
+      - name: Build WebAssembly module
+        run: node scripts/build-rust-wasm.mjs
+      - name: Smoke test WebAssembly ABI
+        run: node scripts/smoke-rust-wasm.mjs
