@@ -1,0 +1,36 @@
+name: Rust
+
+on:
+  pull_request:
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - rust/**
+      - .github/workflows/rust.yml
+  push:
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - rust/**
+      - .github/workflows/rust.yml
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Format, test, and check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal --component rustfmt
+      - name: Select Rust
+        run: rustup default stable
+      - name: Check formatting
+        run: cargo fmt --all --check
+      - name: Run tests
+        run: cargo test --workspace
+      - name: Check workspace
+        run: cargo check --workspace

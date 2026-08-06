@@ -3,7 +3,7 @@
 The Rust port is being introduced as deterministic, testable slices rather than
 as a second implementation of the entire game.
 
-## Current slice
+## Current slices
 
 `openfront-core::geometry` mirrors the pure grid behavior from
 `src/core/game/GameMap.ts`:
@@ -13,6 +13,13 @@ as a second implementation of the entire game.
 - cardinal neighbors in north, south, west, east order
 - Manhattan and squared Euclidean distance
 - circle enumeration in the same x-major order
+
+`openfront-core::tile` mirrors the packed map representation:
+
+- terrain land, shoreline, ocean, and magnitude bits
+- terrain classification, movement cost, and impassable handling
+- 12-bit owner IDs plus fallout and defense flags
+- packed 32-bit tile updates and exact land/fallout counter deltas
 
 The TypeScript implementation remains authoritative until parity tests and a
 binding layer allow callers to switch safely.
@@ -25,8 +32,10 @@ cargo test --workspace
 cargo check --workspace
 ```
 
+Rust-only changes are also checked by `.github/workflows/rust.yml`.
+
 ## Next slice
 
-Port packed terrain/state bit operations, then expose both geometry and tile
-state through a narrow WebAssembly boundary. Rendering and networking stay in
-TypeScript until the deterministic core is proven equivalent.
+Add contiguous terrain/state buffers with `GameMapImpl`-equivalent counters and
+neighbor queries, then expose the proven core through a narrow WebAssembly
+boundary. Rendering and networking remain in TypeScript.
