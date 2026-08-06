@@ -5,9 +5,13 @@ on:
     paths:
       - Cargo.toml
       - Cargo.lock
+      - package.json
+      - package-lock.json
       - .cargo/**
       - rust/**
       - src/client/rust/**
+      - src/core/game/GameMap.ts
+      - tests/rust/**
       - scripts/build-rust-wasm.mjs
       - scripts/smoke-rust-wasm.mjs
       - .github/workflows/rust.yml
@@ -15,9 +19,13 @@ on:
     paths:
       - Cargo.toml
       - Cargo.lock
+      - package.json
+      - package-lock.json
       - .cargo/**
       - rust/**
       - src/client/rust/**
+      - src/core/game/GameMap.ts
+      - tests/rust/**
       - scripts/build-rust-wasm.mjs
       - scripts/smoke-rust-wasm.mjs
       - .github/workflows/rust.yml
@@ -32,6 +40,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install Node dependencies
+        run: npm ci --ignore-scripts
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal --component rustfmt --target wasm32-unknown-unknown
       - name: Select Rust
@@ -48,3 +62,7 @@ jobs:
         run: node scripts/build-rust-wasm.mjs
       - name: Smoke test WebAssembly ABI
         run: node scripts/smoke-rust-wasm.mjs
+      - name: Check TypeScript
+        run: npx tsc --noEmit
+      - name: Run TypeScript and Rust parity harness
+        run: npx vitest run tests/rust/GameMapParity.test.ts

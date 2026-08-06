@@ -58,11 +58,12 @@ cargo check --package openfront-wasm --target wasm32-unknown-unknown
 node scripts/build-rust-wasm.mjs
 node scripts/smoke-rust-wasm.mjs
 npx tsc --noEmit
+npx vitest run tests/rust/GameMapParity.test.ts
 ```
 
 Rust-only changes are also checked by `.github/workflows/rust.yml`. The workflow
-builds the actual browser module and runs the raw ABI smoke test after native and
-Wasm target checks pass.
+builds the actual browser module, runs the raw ABI smoke test, checks TypeScript,
+and executes the TypeScript/Rust parity harness.
 
 ## Build the browser module
 
@@ -87,8 +88,23 @@ The smoke test instantiates the module, writes terrain and traversal masks into
 linear memory, exercises map mutation and query exports, checks packed state and
 counters, and validates invalid-handle error reporting.
 
+## TypeScript and Rust parity
+
+Build the browser module, then run:
+
+```sh
+npx vitest run tests/rust/GameMapParity.test.ts
+```
+
+The harness creates the same mixed-terrain map in `GameMapImpl` and WebAssembly,
+applies explicit edge cases followed by a seeded 64-step mutation trace, and
+checks the entire map after every operation. Each checkpoint compares packed
+tiles, land and fallout counters, cardinal and diagonal neighbor order, connected
+owner regions, and masked traversal results.
+
 ## Next slice
 
-Add a parity harness that runs the same map update and traversal traces through
-TypeScript and WebAssembly, then compare every packed tile and counter. Rendering
-and networking remain in TypeScript.
+Feed replay-derived tile-update traces into the parity harness and add an
+optional shadow-mode adapter that can compare TypeScript and WebAssembly during a
+real match without changing authoritative game behavior. Rendering and
+networking remain in TypeScript.

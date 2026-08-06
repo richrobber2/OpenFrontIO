@@ -38,6 +38,13 @@ export class OpenFrontWasmModule {
     );
   }
 
+  static async fromBytes(bytes: BufferSource): Promise<OpenFrontWasmModule> {
+    const source = await WebAssembly.instantiate(bytes, {});
+    return new OpenFrontWasmModule(
+      source.instance.exports as OpenFrontWasmExports,
+    );
+  }
+
   createMap(
     width: number,
     height: number,
