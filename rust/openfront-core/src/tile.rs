@@ -78,7 +78,11 @@ impl Terrain {
 
     #[must_use]
     pub const fn cost(self) -> u8 {
-        if self.magnitude() < 10 { 2 } else { 1 }
+        if self.magnitude() < 10 {
+            2
+        } else {
+            1
+        }
     }
 
     #[must_use]
@@ -122,8 +126,7 @@ impl Terrain {
 
     /// Stores only the low five bits, matching the TypeScript bit mask.
     pub fn set_magnitude(&mut self, value: u8) {
-        self.0 =
-            (self.0 & !TERRAIN_MAGNITUDE_MASK) | (value & TERRAIN_MAGNITUDE_MASK);
+        self.0 = (self.0 & !TERRAIN_MAGNITUDE_MASK) | (value & TERRAIN_MAGNITUDE_MASK);
     }
 }
 
