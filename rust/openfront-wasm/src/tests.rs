@@ -18,6 +18,23 @@ mod tests {
         openfront_map_create(width, height, upload)
     }
 
+    fn upload_u32s(values: &[u32]) -> u32 {
+        let upload = openfront_upload_create((values.len() * 4) as u32);
+        for (value_index, value) in values.iter().copied().enumerate() {
+            for (byte_index, byte) in value.to_le_bytes().into_iter().enumerate() {
+                assert_eq!(
+                    openfront_upload_set(
+                        upload,
+                        (value_index * 4 + byte_index) as u32,
+                        byte.into(),
+                    ),
+                    1
+                );
+            }
+        }
+        upload
+    }
+
     #[test]
     fn creates_updates_and_destroys_maps() {
         reset();
@@ -66,7 +83,28 @@ mod tests {
     }
 
     #[test]
-    fn reports_invalid_masks_without_corrupting_the_map() {
+    fn owned_depths_returns_flat_tile_depth_pairs() {
+        reset();
+        let land = TERRAIN_LAND_MASK | 1;
+        let map = create_map(4, 1, &[land; 4]);
+        for tile in 0..4 {
+            assert_eq!(openfront_map_set_owner_id(map, tile, 7), 1);
+        }
+        assert_eq!(openfront_map_set_owner_id(map, 2, 9), 1);
+
+        let starts = upload_u32s(&[0, 0]);
+        assert_eq!(openfront_map_owned_depths(map, starts, 7, 10), 1);
+        RESULT.with(|result| assert_eq!(result.borrow().as_slice(), &[0, 0, 1, 1]));
+
+        assert_eq!(openfront_map_owned_depths(map, starts, 0x1000, 10), 0);
+        assert_eq!(
+            openfront_last_error(),
+            ErrorCode::OwnerIdOutOfRange as u32
+        );
+    }
+
+    #[test]
+    fn reports_invalid_query_uploads_without_corrupting_the_map() {
         reset();
         let map = create_map(2, 1, &[0, 0]);
         let mask = openfront_upload_create(1);
@@ -75,6 +113,12 @@ mod tests {
         assert_eq!(
             openfront_last_error(),
             ErrorCode::MaskLengthMismatch as u32
+        );
+
+        assert_eq!(openfront_map_owned_depths(map, mask, 0, 1), 0);
+        assert_eq!(
+            openfront_last_error(),
+            ErrorCode::TileListLengthMismatch as u32
         );
         assert_eq!(openfront_map_tile_count(map), 2);
     }
