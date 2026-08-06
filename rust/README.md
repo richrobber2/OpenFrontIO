@@ -21,6 +21,14 @@ as a second implementation of the entire game.
 - 12-bit owner IDs plus fallout and defense flags
 - packed 32-bit tile updates and exact land/fallout counter deltas
 
+`openfront-core::map` combines those primitives into contiguous map storage:
+
+- validated terrain and state buffers
+- internally derived land and fallout counters
+- packed updates that keep counters synchronized
+- edge, border, and ocean-shore checks
+- zero-allocation cardinal-neighbor access
+
 The TypeScript implementation remains authoritative until parity tests and a
 binding layer allow callers to switch safely.
 
@@ -36,6 +44,6 @@ Rust-only changes are also checked by `.github/workflows/rust.yml`.
 
 ## Next slice
 
-Add contiguous terrain/state buffers with `GameMapImpl`-equivalent counters and
-neighbor queries, then expose the proven core through a narrow WebAssembly
-boundary. Rendering and networking remain in TypeScript.
+Port diagonal-neighbor iteration and filtered breadth-first search, then expose
+the proven core through a narrow WebAssembly boundary. Rendering and networking
+remain in TypeScript.
