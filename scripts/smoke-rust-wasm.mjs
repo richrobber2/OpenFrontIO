@@ -43,6 +43,15 @@ function upload(bytes) {
   return handle;
 }
 
+function uploadU32(values) {
+  const bytes = new Uint8Array(values.length * Uint32Array.BYTES_PER_ELEMENT);
+  const view = new DataView(bytes.buffer);
+  values.forEach((value, index) => {
+    view.setUint32(index * Uint32Array.BYTES_PER_ELEMENT, value, true);
+  });
+  return upload(bytes);
+}
+
 assert.ok(
   wasm.memory instanceof WebAssembly.Memory,
   "Wasm memory is not exported",
@@ -84,6 +93,11 @@ const maskUpload = upload(Uint8Array.of(1, 1, 0, 0));
 assert.equal(call("openfront_map_connected_mask", map, 0, maskUpload), 1);
 assert.deepEqual(resultTiles(), [0, 1]);
 assert.equal(call("openfront_upload_destroy", maskUpload), 1);
+
+const borderUpload = uploadU32([0, 0]);
+assert.equal(call("openfront_map_owned_depths", map, borderUpload, 7, 4), 1);
+assert.deepEqual(resultTiles(), [0, 0, 1, 1]);
+assert.equal(call("openfront_upload_destroy", borderUpload), 1);
 
 assert.equal(call("openfront_map_destroy", map), 1);
 assert.equal(call("openfront_map_width", map), INVALID_RESULT);
