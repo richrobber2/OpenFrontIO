@@ -21,6 +21,7 @@ pub enum ErrorCode {
     MaskLengthMismatch = 5,
     OwnerIdOutOfRange = 6,
     InvalidBufferIndex = 7,
+    TileListLengthMismatch = 8,
     InternalInvariant = 255,
 }
 
