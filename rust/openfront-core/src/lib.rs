@@ -6,6 +6,7 @@
 pub mod geometry;
 pub mod map;
 pub mod tile;
+pub mod traversal;
 
 pub use geometry::{Coord, GridError, GridGeometry, NeighborRefs, TileRef};
 pub use map::{GameMapError, GameMapStore};
@@ -14,3 +15,4 @@ pub use tile::{
     TileTransition, DEFENSE_BONUS_MASK, FALLOUT_MASK, IMPASSABLE_MAGNITUDE, OWNER_ID_MASK,
     TERRAIN_LAND_MASK, TERRAIN_MAGNITUDE_MASK, TERRAIN_OCEAN_MASK, TERRAIN_SHORELINE_MASK,
 };
+pub use traversal::NeighborRefs8;

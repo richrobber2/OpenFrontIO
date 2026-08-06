@@ -29,6 +29,12 @@ as a second implementation of the entire game.
 - edge, border, and ocean-shore checks
 - zero-allocation cardinal-neighbor access
 
+`openfront-core::traversal` ports deterministic traversal behavior:
+
+- fixed-capacity diagonal-neighbor access in TypeScript iteration order
+- filtered connected-region search
+- exact compatibility with the existing `bfs` method's LIFO insertion order
+
 The TypeScript implementation remains authoritative until parity tests and a
 binding layer allow callers to switch safely.
 
@@ -44,6 +50,5 @@ Rust-only changes are also checked by `.github/workflows/rust.yml`.
 
 ## Next slice
 
-Port diagonal-neighbor iteration and filtered breadth-first search, then expose
-the proven core through a narrow WebAssembly boundary. Rendering and networking
-remain in TypeScript.
+Expose the proven geometry, tile, map, and traversal operations through a narrow
+WebAssembly boundary. Rendering and networking remain in TypeScript.
