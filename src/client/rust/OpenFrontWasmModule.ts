@@ -38,8 +38,13 @@ export class OpenFrontWasmModule {
     );
   }
 
-  static async fromBytes(bytes: BufferSource): Promise<OpenFrontWasmModule> {
-    const source = await WebAssembly.instantiate(bytes, {});
+  static async fromBytes(
+    bytes: Uint8Array<ArrayBufferLike>,
+  ): Promise<OpenFrontWasmModule> {
+    // Node Buffers and SharedArrayBuffer-backed views use ArrayBufferLike,
+    // while WebAssembly.instantiate requires an ArrayBuffer-backed view.
+    const ownedBytes = new Uint8Array(bytes);
+    const source = await WebAssembly.instantiate(ownedBytes, {});
     return new OpenFrontWasmModule(
       source.instance.exports as OpenFrontWasmExports,
     );
