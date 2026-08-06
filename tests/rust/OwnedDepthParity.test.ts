@@ -31,13 +31,13 @@ function ownedDepthPairs(
 
   const neighbors = new Array<TileRef>(4);
   for (let index = 0; index < queue.length; index++) {
-    const tile = queue[index];
+    const tile = queue[index]!;
     const depth = depths.get(tile)!;
     if (depth >= maximumDepth) continue;
 
     const count = map.neighbors4(tile, neighbors);
     for (let neighborIndex = 0; neighborIndex < count; neighborIndex++) {
-      const neighbor = neighbors[neighborIndex];
+      const neighbor = neighbors[neighborIndex]!;
       if (depths.has(neighbor) || map.ownerID(neighbor) !== ownerID) continue;
       depths.set(neighbor, depth + 1);
       queue.push(neighbor);
@@ -71,18 +71,18 @@ describe("owned-depth TypeScript/WebAssembly parity", () => {
       }
 
       const starts = [5, 9, 5] as TileRef[];
-      expect(Array.from(rustMap.ownedDepths(Uint32Array.from(starts), 7, 2))).toEqual(
-        ownedDepthPairs(typescriptMap, starts, 7, 2),
-      );
-      expect(Array.from(rustMap.ownedDepths(Uint32Array.from(starts), 7, 0))).toEqual(
-        ownedDepthPairs(typescriptMap, starts, 7, 0),
-      );
+      expect(
+        Array.from(rustMap.ownedDepths(Uint32Array.from(starts), 7, 2)),
+      ).toEqual(ownedDepthPairs(typescriptMap, starts, 7, 2));
+      expect(
+        Array.from(rustMap.ownedDepths(Uint32Array.from(starts), 7, 0)),
+      ).toEqual(ownedDepthPairs(typescriptMap, starts, 7, 0));
 
       typescriptMap.setOwnerID(7, 9);
       rustMap.setOwnerID(7, 9);
-      expect(Array.from(rustMap.ownedDepths(Uint32Array.from([5]), 7, 8))).toEqual(
-        ownedDepthPairs(typescriptMap, [5], 7, 8),
-      );
+      expect(
+        Array.from(rustMap.ownedDepths(Uint32Array.from([5]), 7, 8)),
+      ).toEqual(ownedDepthPairs(typescriptMap, [5], 7, 8));
 
       expect(() =>
         rustMap.ownedDepths(Uint32Array.from([5]), 0x1000, 2),
