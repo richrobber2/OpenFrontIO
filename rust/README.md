@@ -34,42 +34,22 @@ as a second implementation of the entire game.
 - fixed-capacity diagonal-neighbor access in TypeScript iteration order
 - filtered connected-region search
 - exact compatibility with the existing `bfs` method's LIFO insertion order
+- multi-source FIFO owned-land depths matching the AI's
+  `interiorBuildCandidates` helper
 
 `openfront-wasm` exposes the proven core through a dependency-free WebAssembly
 ABI:
 
-- bulk terrain and traversal-mask uploads through linear memory
+- bulk terrain, traversal-mask, and tile-list uploads through linear memory
 - stable map handles and explicit error codes
 - packed tile reads and updates
 - cardinal and diagonal neighbor queries
 - owner and mask based connected-region traversal
+- flat `[tile, depth]` owned-interior query results
 - a typed browser wrapper in `src/client/rust/OpenFrontWasm.ts`
 
 The TypeScript implementation remains authoritative while this boundary is
 validated against live games and replay data.
-
-## One-command shadow game
-
-Run a deterministic local headless match with Rust shadow verification:
-
-```sh
-node scripts/test-rust-shadow.mjs
-```
-
-The command builds the WebAssembly module, starts a local headless World match,
-feeds every real packed tile-update batch into Rust, checks touched tiles and
-counters every tick, and performs periodic full-map comparisons. It requires no
-browser, server, account, archived replay, or game ID.
-
-Optional tuning arguments are forwarded to the headless runner:
-
-```sh
-node scripts/test-rust-shadow.mjs \
-  --ticks 600 \
-  --bots 64 \
-  --checkpoint-every 100 \
-  --seed rust-shadow-long
-```
 
 ## Local checks
 
@@ -82,12 +62,11 @@ node scripts/build-rust-wasm.mjs
 node scripts/smoke-rust-wasm.mjs
 npx tsc --noEmit
 npx vitest run tests/rust
-node scripts/test-rust-shadow.mjs
 ```
 
 Rust changes are also checked by `.github/workflows/rust.yml`. The workflow
 builds the actual browser module, runs the raw ABI smoke test, checks TypeScript,
-executes the deterministic parity tests, and runs a short headless shadow game.
+and executes the deterministic and shadow parity harnesses.
 
 ## Build the browser module
 
@@ -108,15 +87,15 @@ Run the generated binary through Node without browser or TypeScript mocks:
 node scripts/smoke-rust-wasm.mjs
 ```
 
-The smoke test instantiates the module, writes terrain and traversal masks into
-linear memory, exercises map mutation and query exports, checks packed state and
-counters, and validates invalid-handle error reporting.
+The smoke test instantiates the module, writes terrain, traversal masks, and tile
+lists into linear memory, exercises map mutation and query exports, checks packed
+state and counters, and validates invalid-handle error reporting.
 
 ## TypeScript and Rust parity
 
 The deterministic parity tests run the same map operations through
 `GameMapImpl` and WebAssembly and compare every tile, counter, neighbor result,
-and traversal result:
+traversal result, and owned-interior depth result:
 
 ```sh
 npx vitest run tests/rust
@@ -127,9 +106,33 @@ initializes Rust from an authoritative `GameMap`, consumes `GameImpl`'s exact
 `[tile, packedValue]` update pairs, checks touched tiles and counters after each
 batch, and can perform full-map checkpoints. It never changes TypeScript state.
 
+## One-command headless validation
+
+Run a deterministic local game without a server, browser, archive, or game ID:
+
+```sh
+node scripts/test-rust-shadow.mjs
+```
+
+The command builds WebAssembly and runs a 300-tick World game with 32 bots. Rust
+consumes every real packed map-update batch. At each full-map checkpoint the
+harness also chooses the largest current territory and compares Rust's
+multi-source owned-depth result against the existing TypeScript AI algorithm.
+
+Longer runs can override the defaults:
+
+```sh
+node scripts/test-rust-shadow.mjs \
+  --ticks 1000 \
+  --bots 64 \
+  --checkpoint-every 100 \
+  --seed rust-shadow-long
+```
+
 ## Replay shadow mode
 
-Archived replay validation remains available for deeper compatibility testing:
+For historical compatibility checks, build the WebAssembly module and pass
+`--rust-shadow` to the existing replay command:
 
 ```sh
 node scripts/build-rust-wasm.mjs
@@ -143,7 +146,7 @@ mismatch exits nonzero with the first failing checkpoint and tile or counter.
 
 ## Next slice
 
-Use the one-command headless game as the normal development gate, then run replay
-shadow mode across a representative archived corpus before adding opt-in live
-sampling. Rendering, networking, and authoritative simulation remain in
-TypeScript.
+Measure the owned-depth query against the current TypeScript implementation,
+then route AI interior-building candidate generation through the Rust result
+behind an opt-in runtime flag. Rendering, networking, and authoritative
+simulation remain in TypeScript.
