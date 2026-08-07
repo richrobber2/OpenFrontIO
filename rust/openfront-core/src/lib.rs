@@ -7,6 +7,7 @@ pub mod air_path;
 pub mod geometry;
 pub mod map;
 pub mod random;
+pub mod territory;
 pub mod tile;
 pub mod traversal;
 
@@ -14,6 +15,7 @@ pub use air_path::{air_path, AirPathError};
 pub use geometry::{Coord, GridError, GridGeometry, NeighborRefs, TileRef};
 pub use map::{GameMapError, GameMapStore};
 pub use random::PseudoRandom;
+pub use territory::OwnerTerritoryAnalysis;
 pub use tile::{
     apply_packed_update, PackedTile, Terrain, TerrainType, TileState, TileStateError,
     TileTransition, DEFENSE_BONUS_MASK, FALLOUT_MASK, IMPASSABLE_MAGNITUDE, OWNER_ID_MASK,
