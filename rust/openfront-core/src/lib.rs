@@ -13,6 +13,7 @@ pub mod geometry;
 pub mod graphics;
 pub mod hierarchical_water;
 pub mod map;
+pub mod nuke_trajectory;
 pub mod rail_path;
 pub mod random;
 pub mod structure_render;
@@ -38,6 +39,10 @@ pub use graphics::{
 };
 pub use hierarchical_water::HierarchicalWaterPathFinder;
 pub use map::{GameMapError, GameMapStore};
+pub use nuke_trajectory::{
+    build_nuke_trajectory, compute_nuke_control_points, compute_trajectory_thresholds, sam_range,
+    NukeControlPoints, NukeTrajectory, SamInfo, TrajectoryThresholds,
+};
 pub use rail_path::{rail_path, RailPathFinder};
 pub use random::PseudoRandom;
 pub use structure_render::{StructureRenderState, STRUCTURE_FLOATS_PER_INSTANCE};
