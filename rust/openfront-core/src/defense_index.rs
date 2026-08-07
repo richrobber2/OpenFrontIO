@@ -176,11 +176,11 @@ impl DefenseIndex {
         };
         let max_coordinate = f64::from(u32::MAX);
         let min_x = ((f64::from(defense.x) - range).max(0.0).floor() as u32) / self.cell_size;
-        let max_x = ((f64::from(defense.x) + range).ceil().min(max_coordinate) as u32)
-            / self.cell_size;
+        let max_x =
+            ((f64::from(defense.x) + range).ceil().min(max_coordinate) as u32) / self.cell_size;
         let min_y = ((f64::from(defense.y) - range).max(0.0).floor() as u32) / self.cell_size;
-        let max_y = ((f64::from(defense.y) + range).ceil().min(max_coordinate) as u32)
-            / self.cell_size;
+        let max_y =
+            ((f64::from(defense.y) + range).ceil().min(max_coordinate) as u32) / self.cell_size;
 
         for cell_y in min_y..=max_y {
             for cell_x in min_x..=max_x {
