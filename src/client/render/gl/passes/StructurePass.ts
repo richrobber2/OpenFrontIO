@@ -11,9 +11,13 @@
  * One instanced draw call per frame.
  *
  * Data flow:
- *   FrameSnapshot.units → filter structures → instance VBO → GPU
+ *   changed UnitUpdates → Rust persistent structure table → dirty instance
+ *   slots → VBO patch → GPU. A TypeScript full-rebuild fallback remains for
+ *   browsers where the Wasm renderer is unavailable.
  */
 
+import { assetUrl } from "src/core/AssetUrls";
+import { getUnitRenderSubsets } from "../../frame/UnitSubsetRegistry";
 import type { GhostPreviewData, RendererConfig, UnitState } from "../../types";
 import {
   UT_CITY,
@@ -23,8 +27,11 @@ import {
   UT_PORT,
   UT_SAM_LAUNCHER,
 } from "../../types";
+import type { RustStructureRenderDelta } from "../../../rust/OpenFrontWasmUnits";
 import { DynamicInstanceBuffer } from "../DynamicBuffer";
 import type { RenderSettings } from "../RenderSettings";
+import structureFragSrc from "../shaders/structure/structure.frag.glsl?raw";
+import structureVertSrc from "../shaders/structure/structure.vert.glsl?raw";
 import {
   getPaletteSize,
   MAX_TRAIL_COLORS,
@@ -37,10 +44,6 @@ import {
   sameStructureIcons,
 } from "../utils/StructureIconInvalidation";
 import { updateStructureShapeBuffers } from "../utils/StructureShapeUniforms";
-
-import { assetUrl } from "src/core/AssetUrls";
-import structureFragSrc from "../shaders/structure/structure.frag.glsl?raw";
-import structureVertSrc from "../shaders/structure/structure.vert.glsl?raw";
 
 const iconAtlasUrl = assetUrl("atlases/icon-atlas.png");
 
@@ -314,13 +317,24 @@ export class StructurePass {
   }
 
   updateStructures(units: Map<number, UnitState>): void {
-    if (sameStructureIcons(units, this.typeToAtlasCol, this.iconSnapshot)) {
+    const subsets = getUnitRenderSubsets(units);
+    const rustDelta = subsets?.structureRenderDelta;
+    if (rustDelta !== null && rustDelta !== undefined) {
+      this.applyRustStructureDelta(rustDelta);
+      // If Rust later becomes unavailable, force the fallback snapshot path to
+      // rebuild rather than accidentally treating an old TS ordering as equal.
+      this.iconSnapshot.length = 0;
       return;
     }
-    captureStructureIcons(units, this.typeToAtlasCol, this.iconSnapshot);
+
+    const renderUnits = subsets?.structures ?? units;
+    if (sameStructureIcons(renderUnits, this.typeToAtlasCol, this.iconSnapshot)) {
+      return;
+    }
+    captureStructureIcons(renderUnits, this.typeToAtlasCol, this.iconSnapshot);
     let count = 0;
 
-    for (const unit of units.values()) {
+    for (const unit of renderUnits.values()) {
       if (!unit.isActive) continue;
       const atlasIdx = this.typeToAtlasCol.get(unit.unitType);
       if (atlasIdx === undefined) continue;
@@ -353,6 +367,62 @@ export class StructurePass {
         this.instanceBuf.float32,
         0,
         count * FLOATS_PER_INSTANCE,
+      );
+    }
+  }
+
+  private applyRustStructureDelta(delta: RustStructureRenderDelta): void {
+    const dirty = delta.dirtyData;
+    if (dirty.length % FLOATS_PER_INSTANCE !== 0) {
+      throw new Error(
+        `Rust structure patch length ${dirty.length} is not divisible by ${FLOATS_PER_INSTANCE}`,
+      );
+    }
+    const dirtySlots = dirty.length / FLOATS_PER_INSTANCE;
+    if (delta.dirtyStart + dirtySlots > delta.instanceCount) {
+      throw new Error("Rust structure patch exceeds the current instance count");
+    }
+
+    const grew = this.instanceBuf.ensureCapacity(delta.instanceCount);
+    const dstFloat = delta.dirtyStart * FLOATS_PER_INSTANCE;
+
+    // Rust deliberately keeps the table map-agnostic: lane 0 is a TileRef and
+    // lane 1 is reserved. Convert only the dirty records to x/y here. This is
+    // O(changed structures), not O(all structures).
+    for (let off = 0; off < dirty.length; off += FLOATS_PER_INSTANCE) {
+      const tile = dirty[off];
+      const x = tile % this.mapW;
+      dirty[off] = x;
+      dirty[off + 1] = (tile - x) / this.mapW;
+    }
+    if (dirty.length > 0) {
+      this.instanceBuf.float32.set(dirty, dstFloat);
+    }
+
+    this.instanceCount = delta.instanceCount;
+    const gl = this.gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuf.buffer);
+
+    if (grew) {
+      // gl.bufferData() discarded the old GPU contents. The CPU mirror is
+      // complete because every previous Rust patch was copied into it, so a
+      // rare geometric growth can safely restore the entire live prefix.
+      if (this.instanceCount > 0) {
+        gl.bufferSubData(
+          gl.ARRAY_BUFFER,
+          0,
+          this.instanceBuf.float32,
+          0,
+          this.instanceCount * FLOATS_PER_INSTANCE,
+        );
+      }
+    } else if (dirty.length > 0) {
+      gl.bufferSubData(
+        gl.ARRAY_BUFFER,
+        delta.dirtyStart * BYTES_PER_INSTANCE,
+        dirty,
+        0,
+        dirty.length,
       );
     }
   }
