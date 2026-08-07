@@ -129,6 +129,7 @@ function verifyOwnedDepths(
   shadow: RustMapShadow,
   checkpoint: string,
 ): OwnedDepthCheck | null {
+  const typeScriptStart = performance.now();
   const tileCount = map.width() * map.height();
   const ownerCounts = new Map<number, number>();
   for (let tile = 0; tile < tileCount; tile++) {
@@ -161,7 +162,6 @@ function verifyOwnedDepths(
   }
   if (borders.length === 0) return null;
 
-  const typeScriptStart = performance.now();
   const expected = ownedDepthPairs(
     map,
     borders,
@@ -171,13 +171,27 @@ function verifyOwnedDepths(
   const typeScriptMs = performance.now() - typeScriptStart;
 
   const rustStart = performance.now();
-  const actual = shadow.ownedDepths(
-    Uint32Array.from(borders),
-    selectedOwner,
-    OWNED_DEPTH_LIMIT,
-  );
+  const combined = shadow.largestOwnedDepths(OWNED_DEPTH_LIMIT);
   const rustMs = performance.now() - rustStart;
+  if (combined.length < 2) {
+    throw new Error(
+      `Rust combined owned-depth result malformed at ${checkpoint}: ${combined.length} lanes`,
+    );
+  }
 
+  const rustOwner = combined[0]!;
+  const rustSources = combined[1]!;
+  const actual = combined.subarray(2);
+  if (rustOwner !== selectedOwner) {
+    throw new Error(
+      `Rust largest-owner mismatch at ${checkpoint}: ${rustOwner} !== ${selectedOwner}`,
+    );
+  }
+  if (rustSources !== borders.length) {
+    throw new Error(
+      `Rust border-count mismatch at ${checkpoint}: ${rustSources} !== ${borders.length}`,
+    );
+  }
   if (actual.length !== expected.length) {
     throw new Error(
       `Rust owned-depth mismatch at ${checkpoint}: result length ` +
@@ -342,10 +356,10 @@ async function main(): Promise<void> {
         const depthSummary =
           depthCheck === null
             ? "no owned-depth territory available"
-            : `owned-depth owner ${depthCheck.ownerID}: ` +
+            : `largest-territory depth owner ${depthCheck.ownerID}: ` +
               `${depthCheck.sources} borders, ${depthCheck.reached} tiles, ` +
-              `TS ${depthCheck.typeScriptMs.toFixed(3)}ms, ` +
-              `Rust ${depthCheck.rustMs.toFixed(3)}ms`;
+              `TS full ${depthCheck.typeScriptMs.toFixed(3)}ms, ` +
+              `Rust full ${depthCheck.rustMs.toFixed(3)}ms`;
         console.log(
           `Checkpoint ${turnNumber + 1}/${options.ticks}: ` +
             `${packedUpdates} packed updates verified; ${depthSummary}`,
@@ -374,19 +388,15 @@ async function main(): Promise<void> {
         ? typeScriptDepthMs / rustDepthMs
         : Number.POSITIVE_INFINITY;
     console.log(
-      `Owned-depth benchmark: ${ownedDepthChecks} queries, ` +
+      `Largest-territory depth benchmark: ${ownedDepthChecks} queries, ` +
         `${depthTilesReached} total reached tiles; ` +
-        `TS ${typeScriptDepthMs.toFixed(3)}ms total ` +
+        `TS full pipeline ${typeScriptDepthMs.toFixed(3)}ms total ` +
         `(${averageTypeScriptMs.toFixed(3)}ms avg), ` +
-        `Rust ${rustDepthMs.toFixed(3)}ms total ` +
+        `Rust full pipeline ${rustDepthMs.toFixed(3)}ms total ` +
         `(${averageRustMs.toFixed(3)}ms avg), ` +
         `${rustSpeedup.toFixed(2)}x Rust/TS speedup.`,
     );
 
-    // executeNextTick includes the update callback, so subtract the measured
-    // Rust shadow synchronization to estimate the authoritative TS tick cost.
-    // This is deliberately reported as an estimate rather than pretending the
-    // current Rust slice is already a complete second game simulation.
     const estimatedTypeScriptTickMs = Math.max(
       0,
       totalExecuteMs - rustShadowUpdateMs,
@@ -407,13 +417,13 @@ async function main(): Promise<void> {
     );
     console.log(
       `Rust validation cost: full parity ${rustFullParityMs.toFixed(3)}ms; ` +
-        `owned-depth comparison harness ${rustDepthComparisonMs.toFixed(3)}ms. ` +
+        `largest-territory comparison harness ${rustDepthComparisonMs.toFixed(3)}ms. ` +
         `These validation-only costs are excluded from the per-tick shadow overhead.`,
     );
     console.log(
       `Rust shadow game passed: ${options.ticks} ticks, ` +
         `${packedUpdates} packed updates across ${ticksWithUpdates} ticks, ` +
-        `${ownedDepthChecks} owned-depth queries.`,
+        `${ownedDepthChecks} largest-territory depth queries.`,
     );
   } finally {
     shadow.dispose();
