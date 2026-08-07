@@ -4,6 +4,7 @@
 //! outside this crate so the simulation can be tested without a runtime.
 
 pub mod air_path;
+pub mod connected_components;
 pub mod geometry;
 pub mod map;
 pub mod rail_path;
@@ -14,6 +15,7 @@ pub mod traversal;
 pub mod water_path;
 
 pub use air_path::{air_path, AirPathError};
+pub use connected_components::{ConnectedWaterComponents, LAND_COMPONENT_MARKER};
 pub use geometry::{Coord, GridError, GridGeometry, NeighborRefs, TileRef};
 pub use map::{GameMapError, GameMapStore};
 pub use rail_path::{rail_path, RailPathFinder};
