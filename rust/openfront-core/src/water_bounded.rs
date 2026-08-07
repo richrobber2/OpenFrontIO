@@ -223,10 +223,8 @@ impl BoundedWaterPathFinder {
                 x = x.clamp(bounds.min_x, bounds.max_x);
                 y = y.clamp(bounds.min_y, bounds.max_y);
             }
-            i64::from(y) - i64::from(bounds.min_y)
-                * i64::from(bounds_width)
-                + i64::from(x)
-                - i64::from(bounds.min_x)
+            (i64::from(y) - i64::from(bounds.min_y)) * i64::from(bounds_width)
+                + (i64::from(x) - i64::from(bounds.min_x))
         };
         let to_global = |local: u32| -> TileRef {
             let local_x = local % bounds_width;
@@ -294,11 +292,11 @@ impl BoundedWaterPathFinder {
             let current_y = current.get() / map_width;
             let current_g = self.g_score[current_index];
 
-            let mut visit = |neighbor: u32,
-                             neighbor_local: u32,
-                             nx: u32,
-                             ny: u32,
-                             this: &mut Self| {
+            let visit = |neighbor: u32,
+                         neighbor_local: u32,
+                         nx: u32,
+                         ny: u32,
+                         this: &mut Self| {
                 let local_index = neighbor_local as usize;
                 if this.closed_stamp[local_index] == stamp {
                     return;
