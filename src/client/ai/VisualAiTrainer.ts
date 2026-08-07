@@ -80,11 +80,8 @@ import {
   shouldTriggerIdleGrowth,
 } from "./DecisionTriggerPolicy";
 import {
-  evaluateForwardDefenseBait,
   hostileFrontDefensePriority,
   STRATEGIC_LAND_STRUCTURE_TYPES,
-  strategicStructureDefenseWeight,
-  strategicStructureProtectionValue,
 } from "./DefensePlacementPolicy";
 import { DIPLOMACY_MESSAGE_COOLDOWN_TICKS } from "./DiplomacyPolicy";
 import { updateRecurringIncomeEstimate } from "./EconomicIncomePolicy";
@@ -95,7 +92,6 @@ import {
   selectFactoryUpgradeCandidates,
   shouldFundFirstPressureFactory,
 } from "./EconomicSystemPolicy";
-import { memoizeTileMetric } from "./FortifyGeometryCache";
 import { isWithinRailConnectionRange } from "./InfrastructureConnectionPolicy";
 import {
   LandCapacityProjection,
@@ -5384,309 +5380,85 @@ export class VisualAiTrainer {
       ? Math.max(...threateningNations.map((nation) => nation.troops()))
       : totalIncoming;
     const pressureRatio = projectedIncoming / Math.max(1, player.troops());
-    if (!proactive && pressureRatio < 0.35) {
-      return false;
-    }
+    if (!proactive && pressureRatio < 0.35) return false;
 
-    const existingDefensePosts = player.units(UnitType.DefensePost);
-    const cities = player.units(UnitType.City);
-    const strategicStructures = player.units(...STRATEGIC_LAND_STRUCTURE_TYPES);
-    const mayEvaluateForwardBait =
-      proactive && existingDefensePosts.length >= 2;
-    if (
-      proactive &&
-      strategicStructures.length === 0 &&
-      !mayEvaluateForwardBait
-    ) {
-      return false;
-    }
     const defenseRange = this.game.config().defensePostRange();
-    const uncoveredStrategicStructures = strategicStructures.filter(
-      (structure) =>
-        !existingDefensePosts.some(
-          (post) =>
-            this.game.euclideanDistSquared(structure.tile(), post.tile()) <=
-            defenseRange ** 2,
-        ),
-    );
-    if (
-      proactive &&
-      uncoveredStrategicStructures.length === 0 &&
-      !mayEvaluateForwardBait
-    ) {
-      return false;
-    }
-    const baitOnly =
-      proactive &&
-      (strategicStructures.length === 0 ||
-        uncoveredStrategicStructures.length === 0);
-    const nonCityDefenseWeight = strategicStructures
-      .filter((structure) => structure.type() !== UnitType.City)
-      .reduce(
-        (sum, structure) =>
-          sum + strategicStructureDefenseWeight(structure.type()),
-        0,
-      );
-    // Scale the network with every capturable base asset, not only cities.
-    // Factories and silos justify another layer even in a compact city stack.
-    const desiredDefensePosts = Math.max(
-      1,
-      Math.min(
-        16,
-        cities.length +
-          Math.floor(cities.length / 2) +
-          Math.ceil(nonCityDefenseWeight / 6),
-      ),
-    );
-    // Return before any border/geometry scan once the persistent network is
-    // already large enough. Emergency pressure can still exceed this soft cap.
-    if (
-      !proactive &&
-      existingDefensePosts.length >= desiredDefensePosts &&
-      pressureRatio < 0.75
-    ) {
-      return false;
-    }
-
     const attackerIDs = new Set([
       ...incoming.map((attack) => attack.attackerID),
       ...threateningNations.map((nation) => nation.smallID()),
     ]);
-    const borders = knownBorders ?? (await player.borderTiles());
-    const borderTiles = [...borders.borderTiles];
-    const anchors = borderTiles.filter((border) =>
-      this.game
-        .neighbors(border)
-        .some(
-          (neighbor) =>
-            this.game.hasOwner(neighbor) &&
-            attackerIDs.has(this.game.owner(neighbor).smallID()),
-        ),
-    );
     const pushingThisFront = player
       .outgoingAttacks()
       .some((attack) => attackerIDs.has(attack.targetID));
     const canCreateLandBuffer =
       pushingThisFront || player.troops() >= projectedIncoming * 1.2;
-    const normalMinimumSafeDepth = minimumDefensePostDepth(
+    const minimumSafeDepth = minimumDefensePostDepth(
       canCreateLandBuffer,
       defenseRange,
     );
-    const minimumCandidateDepth = minimumDefensePostDepth(
-      canCreateLandBuffer || mayEvaluateForwardBait,
-      defenseRange,
-    );
-    const hostileDistance = memoizeTileMetric((tile: number): number =>
-      anchors.length === 0
-        ? defenseRange * 12
-        : Math.min(
-            ...anchors.map((anchor) =>
-              Math.sqrt(this.game.euclideanDistSquared(tile, anchor)),
-            ),
-          ),
-    );
-    const threatenedStructures = (
-      proactive ? uncoveredStrategicStructures : strategicStructures
-    )
-      .map((structure) => ({
-        structure,
-        hostileDistance: hostileDistance(structure.tile()),
-        weight: strategicStructureDefenseWeight(structure.type()),
-      }))
-      .sort(
-        (a, b) =>
-          a.hostileDistance / Math.max(1, a.weight) -
-          b.hostileDistance / Math.max(1, b.weight),
-      )
-      .slice(0, 24);
-    // Compare real map distances, not squared distances. Squared values made
-    // spacing dominate every other placement signal and caused posts to drift
-    // toward visually isolated but strategically useless tiles.
-    const rangeSquared = defenseRange ** 2;
-    const spacingFromExistingPost = memoizeTileMetric((tile: number): number =>
-      existingDefensePosts.length === 0
-        ? 0
-        : Math.min(
-            ...existingDefensePosts.map((post) =>
-              Math.sqrt(this.game.euclideanDistSquared(tile, post.tile())),
-            ),
-          ),
-    );
-    const coveredBorderTiles = (tile: number): number =>
-      borderTiles.filter(
-        (border) =>
-          this.game.euclideanDistSquared(tile, border) <= rangeSquared,
-      ).length;
-    const uniquelyCoveredBorderTiles = (tile: number): number =>
-      borderTiles.filter(
-        (border) =>
-          this.game.euclideanDistSquared(tile, border) <= rangeSquared &&
-          !existingDefensePosts.some(
-            (post) =>
-              this.game.euclideanDistSquared(border, post.tile()) <=
-              rangeSquared,
-          ),
-      ).length;
-    const existingFrontCoverageRatio =
-      anchors.length === 0
-        ? 0
-        : anchors.filter((anchor) =>
-            existingDefensePosts.some(
-              (post) =>
-                this.game.euclideanDistSquared(anchor, post.tile()) <=
-                rangeSquared,
-            ),
-          ).length / anchors.length;
-    const fallbackDefensePosts = (tile: number, depth: number): number =>
-      existingDefensePosts.filter((post) => {
-        const separation = Math.sqrt(
-          this.game.euclideanDistSquared(tile, post.tile()),
-        );
-        return (
-          separation >= defenseRange * 1.75 &&
-          separation <= defenseRange * 4 &&
-          hostileDistance(post.tile()) > depth + defenseRange * 0.2
-        );
-      }).length;
-    const protectedStructureValue = memoizeTileMetric((tile: number): number =>
-      threatenedStructures.reduce((sum, threat) => {
-        const distance = Math.sqrt(
-          this.game.euclideanDistSquared(tile, threat.structure.tile()),
-        );
-        return (
-          sum +
-          strategicStructureProtectionValue({
-            candidateDistance: distance,
-            hostileDistance: threat.hostileDistance,
-            defenseRadius: defenseRange,
-            type: threat.structure.type(),
-          })
-        );
-      }, 0),
-    );
-    const protectedStructureCount = memoizeTileMetric(
-      (tile: number): number =>
-        threatenedStructures.filter(
-          (threat) =>
-            this.game.euclideanDistSquared(tile, threat.structure.tile()) <=
-            rangeSquared,
-        ).length,
-    );
-    const nearestStructureDistance = (tile: number): number =>
-      strategicStructures.length === 0
-        ? defenseRange * 2
-        : Math.min(
-            ...strategicStructures.map((structure) =>
-              Math.sqrt(this.game.euclideanDistSquared(tile, structure.tile())),
-            ),
-          );
 
-    const candidateDepths = new Map<number, number>();
-    for (const candidate of this.interiorBuildCandidates(
+    const borders = knownBorders ?? (await player.borderTiles());
+    const rawCandidates = this.interiorBuildCandidates(
       player,
       borders.borderTiles,
-      Math.max(6, defenseRange - 3),
-    )
-      .filter(
-        ({ tile, depth }) =>
-          depth >= minimumCandidateDepth &&
-          (existingDefensePosts.length === 0 ||
-            spacingFromExistingPost(tile) >= defenseRange * 1.75) &&
-          (existingDefensePosts.length === 0 ||
-            anchors.some(
-              (anchor) =>
-                this.game.euclideanDistSquared(tile, anchor) <=
-                (defenseRange - 3) ** 2,
-            ) ||
-            protectedStructureValue(tile) > 0),
-      )
-      .slice(0, 128)) {
-      candidateDepths.set(candidate.tile, candidate.depth);
-    }
-    // Also sample legal owned tiles immediately around threatened structures.
-    // This permits an inner defense layer even when the base is deeper than the
-    // border-limited placement search.
-    for (const threat of threatenedStructures) {
-      const localTiles = new Set<number>([threat.structure.tile()]);
-      let frontier = [threat.structure.tile()];
-      for (let ring = 0; ring < 2; ring++) {
-        frontier = frontier.flatMap((tile) => this.game.neighbors(tile));
-        for (const tile of frontier) localTiles.add(tile);
-      }
-      for (const tile of localTiles) {
-        if (
-          !this.game.hasOwner(tile) ||
-          this.game.owner(tile) !== player ||
-          (existingDefensePosts.length > 0 &&
-            spacingFromExistingPost(tile) < defenseRange * 1.75)
-        ) {
-          continue;
-        }
-        const estimatedDepth = Math.floor(hostileDistance(tile));
-        if (
-          estimatedDepth >= normalMinimumSafeDepth &&
-          protectedStructureValue(tile) > 0
-        ) {
-          candidateDepths.set(
-            tile,
-            Math.max(candidateDepths.get(tile) ?? 0, estimatedDepth),
+      Math.max(6, defenseRange),
+    ).filter(({ depth }) => depth >= minimumSafeDepth);
+    if (rawCandidates.length === 0) return false;
+
+    // Keep placement cost bounded in large late-game territories. The
+    // candidates are already depth-sorted, so sample across the full
+    // legal set rather than repeatedly evaluating the same deep corner.
+    const sampleLimit = 192;
+    const sampledCandidates =
+      rawCandidates.length <= sampleLimit
+        ? rawCandidates
+        : Array.from(
+            { length: sampleLimit },
+            (_, index) =>
+              rawCandidates[
+                Math.floor(
+                  (index * (rawCandidates.length - 1)) /
+                    Math.max(1, sampleLimit - 1),
+                )
+              ],
           );
-        }
-      }
-    }
-    const candidates = [...candidateDepths.entries()]
-      .map(([tile, depth]) => ({ tile, depth }))
-      // Geometry scoring scans borders, structures, and existing coverage.
-      // Bound it before sorting on large late-game territories.
-      .slice(0, 192)
-      .map(({ tile, depth }) => {
-        const bait = proactive
-          ? evaluateForwardDefenseBait({
-              ownTroops: player.troops(),
-              maxTroops: this.game.config().maxTroops(player),
-              enemyTroops: projectedIncoming,
-              existingDefensePosts: existingDefensePosts.length,
-              fallbackDefensePosts: fallbackDefensePosts(tile, depth),
-              activeNationFronts: attackerIDs.size,
-              coveredBorderRatio: existingFrontCoverageRatio,
-              candidateDepth: depth,
-              defenseRadius: defenseRange,
-              attackerAttritionMultiplier: this.game
-                .config()
-                .defensePostDefenseBonus(),
-              captureResistanceMultiplier: this.game
-                .config()
-                .defensePostSpeedBonus(),
-            })
-          : undefined;
-        return {
+
+    // Defense-post effects do not stack. Reject overlapping post radii
+    // through the spatial UnitGrid, then score only the land covered by
+    // this candidate's own radius. Buildings never enter this search.
+    const minimumPostSpacing = defenseRange * 2;
+    const minimumPostSpacingSquared = minimumPostSpacing ** 2;
+    const candidates = sampledCandidates
+      .flatMap(({ tile, depth }) => {
+        const overlapsDefense = this.game
+          .nearbyUnits(
+            tile,
+            minimumPostSpacing,
+            [UnitType.DefensePost],
+            ({ unit }) => unit.owner() === player,
+          )
+          .some(({ distSquared }) => distSquared < minimumPostSpacingSquared);
+        if (overlapsDefense) return [];
+
+        const ownedCoverage = this.game.circleSearch(
           tile,
-          depth,
-          bait,
-          protectedStructures: protectedStructureCount(tile),
-          score:
-            uniquelyCoveredBorderTiles(tile) * 45 +
-            spacingFromExistingPost(tile) * 2 +
-            coveredBorderTiles(tile) * 5 +
-            protectedStructureValue(tile) * 80 +
-            protectedStructureCount(tile) * 20 -
-            nearestStructureDistance(tile) * 0.5 +
-            (existingDefensePosts.length === 0 ? depth * 35 : 0) +
-            (bait?.bait ? bait.score * 25 : 0),
-        };
+          defenseRange,
+          (coveredTile) =>
+            this.game.isLand(coveredTile) &&
+            this.game.hasOwner(coveredTile) &&
+            this.game.owner(coveredTile) === player,
+        ).size;
+        if (ownedCoverage === 0) return [];
+
+        return [{ tile, depth, ownedCoverage }];
       })
-      .filter(
-        ({ depth, bait }) =>
-          (depth >= normalMinimumSafeDepth || bait?.bait === true) &&
-          (!baitOnly || bait?.bait === true),
-      )
-      .sort((a, b) => b.score - a.score || b.depth - a.depth)
+      .sort((a, b) => b.ownedCoverage - a.ownedCoverage || b.depth - a.depth)
       .slice(0, 6);
+
     const plans = await Promise.all(
-      candidates.map(async ({ tile, depth, bait, protectedStructures }) => ({
+      candidates.map(async ({ tile, depth, ownedCoverage }) => ({
         depth,
-        bait,
-        protectedStructures,
+        ownedCoverage,
         plan: (await player.buildables(tile, [UnitType.DefensePost]))[0],
       })),
     );
@@ -5697,32 +5469,27 @@ export class VisualAiTrainer {
         player.gold() >= plan.cost,
     );
     if (
-      defense?.plan.canBuild !== false &&
-      defense?.plan.canBuild !== undefined
+      defense?.plan.canBuild === false ||
+      defense?.plan.canBuild === undefined
     ) {
-      this.eventBus.emit(
-        new BuildUnitIntentEvent(UnitType.DefensePost, defense.plan.canBuild),
-      );
-      this.nextEconomicCostRefreshTick = 0;
-      this.nextDecisionTick = this.game.ticks() + 1;
-      this.follow(player, 7);
-      this.setDecision(
-        defense.bait?.bait
-          ? "Establish a fortified border bait"
-          : proactive
-            ? "Pre-fortify threatened infrastructure"
-            : canCreateLandBuffer
-              ? "Fortify behind an advancing front"
-              : "Fortify safely behind the border",
-        defense.bait?.bait
-          ? `The post is placed ${defense.depth} tiles from the hostile border with a verified fallback layer and ${Math.round(existingFrontCoverageRatio * 100)}% of this front already covered. The engine's measured ${this.game.config().defensePostDefenseBonus()}× attacker attrition and ${this.game.config().defensePostSpeedBonus()}× capture resistance produce ${defense.bait.projectedAttritionLeverage.toFixed(1)}× force-adjusted leverage, making the exposed land costly bait without sacrificing the home reserve.`
-          : proactive
-            ? `${renderTroops(projectedIncoming)} is the maximum visible home force across ${threateningNations.length} bordering nation${threateningNations.length === 1 ? "" : "s"}. The post is ready before combat, placed ${defense.depth} tiles inside and covering ${defense.protectedStructures} previously exposed strategic building${defense.protectedStructures === 1 ? "" : "s"}.`
-            : `${renderTroops(totalIncoming)} crossed this front. The post is placed ${defense.depth} tiles inside and covers ${defense.protectedStructures} capturable strategic building${defense.protectedStructures === 1 ? "" : "s"} while preserving broad owned-border coverage; ${canCreateLandBuffer ? "the planned counterattack can add a larger land buffer around it" : "the setback makes it harder to capture and destroy immediately"}.`,
-      );
-      return true;
+      return false;
     }
-    return false;
+
+    this.eventBus.emit(
+      new BuildUnitIntentEvent(UnitType.DefensePost, defense.plan.canBuild),
+    );
+    this.nextEconomicCostRefreshTick = 0;
+    this.nextDecisionTick = this.game.ticks() + 1;
+    this.follow(player, 7);
+    this.setDecision(
+      proactive
+        ? "Pre-fortify owned land"
+        : canCreateLandBuffer
+          ? "Fortify behind an advancing front"
+          : "Fortify safely behind the border",
+      `${proactive ? `${renderTroops(projectedIncoming)} is the maximum visible home force across ${threateningNations.length} bordering nation${threateningNations.length === 1 ? "" : "s"}. ` : `${renderTroops(totalIncoming)} crossed this front. `}The post is placed ${defense.depth} tiles inside and its own radius covers ${defense.ownedCoverage.toLocaleString()} owned tiles without overlapping another defense post.`,
+    );
+    return true;
   }
 
   private ensureAllyCooperationRecord(
