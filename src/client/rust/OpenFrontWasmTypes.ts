@@ -44,6 +44,7 @@ export interface OpenFrontWasmExports extends WebAssembly.Exports {
   openfront_map_largest_owned_depths(handle: number, maximumDepth: number): number;
   openfront_map_air_path(handle: number, from: number, to: number, seed: number): number;
   openfront_map_water_components(handle: number): number;
+  openfront_map_abstract_graph(handle: number, clusterSize: number): number;
   openfront_map_rail_path(handle: number, upload: number, goal: number): number;
   openfront_map_rail_path_small(handle: number, count: number, start0: number, start1: number, start2: number, start3: number, goal: number): number;
   openfront_map_water_path(handle: number, upload: number, goal: number): number;
