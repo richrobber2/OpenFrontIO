@@ -277,13 +277,14 @@ mod tests {
     }
 
     #[test]
-    fn shoreline_can_enter_water_but_open_water_cannot_continue() {
-        let mut terrain = vec![TERRAIN_LAND_MASK | 1; 5];
+    fn shoreline_can_enter_one_open_water_tile_but_not_continue() {
+        let mut terrain = vec![TERRAIN_LAND_MASK | 1; 6];
         terrain[1] = TERRAIN_LAND_MASK | TERRAIN_SHORELINE_MASK | 1;
-        terrain[2] = TERRAIN_SHORELINE_MASK;
+        terrain[2] = 0;
         terrain[3] = 0;
-        let map = GameMapStore::new(5, 1, terrain).unwrap();
-        assert!(rail_path(&map, &[tile(&map, 0, 0)], tile(&map, 4, 0))
+        terrain[4] = TERRAIN_SHORELINE_MASK;
+        let map = GameMapStore::new(6, 1, terrain).unwrap();
+        assert!(rail_path(&map, &[tile(&map, 0, 0)], tile(&map, 5, 0))
             .unwrap()
             .is_none());
     }
