@@ -49,6 +49,8 @@ export interface OpenFrontWasmExports extends WebAssembly.Exports {
   openfront_map_rail_path_small(handle: number, count: number, start0: number, start1: number, start2: number, start3: number, goal: number): number;
   openfront_map_water_path(handle: number, upload: number, goal: number): number;
   openfront_map_water_path_small(handle: number, count: number, start0: number, start1: number, start2: number, start3: number, goal: number): number;
+  openfront_map_water_path_hierarchical(handle: number, upload: number, goal: number): number;
+  openfront_map_water_path_hierarchical_small(handle: number, count: number, start0: number, start1: number, start2: number, start3: number, goal: number): number;
   openfront_map_water_path_bounded(handle: number, upload: number, goal: number, minX: number, maxX: number, minY: number, maxY: number): number;
   openfront_result_ptr(): number;
   openfront_result_len(): number;
