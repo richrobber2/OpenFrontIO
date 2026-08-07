@@ -29,17 +29,17 @@ impl DefensePathPoint {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Defense {
     pub id: u32,
     pub x: u32,
     pub y: u32,
-    pub range: u32,
+    pub range: f64,
     pub available_interceptions: u32,
 }
 
 impl Defense {
-    pub const fn new(id: u32, x: u32, y: u32, range: u32, available_interceptions: u32) -> Self {
+    pub const fn new(id: u32, x: u32, y: u32, range: f64, available_interceptions: u32) -> Self {
         Self {
             id,
             x,
@@ -130,7 +130,7 @@ impl DefenseIndex {
         path: impl IntoIterator<Item = DefensePathPoint>,
         source: DefensePoint,
         destination: DefensePoint,
-        targetable_range: u32,
+        targetable_range: f64,
     ) -> DefensePathAssessment {
         let targetable_range_squared = square(targetable_range);
         let mut intercepting = HashMap::<u32, u32>::new();
@@ -169,10 +169,18 @@ impl DefenseIndex {
     }
 
     fn index_defense(&mut self, index: usize, defense: Defense) {
-        let min_x = defense.x.saturating_sub(defense.range) / self.cell_size;
-        let max_x = defense.x.saturating_add(defense.range) / self.cell_size;
-        let min_y = defense.y.saturating_sub(defense.range) / self.cell_size;
-        let max_y = defense.y.saturating_add(defense.range) / self.cell_size;
+        let range = if defense.range.is_finite() {
+            defense.range.max(0.0)
+        } else {
+            0.0
+        };
+        let max_coordinate = f64::from(u32::MAX);
+        let min_x = ((f64::from(defense.x) - range).max(0.0).floor() as u32) / self.cell_size;
+        let max_x = ((f64::from(defense.x) + range).ceil().min(max_coordinate) as u32)
+            / self.cell_size;
+        let min_y = ((f64::from(defense.y) - range).max(0.0).floor() as u32) / self.cell_size;
+        let max_y = ((f64::from(defense.y) + range).ceil().min(max_coordinate) as u32)
+            / self.cell_size;
 
         for cell_y in min_y..=max_y {
             for cell_x in min_x..=max_x {
@@ -196,15 +204,14 @@ fn assessment(blocked: bool, intercepting: &HashMap<u32, u32>) -> DefensePathAss
     }
 }
 
-fn square(value: u32) -> u64 {
-    let value = u64::from(value);
-    value.saturating_mul(value)
+fn square(value: f64) -> f64 {
+    value * value
 }
 
-fn distance_squared(a: DefensePoint, b: DefensePoint) -> u64 {
-    let dx = u64::from(a.x.abs_diff(b.x));
-    let dy = u64::from(a.y.abs_diff(b.y));
-    dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy))
+fn distance_squared(a: DefensePoint, b: DefensePoint) -> f64 {
+    let dx = f64::from(a.x) - f64::from(b.x);
+    let dy = f64::from(a.y) - f64::from(b.y);
+    dx * dx + dy * dy
 }
 
 #[cfg(test)]
@@ -221,16 +228,16 @@ mod tests {
     fn indexes_normal_and_upgraded_interception_capacity() {
         let mut index = DefenseIndex::new(4).unwrap();
         index.replace([
-            Defense::new(10, 4, 1, 2, 1),
-            Defense::new(20, 16, 0, 2, 3),
-            Defense::new(30, 10, 0, 2, 9),
+            Defense::new(10, 4, 1, 2.0, 1),
+            Defense::new(20, 16, 0, 2.0, 3),
+            Defense::new(30, 10, 0, 2.0, 9),
         ]);
 
         let result = index.assess_path(
             line_path(0, 20, 0),
             DefensePoint::new(0, 0),
             DefensePoint::new(20, 0),
-            8,
+            8.0,
         );
 
         assert_eq!(
@@ -244,15 +251,29 @@ mod tests {
     }
 
     #[test]
+    fn fractional_range_is_not_truncated() {
+        let mut index = DefenseIndex::new(4).unwrap();
+        index.replace([Defense::new(1, 10, 0, 2.5, 2)]);
+
+        let result = index.assess_path(
+            [DefensePathPoint::new(12, 1, false)],
+            DefensePoint::new(0, 0),
+            DefensePoint::new(20, 0),
+            20.0,
+        );
+        assert_eq!(result.interception_capacity, 2);
+    }
+
+    #[test]
     fn circle_boundary_counts_but_targetable_boundary_does_not() {
         let mut index = DefenseIndex::new(8).unwrap();
-        index.replace([Defense::new(1, 4, 3, 3, 2)]);
+        index.replace([Defense::new(1, 4, 3, 3.0, 2)]);
 
         let covered = index.assess_path(
             [DefensePathPoint::new(4, 0, false)],
             DefensePoint::new(0, 0),
             DefensePoint::new(100, 0),
-            5,
+            5.0,
         );
         assert_eq!(covered.interception_capacity, 2);
 
@@ -260,7 +281,7 @@ mod tests {
             [DefensePathPoint::new(5, 0, false)],
             DefensePoint::new(0, 0),
             DefensePoint::new(100, 0),
-            5,
+            5.0,
         );
         assert_eq!(not_targetable.interception_capacity, 0);
     }
@@ -268,7 +289,7 @@ mod tests {
     #[test]
     fn blocked_path_returns_interceptions_seen_before_block() {
         let mut index = DefenseIndex::new(4).unwrap();
-        index.replace([Defense::new(7, 1, 0, 1, 3)]);
+        index.replace([Defense::new(7, 1, 0, 1.0, 3)]);
 
         let result = index.assess_path(
             [
@@ -279,7 +300,7 @@ mod tests {
             ],
             DefensePoint::new(0, 0),
             DefensePoint::new(3, 0),
-            8,
+            8.0,
         );
 
         assert!(result.blocked);
@@ -290,15 +311,15 @@ mod tests {
     #[test]
     fn replacing_index_removes_stale_coverage() {
         let mut index = DefenseIndex::new(4).unwrap();
-        index.replace([Defense::new(1, 2, 0, 2, 1)]);
+        index.replace([Defense::new(1, 2, 0, 2.0, 1)]);
         assert_eq!(index.len(), 1);
 
-        index.replace([Defense::new(2, 100, 100, 1, 1)]);
+        index.replace([Defense::new(2, 100, 100, 1.0, 1)]);
         let result = index.assess_path(
             line_path(0, 5, 0),
             DefensePoint::new(0, 0),
             DefensePoint::new(5, 0),
-            8,
+            8.0,
         );
         assert_eq!(result.interception_capacity, 0);
     }
@@ -306,13 +327,16 @@ mod tests {
     #[test]
     fn duplicate_ids_use_last_record_once() {
         let mut index = DefenseIndex::new(4).unwrap();
-        index.replace([Defense::new(5, 50, 50, 1, 1), Defense::new(5, 1, 0, 2, 4)]);
+        index.replace([
+            Defense::new(5, 50, 50, 1.0, 1),
+            Defense::new(5, 1, 0, 2.0, 4),
+        ]);
 
         let result = index.assess_path(
             [DefensePathPoint::new(1, 0, false)],
             DefensePoint::new(0, 0),
             DefensePoint::new(10, 0),
-            8,
+            8.0,
         );
         assert_eq!(index.len(), 1);
         assert_eq!(result.intercepting_defenses, 1);
