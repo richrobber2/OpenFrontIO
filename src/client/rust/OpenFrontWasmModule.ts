@@ -148,6 +148,15 @@ export class OpenFrontWasmModule {
     finally { this.wasm.openfront_upload_destroy(upload); }
   }
 
+  hierarchicalWaterPath(handle: number, starts: Uint32Array, goal: number): Uint32Array {
+    if (starts.length <= 4) {
+      return this.runSmallPathQuery(starts, (count, start0, start1, start2, start3) => this.wasm.openfront_map_water_path_hierarchical_small(handle, count, start0, start1, start2, start3, goal), "query hierarchical water path");
+    }
+    const upload = this.uploadU32(starts);
+    try { return this.runTileQuery(() => this.wasm.openfront_map_water_path_hierarchical(handle, upload, goal), "query hierarchical water path"); }
+    finally { this.wasm.openfront_upload_destroy(upload); }
+  }
+
   boundedWaterPath(handle: number, starts: Uint32Array, goal: number, bounds: RustSearchBounds): Uint32Array {
     const upload = this.uploadU32(starts);
     try {
