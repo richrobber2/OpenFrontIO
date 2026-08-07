@@ -92,6 +92,18 @@ export class OpenFrontRustMap {
     );
   }
 
+  ownerTerritoryAnalysis(
+    ownerID: number,
+    maximumDepth: number,
+  ): Uint32Array {
+    this.assertLive();
+    return this.module.ownerTerritoryAnalysis(
+      this.handle,
+      ownerID,
+      maximumDepth,
+    );
+  }
+
   largestOwnedDepths(maximumDepth: number): Uint32Array {
     this.assertLive();
     return this.module.largestOwnedDepths(this.handle, maximumDepth);
