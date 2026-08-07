@@ -36,7 +36,7 @@ export interface OpenFrontWasmExports extends WebAssembly.Exports {
     mountain: number,
   ): number;
   openfront_units_classify(upload: number, count: number): number;
-  openfront_structure_renderer_create(mapWidth: number): number;
+  openfront_structure_renderer_create(): number;
   openfront_structure_renderer_destroy(handle: number): number;
   openfront_structure_renderer_update(
     handle: number,
