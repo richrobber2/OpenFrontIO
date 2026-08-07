@@ -278,6 +278,10 @@ async function main(): Promise<void> {
   let typeScriptDepthMs = 0;
   let rustDepthMs = 0;
   let depthTilesReached = 0;
+  let totalExecuteMs = 0;
+  let rustShadowUpdateMs = 0;
+  let rustFullParityMs = 0;
+  let rustDepthComparisonMs = 0;
 
   const runner = new GameRunner(
     game,
@@ -289,11 +293,13 @@ async function main(): Promise<void> {
       }
 
       try {
+        const shadowStart = performance.now();
         shadow.applyPackedTileUpdates(
           game.map(),
           update.packedTileUpdates,
           `tick ${update.tick}`,
         );
+        rustShadowUpdateMs += performance.now() - shadowStart;
         const updateCount = update.packedTileUpdates.length / 2;
         packedUpdates += updateCount;
         if (updateCount > 0) ticksWithUpdates++;
@@ -307,7 +313,10 @@ async function main(): Promise<void> {
   try {
     for (let turnNumber = 0; turnNumber < options.ticks; turnNumber++) {
       runner.addTurn({ turnNumber, intents: [] });
-      if (!runner.executeNextTick()) {
+      const executeStart = performance.now();
+      const executed = runner.executeNextTick();
+      totalExecuteMs += performance.now() - executeStart;
+      if (!executed) {
         throw new Error(
           `game failed at turn ${turnNumber}: ${fatalError ?? "unknown error"}`,
         );
@@ -317,8 +326,13 @@ async function main(): Promise<void> {
 
       if ((turnNumber + 1) % options.checkpointEvery === 0) {
         const checkpoint = `full checkpoint ${turnNumber + 1}`;
+        const parityStart = performance.now();
         shadow.assertFullParity(game.map(), checkpoint);
+        rustFullParityMs += performance.now() - parityStart;
+
+        const depthComparisonStart = performance.now();
         const depthCheck = verifyOwnedDepths(game.map(), shadow, checkpoint);
+        rustDepthComparisonMs += performance.now() - depthComparisonStart;
         if (depthCheck !== null) {
           ownedDepthChecks++;
           typeScriptDepthMs += depthCheck.typeScriptMs;
@@ -339,7 +353,9 @@ async function main(): Promise<void> {
       }
     }
 
+    const finalParityStart = performance.now();
     shadow.assertFullParity(game.map(), "final headless game state");
+    rustFullParityMs += performance.now() - finalParityStart;
     if (packedUpdates === 0) {
       throw new Error(
         "headless game produced no packed tile updates; shadow test was not meaningful",
@@ -354,7 +370,9 @@ async function main(): Promise<void> {
     const averageTypeScriptMs = typeScriptDepthMs / ownedDepthChecks;
     const averageRustMs = rustDepthMs / ownedDepthChecks;
     const rustSpeedup =
-      rustDepthMs > 0 ? typeScriptDepthMs / rustDepthMs : Number.POSITIVE_INFINITY;
+      rustDepthMs > 0
+        ? typeScriptDepthMs / rustDepthMs
+        : Number.POSITIVE_INFINITY;
     console.log(
       `Owned-depth benchmark: ${ownedDepthChecks} queries, ` +
         `${depthTilesReached} total reached tiles; ` +
@@ -362,7 +380,35 @@ async function main(): Promise<void> {
         `(${averageTypeScriptMs.toFixed(3)}ms avg), ` +
         `Rust ${rustDepthMs.toFixed(3)}ms total ` +
         `(${averageRustMs.toFixed(3)}ms avg), ` +
-        `${rustSpeedup.toFixed(2)}x Rust/TS speed ratio.`,
+        `${rustSpeedup.toFixed(2)}x Rust/TS speedup.`,
+    );
+
+    // executeNextTick includes the update callback, so subtract the measured
+    // Rust shadow synchronization to estimate the authoritative TS tick cost.
+    // This is deliberately reported as an estimate rather than pretending the
+    // current Rust slice is already a complete second game simulation.
+    const estimatedTypeScriptTickMs = Math.max(
+      0,
+      totalExecuteMs - rustShadowUpdateMs,
+    );
+    const shadowOverheadPercent =
+      estimatedTypeScriptTickMs > 0
+        ? (rustShadowUpdateMs / estimatedTypeScriptTickMs) * 100
+        : 0;
+    const averageTypeScriptTickMs =
+      estimatedTypeScriptTickMs / options.ticks;
+    const averageRustShadowMs = rustShadowUpdateMs / options.ticks;
+    console.log(
+      `Runtime performance: TS simulation ~${estimatedTypeScriptTickMs.toFixed(3)}ms ` +
+        `total (${averageTypeScriptTickMs.toFixed(3)}ms/tick); ` +
+        `Rust shadow sync ${rustShadowUpdateMs.toFixed(3)}ms total ` +
+        `(${averageRustShadowMs.toFixed(3)}ms/tick, ` +
+        `${shadowOverheadPercent.toFixed(2)}% of TS simulation cost).`,
+    );
+    console.log(
+      `Rust validation cost: full parity ${rustFullParityMs.toFixed(3)}ms; ` +
+        `owned-depth comparison harness ${rustDepthComparisonMs.toFixed(3)}ms. ` +
+        `These validation-only costs are excluded from the per-tick shadow overhead.`,
     );
     console.log(
       `Rust shadow game passed: ${options.ticks} ticks, ` +
