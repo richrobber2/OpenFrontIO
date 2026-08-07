@@ -6,14 +6,6 @@ fn unpack_rgb(packed: u32) -> [u8; 3] {
     ]
 }
 
-fn read_upload_bytes(handle: u32) -> Option<Vec<u8>> {
-    UPLOADS.with(|uploads| {
-        let uploads = uploads.borrow();
-        let index = slot_index(handle)?;
-        Some(uploads.get(index)?.as_ref()?.clone())
-    })
-}
-
 #[unsafe(no_mangle)]
 pub extern "C" fn openfront_graphics_terrain_rgba(
     terrain_upload: u32,
@@ -26,11 +18,6 @@ pub extern "C" fn openfront_graphics_terrain_rgba(
     mountain: u32,
 ) -> u32 {
     begin_call();
-    let Some(terrain) = read_upload_bytes(terrain_upload) else {
-        fail(ErrorCode::InvalidHandle);
-        return 0;
-    };
-
     let palette = TerrainPalette {
         ocean: unpack_rgb(ocean),
         sand: unpack_rgb(sand),
@@ -39,8 +26,19 @@ pub extern "C" fn openfront_graphics_terrain_rgba(
         mountain: unpack_rgb(mountain),
     };
 
-    match build_terrain_rgba(&terrain, width, height, palette) {
-        Ok(rgba) => UPLOADS.with(|uploads| insert_slot(&mut uploads.borrow_mut(), rgba)),
+    let result = UPLOADS.with(|uploads| {
+        let mut uploads = uploads.borrow_mut();
+        let index = slot_index(terrain_upload)?;
+        let buffer = uploads.get_mut(index)?.as_mut()?;
+        Some(build_terrain_rgba_in_place(buffer, width, height, palette))
+    });
+
+    let Some(result) = result else {
+        fail(ErrorCode::InvalidHandle);
+        return 0;
+    };
+    match result {
+        Ok(()) => terrain_upload,
         Err(TerrainGraphicsError::SizeOverflow) => {
             fail(ErrorCode::InvalidDimensions);
             0
@@ -57,7 +55,7 @@ mod graphics_tests {
     use super::*;
 
     #[test]
-    fn terrain_rgba_export_returns_an_upload_buffer() {
+    fn terrain_rgba_export_expands_the_upload_buffer_in_place() {
         UPLOADS.with(|uploads| uploads.borrow_mut().clear());
         begin_call();
 
@@ -75,18 +73,18 @@ mod graphics_tests {
             0xdccb9e,
             0xe6e6e6,
         );
-        assert_ne!(output, 0);
-        assert_eq!(openfront_upload_len(output), 8);
+        assert_eq!(output, input);
+        assert_eq!(openfront_upload_len(input), 8);
 
         UPLOADS.with(|uploads| {
             let uploads = uploads.borrow();
-            let bytes = uploads[slot_index(output).unwrap()].as_ref().unwrap();
+            let bytes = uploads[slot_index(input).unwrap()].as_ref().unwrap();
             assert_eq!(bytes.as_slice(), &[71, 133, 181, 255, 190, 210, 138, 255]);
         });
     }
 
     #[test]
-    fn terrain_rgba_export_rejects_wrong_dimensions() {
+    fn terrain_rgba_export_rejects_wrong_dimensions_without_destroying_input() {
         UPLOADS.with(|uploads| uploads.borrow_mut().clear());
         begin_call();
 
@@ -105,5 +103,6 @@ mod graphics_tests {
             0
         );
         assert_eq!(openfront_last_error(), ErrorCode::TerrainLengthMismatch as u32);
+        assert_eq!(openfront_upload_len(input), 1);
     }
 }
