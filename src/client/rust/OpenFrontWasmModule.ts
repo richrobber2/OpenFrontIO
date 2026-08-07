@@ -13,6 +13,8 @@ const HOST_IS_LITTLE_ENDIAN = (() => {
   return new Uint8Array(word.buffer)[0] === 0x04;
 })();
 
+const DEFENSE_RECORD_BYTES = 24;
+
 export interface RustSearchBounds {
   minX: number;
   maxX: number;
@@ -96,18 +98,23 @@ export class OpenFrontWasmModule {
     handle: number,
     defenses: readonly RustDefenseRecord[],
   ): void {
-    const records = new Uint32Array(defenses.length * 5);
+    const bytes = new Uint8Array(defenses.length * DEFENSE_RECORD_BYTES);
+    const records = new DataView(bytes.buffer);
     for (let index = 0; index < defenses.length; index++) {
       const defense = defenses[index]!;
-      const offset = index * 5;
-      records[offset] = defense.id >>> 0;
-      records[offset + 1] = defense.x >>> 0;
-      records[offset + 2] = defense.y >>> 0;
-      records[offset + 3] = defense.range >>> 0;
-      records[offset + 4] = defense.availableInterceptions >>> 0;
+      const offset = index * DEFENSE_RECORD_BYTES;
+      records.setUint32(offset, defense.id >>> 0, true);
+      records.setUint32(offset + 4, defense.x >>> 0, true);
+      records.setUint32(offset + 8, defense.y >>> 0, true);
+      records.setFloat64(offset + 12, defense.range, true);
+      records.setUint32(
+        offset + 20,
+        defense.availableInterceptions >>> 0,
+        true,
+      );
     }
 
-    const upload = this.uploadU32(records);
+    const upload = this.upload(bytes);
     try {
       if (
         this.wasm.openfront_defense_index_replace(
@@ -151,7 +158,7 @@ export class OpenFrontWasmModule {
             source.y >>> 0,
             destination.x >>> 0,
             destination.y >>> 0,
-            targetableRange >>> 0,
+            targetableRange,
           ),
         "assess defense path",
       );
