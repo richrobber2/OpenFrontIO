@@ -82,6 +82,13 @@ export class RustMapShadow {
     return this.rustMap.ownedDepths(starts, ownerID, maximumDepth);
   }
 
+  ownerTerritoryAnalysis(
+    ownerID: number,
+    maximumDepth: number,
+  ): Uint32Array {
+    return this.rustMap.ownerTerritoryAnalysis(ownerID, maximumDepth);
+  }
+
   largestOwnedDepths(maximumDepth: number): Uint32Array {
     return this.rustMap.largestOwnedDepths(maximumDepth);
   }
