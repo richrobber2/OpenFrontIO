@@ -6,6 +6,7 @@
 pub mod air_path;
 pub mod geometry;
 pub mod map;
+pub mod rail_path;
 pub mod random;
 pub mod territory;
 pub mod tile;
@@ -14,6 +15,7 @@ pub mod traversal;
 pub use air_path::{air_path, AirPathError};
 pub use geometry::{Coord, GridError, GridGeometry, NeighborRefs, TileRef};
 pub use map::{GameMapError, GameMapStore};
+pub use rail_path::rail_path;
 pub use random::PseudoRandom;
 pub use territory::OwnerTerritoryAnalysis;
 pub use tile::{
