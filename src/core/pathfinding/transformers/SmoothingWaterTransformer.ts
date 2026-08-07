@@ -12,6 +12,12 @@ const LOS_MIN_MAGNITUDE_PASS1 = 2;
 const LOS_MIN_MAGNITUDE_PASS2 = 3;
 const MAGNITUDE_MASK = 0x1f;
 
+export type BoundedWaterRefiner = (
+  from: TileRef,
+  to: TileRef,
+  bounds: SearchBounds,
+) => TileRef[] | undefined;
+
 /**
  * Water path smoother transformer:
  * 1. Binary search LOS smoothing (avoids shallow water)
@@ -28,6 +34,7 @@ export class SmoothingWaterTransformer implements PathFinder<TileRef> {
     private inner: PathFinder<TileRef>,
     private map: GameMap,
     isTraversable: (tile: TileRef) => boolean = (t) => map.isWater(t),
+    private readonly boundedRefiner?: BoundedWaterRefiner,
   ) {
     this.mapWidth = map.width();
     this.localAStar = new AStarWaterBounded(map, LOCAL_ASTAR_MAX_AREA);
@@ -190,6 +197,11 @@ export class SmoothingWaterTransformer implements PathFinder<TileRef> {
       minY: Math.max(0, Math.min(y0, y1) - padding),
       maxY: Math.min(this.map.height() - 1, Math.max(y0, y1) + padding),
     };
+
+    const rustPath = this.boundedRefiner?.(from, to, bounds);
+    if (rustPath !== undefined) {
+      return rustPath.length === 0 ? null : rustPath;
+    }
 
     return this.localAStar.searchBounded(from, to, bounds);
   }
