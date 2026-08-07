@@ -24,6 +24,15 @@ pub extern "C" fn openfront_map_create(width: u32, height: u32, upload_handle: u
                 }
                 finders[index] = Some(WaterPathFinder::new(tile_count));
             });
+            HIERARCHICAL_WATER_FINDERS.with(|finders| {
+                let mut finders = finders.borrow_mut();
+                if finders.len() <= index {
+                    finders.resize_with(index + 1, || None);
+                }
+                // Built lazily on the first HPA query; graph construction is
+                // intentionally not paid by maps that never request water HPA.
+                finders[index] = None;
+            });
             BOUNDED_WATER_FINDERS.with(|finders| {
                 let mut finders = finders.borrow_mut();
                 if finders.len() <= index {
@@ -58,6 +67,14 @@ pub extern "C" fn openfront_map_destroy(handle: u32) -> u32 {
         WATER_FINDERS.with(|finders| {
             let mut finders = finders.borrow_mut();
             let _ = remove_slot(finders.as_mut_slice(), handle);
+        });
+        HIERARCHICAL_WATER_FINDERS.with(|finders| {
+            let mut finders = finders.borrow_mut();
+            if let Some(index) = slot_index(handle) {
+                if let Some(slot) = finders.get_mut(index) {
+                    *slot = None;
+                }
+            }
         });
         BOUNDED_WATER_FINDERS.with(|finders| {
             let mut finders = finders.borrow_mut();
