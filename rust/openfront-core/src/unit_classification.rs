@@ -74,10 +74,7 @@ pub fn classify_unit_kind(kind_index: u32, is_active: bool) -> u32 {
 
     match kind {
         UnitKind::Transport => {
-            UNIT_CLASS_MOBILE
-                | UNIT_CLASS_TRAIL
-                | UNIT_CLASS_ATTACK_RING
-                | UNIT_CLASS_LIGHT
+            UNIT_CLASS_MOBILE | UNIT_CLASS_TRAIL | UNIT_CLASS_ATTACK_RING | UNIT_CLASS_LIGHT
         }
         UnitKind::TradeShip | UnitKind::Warship | UnitKind::Train => {
             UNIT_CLASS_MOBILE | UNIT_CLASS_LIGHT
