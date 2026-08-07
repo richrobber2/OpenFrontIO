@@ -57,10 +57,10 @@ impl AbstractGraphBuilder {
                     let edge_x = (base_x + self.cluster_size - 1).min(width - 1);
                     let max_y = (base_y + self.cluster_size).min(height);
                     let mut span_start: Option<u32> = None;
-                    let mut finish_span = |span: &mut Option<u32>,
-                                           end_y: u32,
-                                           cluster_nodes: &mut Vec<Vec<u32>>,
-                                           get_or_create: &mut dyn FnMut(u32, u32) -> AbstractNode| {
+                    let finish_span = |span: &mut Option<u32>,
+                                       end_y: u32,
+                                       cluster_nodes: &mut Vec<Vec<u32>>,
+                                       get_or_create: &mut dyn FnMut(u32, u32) -> AbstractNode| {
                         let Some(start_y) = span.take() else { return; };
                         let mid_y = start_y + (end_y - start_y) / 2;
                         let node = get_or_create(edge_x, mid_y);
@@ -105,10 +105,10 @@ impl AbstractGraphBuilder {
                     let edge_y = (base_y + self.cluster_size - 1).min(height - 1);
                     let max_x = (base_x + self.cluster_size).min(width);
                     let mut span_start: Option<u32> = None;
-                    let mut finish_span = |span: &mut Option<u32>,
-                                           end_x: u32,
-                                           cluster_nodes: &mut Vec<Vec<u32>>,
-                                           get_or_create: &mut dyn FnMut(u32, u32) -> AbstractNode| {
+                    let finish_span = |span: &mut Option<u32>,
+                                       end_x: u32,
+                                       cluster_nodes: &mut Vec<Vec<u32>>,
+                                       get_or_create: &mut dyn FnMut(u32, u32) -> AbstractNode| {
                         let Some(start_x) = span.take() else { return; };
                         let mid_x = start_x + (end_x - start_x) / 2;
                         let node = get_or_create(mid_x, edge_y);
@@ -216,8 +216,7 @@ impl AbstractGraphBuilder {
                         |tile, dist| {
                             let x = tile % width;
                             let y = tile / width;
-                            let is_start_or_target =
-                                tile == from.tile || target_by_tile.contains_key(&tile);
+                            let is_start_or_target = tile == from.tile || target_by_tile.contains_key(&tile);
                             if !is_start_or_target
                                 && (x < min_x || x > max_x || y < min_y || y > max_y)
                             {
@@ -293,7 +292,7 @@ mod tests {
         let width = 8;
         let height = 4;
         let mut terrain = vec![5_u8; width * height];
-        terrain[width + 3] = TERRAIN_LAND_MASK | 1;
+        terrain[1 * width + 3] = TERRAIN_LAND_MASK | 1;
         terrain[2 * width + 4] = TERRAIN_LAND_MASK | 1;
         let map = GameMapStore::new(width as u32, height as u32, terrain).unwrap();
         let graph = AbstractGraphBuilder::new(4).build(&map).unwrap();
