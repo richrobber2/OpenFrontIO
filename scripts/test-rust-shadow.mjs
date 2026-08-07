@@ -34,6 +34,7 @@ run(npm, [
   "tests/rust/BoundedWaterPathParity.test.ts",
   "tests/rust/ConnectedComponentsParity.test.ts",
   "tests/rust/AbstractGraphParity.test.ts",
+  "tests/rust/HierarchicalWaterPathParity.test.ts",
   "tests/rust/LiveRailIntegration.test.ts",
   "tests/rust/LiveWaterIntegration.test.ts",
   "tests/rust/PathfindingBenchmark.test.ts",
