@@ -80,6 +80,7 @@ export interface OpenFrontWasmExports extends WebAssembly.Exports {
     to: number,
     seed: number,
   ): number;
+  openfront_map_water_components(handle: number): number;
   openfront_map_rail_path(
     handle: number,
     upload: number,
