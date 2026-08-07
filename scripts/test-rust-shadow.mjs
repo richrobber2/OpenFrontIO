@@ -30,6 +30,7 @@ run(npm, [
   "tests/rust/AirPathParity.test.ts",
   "tests/rust/TerritoryAnalysisParity.test.ts",
   "tests/rust/RailPathParity.test.ts",
+  "tests/rust/WaterPathParity.test.ts",
 ]);
 run(npm, [
   "exec",
