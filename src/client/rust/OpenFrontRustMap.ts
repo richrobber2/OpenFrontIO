@@ -92,6 +92,11 @@ export class OpenFrontRustMap {
     );
   }
 
+  largestOwnedDepths(maximumDepth: number): Uint32Array {
+    this.assertLive();
+    return this.module.largestOwnedDepths(this.handle, maximumDepth);
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.module.destroyMap(this.handle);
