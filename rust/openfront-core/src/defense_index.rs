@@ -39,13 +39,7 @@ pub struct Defense {
 }
 
 impl Defense {
-    pub const fn new(
-        id: u32,
-        x: u32,
-        y: u32,
-        range: u32,
-        available_interceptions: u32,
-    ) -> Self {
+    pub const fn new(id: u32, x: u32, y: u32, range: u32, available_interceptions: u32) -> Self {
         Self {
             id,
             x,
@@ -182,7 +176,10 @@ impl DefenseIndex {
 
         for cell_y in min_y..=max_y {
             for cell_x in min_x..=max_x {
-                self.buckets.entry((cell_x, cell_y)).or_default().push(index);
+                self.buckets
+                    .entry((cell_x, cell_y))
+                    .or_default()
+                    .push(index);
             }
         }
     }
@@ -207,8 +204,7 @@ fn square(value: u32) -> u64 {
 fn distance_squared(a: DefensePoint, b: DefensePoint) -> u64 {
     let dx = u64::from(a.x.abs_diff(b.x));
     let dy = u64::from(a.y.abs_diff(b.y));
-    dx.saturating_mul(dx)
-        .saturating_add(dy.saturating_mul(dy))
+    dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy))
 }
 
 #[cfg(test)]
@@ -310,10 +306,7 @@ mod tests {
     #[test]
     fn duplicate_ids_use_last_record_once() {
         let mut index = DefenseIndex::new(4).unwrap();
-        index.replace([
-            Defense::new(5, 50, 50, 1, 1),
-            Defense::new(5, 1, 0, 2, 4),
-        ]);
+        index.replace([Defense::new(5, 50, 50, 1, 1), Defense::new(5, 1, 0, 2, 4)]);
 
         let result = index.assess_path(
             [DefensePathPoint::new(1, 0, false)],
