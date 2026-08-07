@@ -69,8 +69,10 @@ export interface StructureRenderInput extends UnitClassificationInput {
 
 /**
  * A copied JS-owned patch returned by Rust's persistent structure table.
- * `dirtyStart` is an instance slot, not a float index. `dirtyData` contains
- * whole 6-float instances and stays valid after later Wasm calls.
+ * `dirtyStart` is an instance slot, not a float index. In `dirtyData`, lane 0
+ * is the tile ref and lane 1 is reserved; StructurePass converts those two
+ * lanes to x/y using its map width before the WebGL upload. The remaining
+ * lanes already match the GPU instance layout.
  */
 export interface RustStructureRenderDelta {
   readonly instanceCount: number;
@@ -96,7 +98,6 @@ export class OpenFrontWasmUnits {
   private structureUploadPtr = 0;
   private structureCapacityRecords = 0;
   private structureRendererHandle = 0;
-  private structureMapWidth = 0;
 
   private constructor(private readonly wasm: OpenFrontWasmExports) {
     const exportedVersion = this.wasm.openfront_abi_version() >>> 0;
@@ -189,16 +190,12 @@ export class OpenFrontWasmUnits {
 
   updateStructureRenderer(
     updates: readonly StructureRenderInput[],
-    mapWidth: number,
   ): RustStructureRenderDelta {
     if (!this.supportsStructureRenderer()) {
       throw new Error("OpenFront units Wasm is missing structure renderer support");
     }
-    if (!Number.isInteger(mapWidth) || mapWidth <= 0) {
-      throw new Error(`Invalid structure render map width ${mapWidth}`);
-    }
 
-    this.ensureStructureRenderer(mapWidth);
+    this.ensureStructureRenderer();
     const count = updates.length;
     if (count > 0) {
       this.ensureStructureCapacity(count);
@@ -284,7 +281,6 @@ export class OpenFrontWasmUnits {
     if (this.structureRendererHandle !== 0) {
       this.wasm.openfront_structure_renderer_destroy(this.structureRendererHandle);
       this.structureRendererHandle = 0;
-      this.structureMapWidth = 0;
     }
     if (this.structureUploadHandle !== 0) {
       this.wasm.openfront_upload_destroy(this.structureUploadHandle);
@@ -324,21 +320,11 @@ export class OpenFrontWasmUnits {
     this.capacityRecords = capacity;
   }
 
-  private ensureStructureRenderer(mapWidth: number): void {
-    if (
-      this.structureRendererHandle !== 0 &&
-      this.structureMapWidth === mapWidth
-    ) {
-      return;
-    }
-    if (this.structureRendererHandle !== 0) {
-      this.wasm.openfront_structure_renderer_destroy(this.structureRendererHandle);
-      this.structureRendererHandle = 0;
-    }
-    const handle = this.wasm.openfront_structure_renderer_create(mapWidth >>> 0);
+  private ensureStructureRenderer(): void {
+    if (this.structureRendererHandle !== 0) return;
+    const handle = this.wasm.openfront_structure_renderer_create();
     if (handle === 0) this.throwLastError("create structure render state");
     this.structureRendererHandle = handle;
-    this.structureMapWidth = mapWidth;
   }
 
   private ensureStructureCapacity(requiredRecords: number): void {
@@ -375,21 +361,49 @@ export class OpenFrontWasmUnits {
   private writeStructureRecords(
     updates: readonly StructureRenderInput[],
   ): void {
-    const words = new Uint32Array(
+    if (HOST_IS_LITTLE_ENDIAN) {
+      const words = new Uint32Array(
+        this.wasm.memory.buffer,
+        this.structureUploadPtr,
+        this.structureCapacityRecords * STRUCTURE_WORDS_PER_RECORD,
+      );
+      for (let index = 0; index < updates.length; index++) {
+        const update = updates[index]!;
+        const off = index * STRUCTURE_WORDS_PER_RECORD;
+        words[off] = update.id >>> 0;
+        words[off + 1] = UNIT_KIND_BY_TYPE.get(update.unitType) ?? UNKNOWN_KIND;
+        words[off + 2] = update.isActive ? 1 : 0;
+        words[off + 3] = update.pos >>> 0;
+        words[off + 4] = update.ownerID >>> 0;
+        words[off + 5] = update.underConstruction ? 1 : 0;
+        words[off + 6] = update.markedForDeletion !== false ? 1 : 0;
+      }
+      return;
+    }
+
+    const bytes = new DataView(
       this.wasm.memory.buffer,
       this.structureUploadPtr,
-      this.structureCapacityRecords * STRUCTURE_WORDS_PER_RECORD,
+      this.structureCapacityRecords * STRUCTURE_BYTES_PER_RECORD,
     );
     for (let index = 0; index < updates.length; index++) {
       const update = updates[index]!;
-      const off = index * STRUCTURE_WORDS_PER_RECORD;
-      words[off] = update.id >>> 0;
-      words[off + 1] = UNIT_KIND_BY_TYPE.get(update.unitType) ?? UNKNOWN_KIND;
-      words[off + 2] = update.isActive ? 1 : 0;
-      words[off + 3] = update.pos >>> 0;
-      words[off + 4] = update.ownerID >>> 0;
-      words[off + 5] = update.underConstruction ? 1 : 0;
-      words[off + 6] = update.markedForDeletion !== false ? 1 : 0;
+      const base = index * STRUCTURE_BYTES_PER_RECORD;
+      bytes.setUint32(base, update.id >>> 0, true);
+      bytes.setUint32(
+        base + 4,
+        UNIT_KIND_BY_TYPE.get(update.unitType) ?? UNKNOWN_KIND,
+        true,
+      );
+      bytes.setUint32(base + 8, update.isActive ? 1 : 0, true);
+      bytes.setUint32(base + 12, update.pos >>> 0, true);
+      bytes.setUint32(base + 16, update.ownerID >>> 0, true);
+      bytes.setUint32(base + 20, update.underConstruction ? 1 : 0, true);
+      bytes.setUint32(
+        base + 24,
+        update.markedForDeletion !== false ? 1 : 0,
+        true,
+      );
     }
   }
 
@@ -468,11 +482,10 @@ export function classifyUnitDeltasRust(
  */
 export function updateStructureRenderDeltasRust(
   updates: readonly StructureRenderInput[],
-  mapWidth: number,
 ): RustStructureRenderDelta | null {
   if (rustUnits === null || rustStructureRendererDisabled) return null;
   try {
-    return rustUnits.updateStructureRenderer(updates, mapWidth);
+    return rustUnits.updateStructureRenderer(updates);
   } catch (error) {
     rustStructureRendererDisabled = true;
     if (!rustStructureRendererFailureLogged) {
