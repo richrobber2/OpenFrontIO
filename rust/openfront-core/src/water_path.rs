@@ -120,8 +120,11 @@ impl WaterPathFinder {
         goal: TileRef,
     ) -> Result<Option<Vec<TileRef>>, GameMapError> {
         let geometry = map.geometry();
-        if starts.is_empty() || !geometry.is_valid_ref(goal) {
+        if starts.is_empty() {
             return Ok(None);
+        }
+        if !geometry.is_valid_ref(goal) {
+            return Err(GameMapError::InvalidTile { tile: goal });
         }
         for start in starts {
             if !geometry.is_valid_ref(*start) {
@@ -185,7 +188,7 @@ impl WaterPathFinder {
             let current_coord = geometry.coord(current_ref).expect("current is valid");
             let current_g = self.g_score[current_index];
 
-            let mut visit = |neighbor: u32, nx: u32, ny: u32, this: &mut Self| -> Result<(), GameMapError> {
+            let visit = |neighbor: u32, nx: u32, ny: u32, this: &mut Self| -> Result<(), GameMapError> {
                 let neighbor_index = neighbor as usize;
                 if this.closed_stamp[neighbor_index] == stamp {
                     return Ok(());
@@ -263,5 +266,17 @@ mod tests {
         for tile in path.iter().skip(1).take(path.len().saturating_sub(2)) {
             assert!(!map.terrain(*tile).unwrap().is_land());
         }
+    }
+
+    #[test]
+    fn rejects_invalid_goal() {
+        let map = GameMapStore::new(2, 2, vec![5_u8; 4]).unwrap();
+        let start = map.tile_ref(Coord::new(0, 0)).unwrap();
+        let invalid = TileRef::new(map.tile_count());
+        let mut finder = WaterPathFinder::new(map.tile_count() as usize);
+        assert_eq!(
+            finder.find_path(&map, &[start], invalid),
+            Err(GameMapError::InvalidTile { tile: invalid })
+        );
     }
 }
