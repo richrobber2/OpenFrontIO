@@ -1,5 +1,10 @@
 import { assetUrl } from "../AssetUrls";
 import { FetchGameMapLoader } from "../game/FetchGameMapLoader";
+import type {
+  BuildableUnit,
+  PlayerBuildableUnitType,
+  PlayerID,
+} from "../game/Game";
 import { ErrorUpdate, GameUpdateViewData } from "../game/GameUpdates";
 import { createGameRunner, GameRunner } from "../GameRunner";
 import {
@@ -30,6 +35,55 @@ const MAX_TICKS_BEFORE_YIELD = 4;
 // simulation state or adding worker messages just for development telemetry.
 const RUST_STATS_INTERVAL_TICKS = 300;
 let executedTicks = 0;
+
+interface PlayerBuildablesCache {
+  tick: number;
+  playerID: PlayerID;
+  x: number | undefined;
+  y: number | undefined;
+  unitsKey: string;
+  result: BuildableUnit[];
+}
+
+// BuildPreviewController polls playerBuildables every 50 ms so the preview can
+// react to world changes. The simulation itself only changes on ticks. Cache an
+// identical player/tile/type query for the remainder of the current tick so a
+// 20 Hz cursor loop does not run the same BFS + dense structure-spacing scan
+// twice against an unchanged world snapshot. Moving to a different tile or a
+// new simulation tick misses the cache immediately.
+let playerBuildablesCache: PlayerBuildablesCache | null = null;
+
+function buildablesUnitsKey(
+  units: readonly PlayerBuildableUnitType[] | undefined,
+): string {
+  return units === undefined ? "*" : units.join("\u0000");
+}
+
+function playerBuildablesCached(
+  gr: GameRunner,
+  playerID: PlayerID,
+  x?: number,
+  y?: number,
+  units?: readonly PlayerBuildableUnitType[],
+): BuildableUnit[] {
+  const tick = gr.game.ticks();
+  const unitsKey = buildablesUnitsKey(units);
+  const cached = playerBuildablesCache;
+  if (
+    cached !== null &&
+    cached.tick === tick &&
+    cached.playerID === playerID &&
+    cached.x === x &&
+    cached.y === y &&
+    cached.unitsKey === unitsKey
+  ) {
+    return cached.result;
+  }
+
+  const result = gr.playerBuildables(playerID, x, y, units);
+  playerBuildablesCache = { tick, playerID, x, y, unitsKey, result };
+  return result;
+}
 
 let drainScheduled = false;
 let draining = false;
@@ -163,6 +217,7 @@ ctx.addEventListener("message", async (e: MessageEvent<MainThreadMessage>) => {
   switch (message.type) {
     case "init":
       try {
+        playerBuildablesCache = null;
         // Set before createGameRunner so map fetches via mapLoader pick up the
         // CDN base. Workers have no `window`, so AssetUrls falls back to this.
         globalThis.__CDN_BASE__ = message.cdnBase;
@@ -231,7 +286,9 @@ ctx.addEventListener("message", async (e: MessageEvent<MainThreadMessage>) => {
       }
 
       try {
-        const buildables = (await gameRunner).playerBuildables(
+        const gr = await gameRunner;
+        const buildables = playerBuildablesCached(
+          gr,
           message.playerID,
           message.x,
           message.y,
