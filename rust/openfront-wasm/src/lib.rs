@@ -5,8 +5,8 @@
 //! into a reusable `u32` result buffer and exposed by pointer/length accessors.
 
 use openfront_core::{
-    BoundedWaterPathFinder, GameMapError, GameMapStore, PackedTile, RailPathFinder, TileRef,
-    TileStateError, WaterPathFinder,
+    BoundedWaterPathFinder, GameMapError, GameMapStore, HierarchicalWaterPathFinder, PackedTile,
+    RailPathFinder, TileRef, TileStateError, WaterPathFinder, DEFAULT_CLUSTER_SIZE,
 };
 use std::cell::{Cell, RefCell};
 
@@ -31,6 +31,7 @@ pub enum ErrorCode {
 thread_local! {
     static MAPS: RefCell<Vec<Option<GameMapStore>>> = const { RefCell::new(Vec::new()) };
     static WATER_FINDERS: RefCell<Vec<Option<WaterPathFinder>>> = const { RefCell::new(Vec::new()) };
+    static HIERARCHICAL_WATER_FINDERS: RefCell<Vec<Option<HierarchicalWaterPathFinder>>> = const { RefCell::new(Vec::new()) };
     static BOUNDED_WATER_FINDERS: RefCell<Vec<Option<BoundedWaterPathFinder>>> = const { RefCell::new(Vec::new()) };
     static RAIL_FINDERS: RefCell<Vec<Option<RailPathFinder>>> = const { RefCell::new(Vec::new()) };
     static UPLOADS: RefCell<Vec<Option<Vec<u8>>>> = const { RefCell::new(Vec::new()) };
@@ -140,5 +141,6 @@ include!("components_query.rs");
 include!("abstract_graph_query.rs");
 include!("rail_query.rs");
 include!("water_query.rs");
+include!("hierarchical_water_query.rs");
 include!("bounded_water_query.rs");
 include!("tests.rs");
