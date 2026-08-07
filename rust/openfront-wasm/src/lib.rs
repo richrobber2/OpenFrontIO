@@ -27,6 +27,7 @@ pub enum ErrorCode {
     InvalidBufferIndex = 7,
     TileListLengthMismatch = 8,
     UnitRecordLengthMismatch = 9,
+    StructureRecordLengthMismatch = 10,
     InternalInvariant = 255,
 }
 
@@ -36,6 +37,7 @@ thread_local! {
     static HIERARCHICAL_WATER_FINDERS: RefCell<Vec<Option<HierarchicalWaterPathFinder>>> = const { RefCell::new(Vec::new()) };
     static BOUNDED_WATER_FINDERS: RefCell<Vec<Option<BoundedWaterPathFinder>>> = const { RefCell::new(Vec::new()) };
     static RAIL_FINDERS: RefCell<Vec<Option<RailPathFinder>>> = const { RefCell::new(Vec::new()) };
+    static STRUCTURE_RENDERERS: RefCell<Vec<Option<WasmStructureRenderer>>> = const { RefCell::new(Vec::new()) };
     static UPLOADS: RefCell<Vec<Option<Vec<u8>>>> = const { RefCell::new(Vec::new()) };
     static RESULT: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
     static LAST_ERROR: Cell<u32> = const { Cell::new(ErrorCode::None as u32) };
@@ -138,6 +140,7 @@ include!("abi.rs");
 include!("upload.rs");
 include!("graphics.rs");
 include!("units.rs");
+include!("structure_render.rs");
 include!("map_lifecycle.rs");
 include!("map_mutation.rs");
 include!("query.rs");
