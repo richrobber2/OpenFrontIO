@@ -15,6 +15,7 @@
 import type { Config } from "../../../../core/configuration/Config";
 import { UnitType } from "../../../../core/game/Game";
 import { maxHealthWithVeterancy } from "../../../../core/game/Veterancy";
+import { getUnitRenderSubsets } from "../../frame/UnitSubsetRegistry";
 import type { RendererConfig, UnitState } from "../../types";
 import { UT_MISSILE_SILO, UT_SAM_LAUNCHER } from "../../types";
 import type { RenderSettings } from "../RenderSettings";
@@ -139,10 +140,18 @@ export class BarPass {
     this.progressCount = 0;
     this.veterancyCount = 0;
 
+    // Renderer currently supplies the long-lived master map to both arguments.
+    // Resolve the Rust-maintained incremental subsets when available so a city
+    // never enters the warship loop and a missile never enters structure bars.
+    const subsets =
+      getUnitRenderSubsets(mobileUnits) ?? getUnitRenderSubsets(structures);
+    const renderMobile = subsets?.mobile ?? mobileUnits;
+    const renderStructures = subsets?.structures ?? structures;
+
     // --- Health bars + veterancy pips (warships) ---
     // Only warships carry health among mobile units, so this loop is effectively
     // warship-only.
-    for (const unit of mobileUnits.values()) {
+    for (const unit of renderMobile.values()) {
       if (unit.health === null || unit.health <= 0) continue;
       // Veteran warships have a higher effective max health, so a full veteran
       // ship reads as full. Shared with the engine's UnitImpl.maxHealth().
@@ -160,7 +169,7 @@ export class BarPass {
     }
 
     // --- Progress bars (structures) ---
-    for (const unit of structures.values()) {
+    for (const unit of renderStructures.values()) {
       if (!unit.isActive) continue;
       const progress = this.computeStructureProgress(unit, gameTick);
       if (progress !== null) this.pushProgress(unit, progress);
