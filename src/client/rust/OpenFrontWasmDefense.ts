@@ -24,6 +24,8 @@ type LoadedDefenseIndex = {
   handle: number;
 };
 
+type DefenseModuleLoader = () => Promise<OpenFrontWasmModule>;
+
 let loaded: LoadedDefenseIndex | null = null;
 let loadPromise: Promise<void> | null = null;
 let disabled = false;
@@ -73,12 +75,27 @@ function disableRustDefense(error: unknown): void {
   }
 }
 
-/** Preload the persistent Rust defense index; failures preserve TS fallback. */
-export function preloadRustDefenseIndex(): Promise<void> {
+function loadBrowserDefenseModule(): Promise<OpenFrontWasmModule> {
+  return OpenFrontWasmModule.load(assetUrl("wasm/openfront_wasm.wasm"));
+}
+
+/** Whether the persistent Rust defense index is loaded and available. */
+export function isRustDefenseIndexReady(): boolean {
+  return loaded !== null && !disabled;
+}
+
+/**
+ * Preload the persistent Rust defense index; failures preserve TS fallback.
+ * Tests and headless callers may inject a loader so they can instantiate the
+ * built Wasm bytes directly instead of relying on browser-relative fetches.
+ */
+export function preloadRustDefenseIndex(
+  loadModule: DefenseModuleLoader = loadBrowserDefenseModule,
+): Promise<void> {
   if (loaded !== null || disabled) return Promise.resolve();
   if (loadPromise !== null) return loadPromise;
 
-  loadPromise = OpenFrontWasmModule.load(assetUrl("wasm/openfront_wasm.wasm"))
+  loadPromise = loadModule()
     .then((module) => {
       loaded = {
         module,
