@@ -41,6 +41,7 @@ run(npm, [
   "tests/rust/UnitClassificationBuildingStress.test.ts",
   "tests/rust/UnitSubsetIndexStress.test.ts",
   "tests/rust/BuildingPopulationStress.test.ts",
+  "tests/rust/BuildingPlacementStress.test.ts",
   "tests/rust/PathfindingBenchmark.test.ts",
   "tests/rust/FullWorldPathfindingBenchmark.test.ts",
 ]);
