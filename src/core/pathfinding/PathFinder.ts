@@ -3,6 +3,7 @@ import { GameMap, TileRef } from "../game/GameMap";
 import { TrainStation } from "../game/TrainStation";
 import {
   rustBoundedWaterPath,
+  rustHierarchicalWaterPath,
   rustRailPath,
   rustWaterPath,
 } from "../rust/RustPathfindingService";
@@ -70,6 +71,27 @@ class LiveWaterPathFinder implements PathFinder<TileRef> {
   }
 }
 
+/**
+ * Rust-first hierarchical water pathfinder. The TypeScript HPA instance stays
+ * alive as the deterministic fallback and the surrounding production
+ * transformer chain remains authoritative.
+ */
+class LiveHierarchicalWaterPathFinder implements PathFinder<TileRef> {
+  constructor(
+    private readonly game: Game,
+    private readonly fallback: PathFinder<TileRef>,
+  ) {}
+
+  findPath(from: TileRef | TileRef[], to: TileRef): TileRef[] | null {
+    const starts = Array.isArray(from) ? from : [from];
+    const rustPath = rustHierarchicalWaterPath(this.game, starts, to);
+    if (rustPath !== undefined) {
+      return rustPath.length === 0 ? null : rustPath;
+    }
+    return this.fallback.findPath(from, to);
+  }
+}
+
 function buildWaterChain(game: Game): PathFinder<TileRef> {
   const hpa = game.miniWaterHPA();
   const graph = game.miniWaterGraph();
@@ -83,8 +105,9 @@ function buildWaterChain(game: Game): PathFinder<TileRef> {
       .build();
   }
 
+  const hierarchical = new LiveHierarchicalWaterPathFinder(game, hpa);
   const componentCheckFn = (t: TileRef) => graph.getComponentId(t);
-  return PathFinderBuilder.create(hpa)
+  return PathFinderBuilder.create(hierarchical)
     .wrap((pf) => new ComponentCheckTransformer(pf, componentCheckFn))
     .wrap(
       (pf) =>
