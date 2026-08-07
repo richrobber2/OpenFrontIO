@@ -4,6 +4,7 @@ import { TrainStation } from "../game/TrainStation";
 import {
   rustBoundedWaterPath,
   rustRailPath,
+  rustWaterPath,
 } from "../rust/RustPathfindingService";
 import { AStarRail } from "./algorithms/AStar.Rail";
 import { AStarWater } from "./algorithms/AStar.Water";
@@ -48,13 +49,34 @@ const _waterChainCache = new WeakMap<
   { version: number; chain: PathFinder<TileRef> }
 >();
 
+/** Rust-first flat water pathfinder with deterministic TypeScript fallback. */
+class LiveWaterPathFinder implements PathFinder<TileRef> {
+  private readonly fallback: AStarWater;
+
+  constructor(
+    private readonly game: Game,
+    miniMap: GameMap,
+  ) {
+    this.fallback = new AStarWater(miniMap);
+  }
+
+  findPath(from: TileRef | TileRef[], to: TileRef): TileRef[] | null {
+    const starts = Array.isArray(from) ? from : [from];
+    const rustPath = rustWaterPath(this.game, starts, to);
+    if (rustPath !== undefined) {
+      return rustPath.length === 0 ? null : rustPath;
+    }
+    return this.fallback.findPath(from, to) as TileRef[] | null;
+  }
+}
+
 function buildWaterChain(game: Game): PathFinder<TileRef> {
   const hpa = game.miniWaterHPA();
   const graph = game.miniWaterGraph();
   const miniMap = game.miniMap();
 
   if (!hpa || !graph || graph.nodeCount < 100) {
-    const simple = new AStarWater(miniMap);
+    const simple = new LiveWaterPathFinder(game, miniMap);
     return PathFinderBuilder.create(simple)
       .wrap((pf) => new ShoreCoercingTransformer(pf, miniMap))
       .wrap((pf) => new MiniMapTransformer(pf, game.map(), miniMap))
