@@ -28,6 +28,7 @@ const PROJECT_ROOT = path.resolve(
 const BUILDING_COUNT = 1_200;
 const QUERY_ROUNDS = 40;
 const DENSE_RADIUS = 30;
+const OWNED_RADIUS = 15;
 
 describe("dense structure placement stress", () => {
   test(
@@ -88,14 +89,13 @@ describe("dense structure placement stress", () => {
         throw new Error("World placement stress game has no nation owner");
       }
 
-      // Pick the owner's tile with the largest map-edge margin so a radius-30
-      // dense population can be seeded without boundary effects dominating the
-      // placement query. The direct buildUnit calls intentionally bypass normal
-      // spacing validation: this is a synthetic late-game density harness.
+      // NationCreation registers nation players before their spawn executions
+      // have claimed territory. Pick a safe interior land tile, then explicitly
+      // conquer a compact patch so PlayerImpl is alive and build-preview BFS
+      // sees the same owned-territory invariant as a live match.
       let targetTile = -1;
-      let bestMargin = -1;
       for (let tile = 0; tile < game.width() * game.height(); tile++) {
-        if (game.owner(tile) !== owner || !game.isLand(tile)) continue;
+        if (!game.isLand(tile) || game.isImpassable(tile)) continue;
         const x = game.x(tile);
         const y = game.y(tile);
         const margin = Math.min(
@@ -104,26 +104,39 @@ describe("dense structure placement stress", () => {
           game.width() - 1 - x,
           game.height() - 1 - y,
         );
-        if (margin > bestMargin) {
-          bestMargin = margin;
+        if (margin >= DENSE_RADIUS) {
           targetTile = tile;
+          break;
         }
       }
       expect(targetTile).toBeGreaterThanOrEqual(0);
 
       const tx = game.x(targetTile);
       const ty = game.y(targetTile);
+      let conquered = 0;
+      for (let dy = -OWNED_RADIUS; dy <= OWNED_RADIUS; dy++) {
+        for (let dx = -OWNED_RADIUS; dx <= OWNED_RADIUS; dx++) {
+          if (dx * dx + dy * dy >= OWNED_RADIUS * OWNED_RADIUS) continue;
+          const tile = game.ref(tx + dx, ty + dy);
+          if (!game.isLand(tile) || game.isImpassable(tile)) continue;
+          owner.conquer(tile);
+          conquered++;
+        }
+      }
+      expect(conquered).toBeGreaterThan(0);
+      expect(owner.isAlive()).toBe(true);
+      expect(game.owner(targetTile)).toBe(owner);
+
+      // Pack actual UnitImpl structures around the cursor. Direct buildUnit is
+      // intentional here: the stress population must be much denser than normal
+      // placement rules allow so validStructureSpawnTiles hits its worst-case
+      // candidate-tile × nearby-building rejection loop.
       const candidates: Array<{ tile: number; distSq: number }> = [];
       for (let dy = -DENSE_RADIUS; dy <= DENSE_RADIUS; dy++) {
         for (let dx = -DENSE_RADIUS; dx <= DENSE_RADIUS; dx++) {
           const distSq = dx * dx + dy * dy;
           if (distSq > DENSE_RADIUS * DENSE_RADIUS) continue;
-          const x = tx + dx;
-          const y = ty + dy;
-          if (x < 0 || y < 0 || x >= game.width() || y >= game.height()) {
-            continue;
-          }
-          candidates.push({ tile: game.ref(x, y), distSq });
+          candidates.push({ tile: game.ref(tx + dx, ty + dy), distSq });
         }
       }
       candidates.sort((a, b) => a.distSq - b.distSq);
