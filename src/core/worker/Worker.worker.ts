@@ -2,7 +2,10 @@ import { assetUrl } from "../AssetUrls";
 import { FetchGameMapLoader } from "../game/FetchGameMapLoader";
 import { ErrorUpdate, GameUpdateViewData } from "../game/GameUpdates";
 import { createGameRunner, GameRunner } from "../GameRunner";
-import { initializeRustPathfinding } from "../rust/RustPathfindingService";
+import {
+  initializeRustPathfinding,
+  rustPathfindingStats,
+} from "../rust/RustPathfindingService";
 import {
   AttackClusteredPositionsResultMessage,
   InitializedMessage,
@@ -22,10 +25,22 @@ const mapLoader = new FetchGameMapLoader((path) => assetUrl(`maps/${path}`));
 // Yield threshold; not a backlog cap. Used to avoid monopolizing the worker task
 // and flooding the main thread with messages during catch-up.
 const MAX_TICKS_BEFORE_YIELD = 4;
+// Low-frequency proof that normal matches are actually exercising the Rust
+// pathfinding service. Keeping this in the worker avoids polluting deterministic
+// simulation state or adding worker messages just for development telemetry.
+const RUST_STATS_INTERVAL_TICKS = 300;
+let executedTicks = 0;
 
 let drainScheduled = false;
 let draining = false;
 let drainRequested = false;
+
+function logRustPathfindingUsage(gr: GameRunner): void {
+  const stats = rustPathfindingStats(gr.game);
+  console.info(
+    `[RustPathfinding] live match @ ${executedTicks} ticks: enabled=${stats.enabled} rail=${stats.railQueries} simpleWater=${stats.waterQueries} hierarchicalWater=${stats.hierarchicalWaterQueries} refinement=${stats.waterRefinementQueries} rebuilds=${stats.rebuilds} failures=${stats.failures}`,
+  );
+}
 
 function scheduleDrain(): void {
   drainRequested = true;
@@ -79,6 +94,10 @@ async function drain(): Promise<void> {
         break;
       }
       ticksRun++;
+      executedTicks++;
+      if (executedTicks % RUST_STATS_INTERVAL_TICKS === 0) {
+        logRustPathfindingUsage(gr);
+      }
     }
 
     tickUpdateSink = null;
