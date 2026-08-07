@@ -16,7 +16,7 @@ pub mod water_path;
 pub use air_path::{air_path, AirPathError};
 pub use geometry::{Coord, GridError, GridGeometry, NeighborRefs, TileRef};
 pub use map::{GameMapError, GameMapStore};
-pub use rail_path::rail_path;
+pub use rail_path::{rail_path, RailPathFinder};
 pub use random::PseudoRandom;
 pub use territory::OwnerTerritoryAnalysis;
 pub use tile::{
