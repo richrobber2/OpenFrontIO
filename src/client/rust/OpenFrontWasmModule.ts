@@ -245,6 +245,23 @@ export class OpenFrontWasmModule {
   }
 
   railPath(handle: number, starts: Uint32Array, goal: number): Uint32Array {
+    if (starts.length <= 4) {
+      return this.runSmallPathQuery(
+        starts,
+        (count, start0, start1, start2, start3) =>
+          this.wasm.openfront_map_rail_path_small(
+            handle,
+            count,
+            start0,
+            start1,
+            start2,
+            start3,
+            goal,
+          ),
+        "query rail path",
+      );
+    }
+
     const upload = this.uploadU32(starts);
     try {
       return this.runTileQuery(
@@ -257,6 +274,23 @@ export class OpenFrontWasmModule {
   }
 
   waterPath(handle: number, starts: Uint32Array, goal: number): Uint32Array {
+    if (starts.length <= 4) {
+      return this.runSmallPathQuery(
+        starts,
+        (count, start0, start1, start2, start3) =>
+          this.wasm.openfront_map_water_path_small(
+            handle,
+            count,
+            start0,
+            start1,
+            start2,
+            start3,
+            goal,
+          ),
+        "query water path",
+      );
+    }
+
     const upload = this.uploadU32(starts);
     try {
       return this.runTileQuery(
@@ -266,6 +300,30 @@ export class OpenFrontWasmModule {
     } finally {
       this.wasm.openfront_upload_destroy(upload);
     }
+  }
+
+  private runSmallPathQuery(
+    starts: Uint32Array,
+    query: (
+      count: number,
+      start0: number,
+      start1: number,
+      start2: number,
+      start3: number,
+    ) => number,
+    operation: string,
+  ): Uint32Array {
+    return this.runTileQuery(
+      () =>
+        query(
+          starts.length,
+          starts[0] ?? 0,
+          starts[1] ?? 0,
+          starts[2] ?? 0,
+          starts[3] ?? 0,
+        ),
+      operation,
+    );
   }
 
   private uploadU32(values: Uint32Array): number {
