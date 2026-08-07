@@ -1,7 +1,7 @@
 use openfront_core::{Defense, DefenseIndex, DefensePathAssessment, DefensePathPoint, DefensePoint};
 
-const DEFENSE_RECORD_WORDS: usize = 5;
-const DEFENSE_RECORD_BYTES: usize = DEFENSE_RECORD_WORDS * 4;
+const DEFENSE_RECORD_BYTES: usize = 24;
+const DEFENSE_RANGE_OFFSET: usize = 12;
 const DEFENSE_PATH_RECORD_WORDS: usize = 3;
 const DEFENSE_PATH_RECORD_BYTES: usize = DEFENSE_PATH_RECORD_WORDS * 4;
 
@@ -12,6 +12,19 @@ fn read_defense_u32(record: &[u8], word: usize) -> u32 {
         record[offset + 1],
         record[offset + 2],
         record[offset + 3],
+    ])
+}
+
+fn read_defense_f64(record: &[u8], offset: usize) -> f64 {
+    f64::from_le_bytes([
+        record[offset],
+        record[offset + 1],
+        record[offset + 2],
+        record[offset + 3],
+        record[offset + 4],
+        record[offset + 5],
+        record[offset + 6],
+        record[offset + 7],
     ])
 }
 
@@ -41,8 +54,8 @@ pub extern "C" fn openfront_defense_index_destroy(handle: u32) -> u32 {
 
 /// Replace all indexed defenses.
 ///
-/// Upload records are little-endian u32 words:
-/// `[id, x, y, range, available_interceptions]`.
+/// Upload records are little-endian fields:
+/// `[id: u32, x: u32, y: u32, range: f64, available_interceptions: u32]`.
 #[unsafe(no_mangle)]
 pub extern "C" fn openfront_defense_index_replace(
     handle: u32,
@@ -72,8 +85,8 @@ pub extern "C" fn openfront_defense_index_replace(
                     read_defense_u32(record, 0),
                     read_defense_u32(record, 1),
                     read_defense_u32(record, 2),
-                    read_defense_u32(record, 3),
-                    read_defense_u32(record, 4),
+                    read_defense_f64(record, DEFENSE_RANGE_OFFSET),
+                    read_defense_u32(record, 5),
                 )
             })
             .collect())
@@ -117,7 +130,7 @@ pub extern "C" fn openfront_defense_index_assess_path(
     source_y: u32,
     destination_x: u32,
     destination_y: u32,
-    targetable_range: u32,
+    targetable_range: f64,
 ) -> u32 {
     begin_call();
 
