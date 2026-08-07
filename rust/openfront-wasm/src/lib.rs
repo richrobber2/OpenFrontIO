@@ -26,6 +26,7 @@ pub enum ErrorCode {
     OwnerIdOutOfRange = 6,
     InvalidBufferIndex = 7,
     TileListLengthMismatch = 8,
+    UnitRecordLengthMismatch = 9,
     InternalInvariant = 255,
 }
 
@@ -136,6 +137,7 @@ fn query_tiles(
 include!("abi.rs");
 include!("upload.rs");
 include!("graphics.rs");
+include!("units.rs");
 include!("map_lifecycle.rs");
 include!("map_mutation.rs");
 include!("query.rs");

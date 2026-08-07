@@ -17,6 +17,7 @@ pub mod random;
 pub mod territory;
 pub mod tile;
 pub mod traversal;
+pub mod unit_classification;
 pub mod water_bounded;
 pub mod water_path;
 
@@ -41,5 +42,9 @@ pub use tile::{
     TERRAIN_LAND_MASK, TERRAIN_MAGNITUDE_MASK, TERRAIN_OCEAN_MASK, TERRAIN_SHORELINE_MASK,
 };
 pub use traversal::NeighborRefs8;
+pub use unit_classification::{
+    classify_unit_kind, UnitKind, UNIT_CLASS_ATTACK_RING, UNIT_CLASS_LIGHT, UNIT_CLASS_MOBILE,
+    UNIT_CLASS_NUKE_ACTIVE, UNIT_CLASS_NUKE_TELEGRAPH, UNIT_CLASS_STRUCTURE, UNIT_CLASS_TRAIL,
+};
 pub use water_bounded::{BoundedWaterPathFinder, SearchBounds};
 pub use water_path::WaterPathFinder;
