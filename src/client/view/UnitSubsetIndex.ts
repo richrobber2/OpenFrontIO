@@ -92,8 +92,6 @@ export class UnitSubsetIndex {
   private rustStructureInitialized = false;
   private readonly structureDeltaScratch: StructureRenderInput[] = [];
 
-  constructor(private readonly mapWidth: number) {}
-
   applyUpdates(
     updates: readonly StructureRenderInput[],
     states: ReadonlyMap<number, UnitState>,
@@ -183,7 +181,7 @@ export class UnitSubsetIndex {
       // table can safely switch from full rebuilds to delta patches mid-match.
       changed.length = 0;
       for (const state of this.structures.values()) changed.push(state);
-      const initial = updateStructureRenderDeltasRust(changed, this.mapWidth);
+      const initial = updateStructureRenderDeltasRust(changed);
       if (initial === null) {
         this.structureRenderDelta = null;
         return;
@@ -198,7 +196,7 @@ export class UnitSubsetIndex {
       return;
     }
 
-    const delta = updateStructureRenderDeltasRust(changed, this.mapWidth);
+    const delta = updateStructureRenderDeltasRust(changed);
     if (delta === null) {
       // The live StructurePass will rebuild from the TypeScript structure map
       // on the next dirty update. Do not keep advertising a stale Rust patch.
