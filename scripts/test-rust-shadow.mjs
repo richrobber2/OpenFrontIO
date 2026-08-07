@@ -25,6 +25,13 @@ const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 run(npm, [
   "exec",
   "--",
+  "vitest",
+  "run",
+  "tests/rust/AirPathParity.test.ts",
+]);
+run(npm, [
+  "exec",
+  "--",
   "tsx",
   "tests/rust/HeadlessShadowGame.ts",
   ...process.argv.slice(2),
