@@ -214,6 +214,22 @@ export class OpenFrontWasmModule {
     return result;
   }
 
+  ownerTerritoryAnalysis(
+    handle: number,
+    ownerID: number,
+    maximumDepth: number,
+  ): Uint32Array {
+    return this.runTileQuery(
+      () =>
+        this.wasm.openfront_map_owner_territory_analysis(
+          handle,
+          ownerID,
+          maximumDepth,
+        ),
+      "query owner territory analysis",
+    );
+  }
+
   largestOwnedDepths(handle: number, maximumDepth: number): Uint32Array {
     return this.runTileQuery(
       () => this.wasm.openfront_map_largest_owned_depths(handle, maximumDepth),
