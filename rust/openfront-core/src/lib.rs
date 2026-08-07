@@ -4,6 +4,7 @@
 //! outside this crate so the simulation can be tested without a runtime.
 
 pub mod air_path;
+pub mod bfs_grid;
 pub mod connected_components;
 pub mod geometry;
 pub mod map;
@@ -16,6 +17,7 @@ pub mod water_bounded;
 pub mod water_path;
 
 pub use air_path::{air_path, AirPathError};
+pub use bfs_grid::{BfsGrid, BfsVisit};
 pub use connected_components::{ConnectedWaterComponents, LAND_COMPONENT_MARKER};
 pub use geometry::{Coord, GridError, GridGeometry, NeighborRefs, TileRef};
 pub use map::{GameMapError, GameMapStore};
