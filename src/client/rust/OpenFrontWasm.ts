@@ -2,6 +2,14 @@ export { OpenFrontRustMap } from "./OpenFrontRustMap";
 export { OpenFrontWasmGraphics } from "./OpenFrontWasmGraphics";
 export { OpenFrontWasmModule } from "./OpenFrontWasmModule";
 export {
+  OpenFrontWasmTrajectory,
+  buildNukeTrajectoryRust,
+  preloadRustNukeTrajectory,
+  samRangeRust,
+  type RustNukeTrajectoryData,
+  type RustNukeTrajectorySAM,
+} from "./OpenFrontWasmTrajectory";
+export {
   OpenFrontWasmUnits,
   classifyUnitDeltasRust,
   preloadRustUnitClassifier,
