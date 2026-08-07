@@ -28,6 +28,9 @@ pub enum ErrorCode {
     TileListLengthMismatch = 8,
     UnitRecordLengthMismatch = 9,
     StructureRecordLengthMismatch = 10,
+    DefenseRecordLengthMismatch = 11,
+    PathRecordLengthMismatch = 12,
+    InvalidCellSize = 13,
     InternalInvariant = 255,
 }
 
@@ -37,6 +40,7 @@ thread_local! {
     static HIERARCHICAL_WATER_FINDERS: RefCell<Vec<Option<HierarchicalWaterPathFinder>>> = const { RefCell::new(Vec::new()) };
     static BOUNDED_WATER_FINDERS: RefCell<Vec<Option<BoundedWaterPathFinder>>> = const { RefCell::new(Vec::new()) };
     static RAIL_FINDERS: RefCell<Vec<Option<RailPathFinder>>> = const { RefCell::new(Vec::new()) };
+    static DEFENSE_INDICES: RefCell<Vec<Option<openfront_core::DefenseIndex>>> = const { RefCell::new(Vec::new()) };
     static STRUCTURE_RENDERERS: RefCell<Vec<Option<WasmStructureRenderer>>> = const { RefCell::new(Vec::new()) };
     static UPLOADS: RefCell<Vec<Option<Vec<u8>>>> = const { RefCell::new(Vec::new()) };
     static RESULT: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
@@ -150,4 +154,5 @@ include!("rail_query.rs");
 include!("water_query.rs");
 include!("hierarchical_water_query.rs");
 include!("bounded_water_query.rs");
+include!("defense_query.rs");
 include!("tests.rs");

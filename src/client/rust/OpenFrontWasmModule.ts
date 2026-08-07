@@ -13,11 +13,33 @@ const HOST_IS_LITTLE_ENDIAN = (() => {
   return new Uint8Array(word.buffer)[0] === 0x04;
 })();
 
+const DEFENSE_RECORD_BYTES = 24;
+
 export interface RustSearchBounds {
   minX: number;
   maxX: number;
   minY: number;
   maxY: number;
+}
+
+export interface RustDefenseRecord {
+  id: number;
+  x: number;
+  y: number;
+  range: number;
+  availableInterceptions: number;
+}
+
+export interface RustDefensePathPoint {
+  x: number;
+  y: number;
+  blocked: boolean;
+}
+
+export interface RustDefensePathAssessment {
+  blocked: boolean;
+  interceptingDefenses: number;
+  interceptionCapacity: number;
 }
 
 export class OpenFrontWasmModule {
@@ -58,6 +80,101 @@ export class OpenFrontWasmModule {
     const handle = this.wasm.openfront_map_create(width, height, upload);
     if (handle === 0) this.throwLastError("create map");
     return new OpenFrontRustMap(this, handle);
+  }
+
+  createDefenseIndex(cellSize = 32): number {
+    const handle = this.wasm.openfront_defense_index_create(cellSize >>> 0);
+    if (handle === 0) this.throwLastError("create defense index");
+    return handle;
+  }
+
+  destroyDefenseIndex(handle: number): void {
+    if (this.wasm.openfront_defense_index_destroy(handle) === 0) {
+      this.throwLastError("destroy defense index");
+    }
+  }
+
+  replaceDefenseIndex(
+    handle: number,
+    defenses: readonly RustDefenseRecord[],
+  ): void {
+    const bytes = new Uint8Array(defenses.length * DEFENSE_RECORD_BYTES);
+    const records = new DataView(bytes.buffer);
+    for (let index = 0; index < defenses.length; index++) {
+      const defense = defenses[index]!;
+      const offset = index * DEFENSE_RECORD_BYTES;
+      records.setUint32(offset, defense.id >>> 0, true);
+      records.setUint32(offset + 4, defense.x >>> 0, true);
+      records.setUint32(offset + 8, defense.y >>> 0, true);
+      records.setFloat64(offset + 12, defense.range, true);
+      records.setUint32(
+        offset + 20,
+        defense.availableInterceptions >>> 0,
+        true,
+      );
+    }
+
+    const upload = this.upload(bytes);
+    try {
+      if (
+        this.wasm.openfront_defense_index_replace(
+          handle,
+          upload,
+          defenses.length,
+        ) === 0
+      ) {
+        this.throwLastError("replace defense index");
+      }
+    } finally {
+      this.wasm.openfront_upload_destroy(upload);
+    }
+  }
+
+  assessDefensePath(
+    handle: number,
+    path: readonly RustDefensePathPoint[],
+    source: { x: number; y: number },
+    destination: { x: number; y: number },
+    targetableRange: number,
+  ): RustDefensePathAssessment {
+    const records = new Uint32Array(path.length * 3);
+    for (let index = 0; index < path.length; index++) {
+      const point = path[index]!;
+      const offset = index * 3;
+      records[offset] = point.x >>> 0;
+      records[offset + 1] = point.y >>> 0;
+      records[offset + 2] = Number(point.blocked);
+    }
+
+    const upload = this.uploadU32(records);
+    try {
+      const result = this.runTileQuery(
+        () =>
+          this.wasm.openfront_defense_index_assess_path(
+            handle,
+            upload,
+            path.length,
+            source.x >>> 0,
+            source.y >>> 0,
+            destination.x >>> 0,
+            destination.y >>> 0,
+            targetableRange,
+          ),
+        "assess defense path",
+      );
+      if (result.length !== 3) {
+        throw new Error(
+          `Unable to assess defense path: expected 3 result words, got ${result.length}`,
+        );
+      }
+      return {
+        blocked: result[0] !== 0,
+        interceptingDefenses: result[1]!,
+        interceptionCapacity: result[2]!,
+      };
+    } finally {
+      this.wasm.openfront_upload_destroy(upload);
+    }
   }
 
   destroyMap(handle: number): void {

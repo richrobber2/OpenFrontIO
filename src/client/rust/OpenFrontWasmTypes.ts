@@ -13,6 +13,9 @@ export const ERROR_MESSAGES: Record<number, string> = {
   8: "uploaded tile list length is not divisible by four",
   9: "uploaded unit record buffer is too short",
   10: "uploaded structure render record buffer is too short",
+  11: "uploaded defense record buffer is too short",
+  12: "uploaded defense path buffer is too short",
+  13: "defense index cell size must be greater than zero",
   255: "Rust map invariant failed",
 };
 
@@ -49,6 +52,23 @@ export interface OpenFrontWasmExports extends WebAssembly.Exports {
   openfront_structure_renderer_dirty_start(handle: number): number;
   openfront_structure_renderer_dirty_len(handle: number): number;
   openfront_structure_renderer_floats_per_instance(): number;
+  openfront_defense_index_create(cellSize: number): number;
+  openfront_defense_index_destroy(handle: number): number;
+  openfront_defense_index_replace(
+    handle: number,
+    upload: number,
+    count: number,
+  ): number;
+  openfront_defense_index_assess_path(
+    handle: number,
+    upload: number,
+    count: number,
+    sourceX: number,
+    sourceY: number,
+    destinationX: number,
+    destinationY: number,
+    targetableRange: number,
+  ): number;
   openfront_map_create(width: number, height: number, upload: number): number;
   openfront_map_destroy(handle: number): number;
   openfront_map_width(handle: number): number;

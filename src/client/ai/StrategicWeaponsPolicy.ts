@@ -1,3 +1,5 @@
+import { assessStrategicRouteRust } from "../rust/OpenFrontWasmDefense";
+
 export type StrategicWeaponKind = "nuke" | "mirv";
 
 export interface StrategicStrikeContext {
@@ -173,7 +175,9 @@ export function planStrategicCapability(
 /**
  * Evaluates the exact engine-produced parabolic path. SAMs can only target the
  * portion within range of the source or destination; impassable terrain blocks
- * the entire trajectory, including its untargetable middle.
+ * the entire trajectory, including its untargetable middle. Browser callers
+ * use the persistent Rust spatial index once its Wasm module is ready; tests,
+ * headless runs, and load failures retain this exact TypeScript fallback.
  */
 export function assessStrategicRoute({
   path,
@@ -188,6 +192,15 @@ export function assessStrategicRoute({
   targetableRange: number;
   sams: readonly StrategicRouteSam[];
 }): StrategicRouteAssessment {
+  const rust = assessStrategicRouteRust({
+    path,
+    source,
+    destination,
+    targetableRange,
+    sams,
+  });
+  if (rust !== null) return rust;
+
   const rangeSquared = targetableRange ** 2;
   const intercepting = new Map<number, number>();
   const distanceSquared = (
@@ -275,22 +288,25 @@ export function assessStrategicStrike(
     1,
     context.requiredSalvoSize ?? (context.samInterceptionCapacity ?? 0) + 1,
   );
-  const canSaturate =
-    context.availableWeapons >= requiredSalvoSize &&
-    (context.spendableGold ?? Number.POSITIVE_INFINITY) >=
-      (context.weaponCost ?? 0) * requiredSalvoSize;
+  const samInterceptionCapacity = Math.max(
+    0,
+    context.samInterceptionCapacity ?? 0,
+  );
+  // The trainer emits one strategic launch intent at a time. Treating several
+  // loaded silos as an instantaneous saturation salvo is therefore incorrect:
+  // an upgraded SAM can consume each sequential missile before the next intent
+  // is issued. Until real same-tick salvo launching is implemented, any loaded
+  // interception slot on the evaluated trajectory makes the route unsafe.
+  const samRouteUnsafe = samInterceptionCapacity > 0;
   const scarcityPenalty =
     context.availableWeapons === 1 && requiredSalvoSize === 1 ? 8 : 0;
-  const samPenalty =
-    (context.samInterceptionCapacity ?? 0) > 0
-      ? canSaturate
-        ? Math.min(18, requiredSalvoSize * 3)
-        : 45
-      : context.targetHasSamCoverage
-        ? context.weapon === "mirv"
-          ? 16
-          : 28
-        : 0;
+  const samPenalty = samRouteUnsafe
+    ? 45
+    : context.targetHasSamCoverage
+      ? context.weapon === "mirv"
+        ? 16
+        : 28
+      : 0;
   const costPenalty =
     context.weaponCost !== undefined && context.weaponCost > 0
       ? Math.min(
@@ -319,8 +335,10 @@ export function assessStrategicStrike(
     exposurePenalty;
 
   if (context.targetHasSamCoverage) reasons.push("target has SAM coverage");
-  if ((context.samInterceptionCapacity ?? 0) > 0 && !canSaturate) {
-    reasons.push("loaded silo slots cannot saturate the SAM route");
+  if (samRouteUnsafe) {
+    reasons.push(
+      `launch path has ${samInterceptionCapacity} ready SAM interception slot${samInterceptionCapacity === 1 ? "" : "s"}; sequential launches cannot safely saturate it`,
+    );
   }
   if (context.availableWeapons === 1)
     reasons.push("last weapon should be conserved");
@@ -334,7 +352,7 @@ export function assessStrategicStrike(
       !friendlyCollateral &&
       !thirdPartyCollateral &&
       context.pathBlocked !== true &&
-      ((context.samInterceptionCapacity ?? 0) === 0 || canSaturate) &&
+      !samRouteUnsafe &&
       context.ticksSinceLastStrike >= STRATEGIC_STRIKE_COOLDOWN_TICKS &&
       score >= 35,
     score,
