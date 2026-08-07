@@ -3,6 +3,7 @@
 //! Browser, rendering, networking, and JavaScript bindings deliberately stay
 //! outside this crate so the simulation can be tested without a runtime.
 
+pub mod abstract_graph;
 pub mod air_path;
 pub mod bfs_grid;
 pub mod connected_components;
@@ -16,6 +17,9 @@ pub mod traversal;
 pub mod water_bounded;
 pub mod water_path;
 
+pub use abstract_graph::{
+    AbstractEdge, AbstractGraph, AbstractGraphAStar, AbstractNode, Cluster,
+};
 pub use air_path::{air_path, AirPathError};
 pub use bfs_grid::{BfsGrid, BfsVisit};
 pub use connected_components::{ConnectedWaterComponents, LAND_COMPONENT_MARKER};
