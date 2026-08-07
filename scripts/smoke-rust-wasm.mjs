@@ -59,6 +59,34 @@ assert.ok(
 assert.equal(call("openfront_abi_version"), 1);
 assert.equal(call("openfront_invalid_result"), INVALID_RESULT);
 
+const graphicsUpload = upload(Uint8Array.of(0, 0x80 | 5, 0x40, 0x80 | 20));
+assert.equal(
+  call(
+    "openfront_graphics_terrain_rgba",
+    graphicsUpload,
+    2,
+    2,
+    0x4785b5,
+    0xcccb9e,
+    0xbedc8a,
+    0xdccb9e,
+    0xe6e6e6,
+  ),
+  graphicsUpload,
+);
+assert.equal(call("openfront_upload_len", graphicsUpload), 16);
+const graphicsPointer = call("openfront_upload_ptr", graphicsUpload);
+assert.deepEqual(
+  Array.from(new Uint8Array(wasm.memory.buffer, graphicsPointer, 16)),
+  [
+    71, 133, 181, 255,
+    190, 210, 138, 255,
+    126, 170, 203, 255,
+    240, 240, 240, 255,
+  ],
+);
+assert.equal(call("openfront_upload_destroy", graphicsUpload), 1);
+
 const land = 0x80 | 1;
 const terrainUpload = upload(Uint8Array.of(land, land, land, 0));
 const map = call("openfront_map_create", 2, 2, terrainUpload);
