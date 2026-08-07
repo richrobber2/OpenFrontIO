@@ -40,15 +40,8 @@ import { TrailManager } from "../render/frame/TrailManager";
 import type { FrameData, NameEntry } from "../render/types";
 import { STRUCTURE_TYPES } from "../render/types";
 import { PlayerView } from "./PlayerView";
+import { UnitSubsetIndex } from "./UnitSubsetIndex";
 import { UnitView } from "./UnitView";
-
-const TRAIL_TYPES: ReadonlySet<UnitType> = new Set<UnitType>([
-  UnitType.TransportShip,
-  UnitType.AtomBomb,
-  UnitType.HydrogenBomb,
-  UnitType.MIRV,
-  UnitType.MIRVWarhead,
-]);
 
 type TrainPlanState = {
   planId: number;
@@ -102,6 +95,8 @@ export class GameView implements GameMap {
   private _names = new Map<string, NameEntry>();
   /** Reusable scratch buffers for per-tick deltas. */
   private readonly _trailIdsScratch: number[] = [];
+  /** Incremental hot subsets, classified from unit deltas in Rust when available. */
+  private readonly unitSubsets = new UnitSubsetIndex();
   /**
    * The single long-lived FrameData object. Fields are mutated in place each
    * tick by update(). Renderer reads this each frame via frameData().
@@ -477,7 +472,8 @@ export class GameView implements GameMap {
         unit.lastPos = unit.lastPos.slice(-1);
       }
     }
-    gu.updates[GameUpdateType.Unit].forEach((update) => {
+    const unitUpdates = gu.updates[GameUpdateType.Unit];
+    unitUpdates.forEach((update) => {
       let unit = this._units.get(update.id);
       const isStructure = STRUCTURE_TYPES.has(update.unitType);
       if (unit !== undefined) {
@@ -516,6 +512,7 @@ export class GameView implements GameMap {
         this.clearTrainPlanForUnit(unit.id());
       }
     });
+    this.unitSubsets.applyUpdates(unitUpdates, this._unitStates);
 
     this.advanceMotionPlannedUnits(gu.tick);
     this.rebuildMotionPlannedUnitIdsCacheIfDirty();
@@ -539,13 +536,8 @@ export class GameView implements GameMap {
     // at the start of apply().
     this.railroadCache.apply(gu);
 
-    // Trail update: walk active trail-type units and stamp/decay.
-    this._trailIdsScratch.length = 0;
-    for (const u of this._units.values()) {
-      if (u.isActive() && TRAIL_TYPES.has(u.type())) {
-        this._trailIdsScratch.push(u.id());
-      }
-    }
+    // Trail update: walk only the incrementally maintained trail subset.
+    this.unitSubsets.trailIdsInto(this._trailIdsScratch);
     this.trailManager.update(
       this._unitStates as Map<number, import("../render/types").UnitState>,
       this._trailIdsScratch,
@@ -573,17 +565,21 @@ export class GameView implements GameMap {
     f.trailDirtyRowMin = this.trailManager.dirtyRowMin;
     f.trailDirtyRowMax = this.trailManager.dirtyRowMax;
 
-    f.playerStatus = computePlayerStatus(this._playerStates, this._unitStates, {
-      localPlayerSmallID: this._myPlayer?.smallID() ?? 0,
-      localPlayerID: this._myPlayer?.id() ?? "",
-      tileState: this._map.tileStateBuffer(),
-      tick: gu.tick,
-      allianceDuration: this._config.allianceDuration(),
-      isTransitiveTarget: (sid) =>
-        this._myPlayer?.hasTransitiveTarget(sid) ?? false,
-      doomsdayClockWarnTicks:
-        this._config.doomsdayClockConfig().warnSeconds * 10,
-    });
+    f.playerStatus = computePlayerStatus(
+      this._playerStates,
+      this.unitSubsets.nukeActive,
+      {
+        localPlayerSmallID: this._myPlayer?.smallID() ?? 0,
+        localPlayerID: this._myPlayer?.id() ?? "",
+        tileState: this._map.tileStateBuffer(),
+        tick: gu.tick,
+        allianceDuration: this._config.allianceDuration(),
+        isTransitiveTarget: (sid) =>
+          this._myPlayer?.hasTransitiveTarget(sid) ?? false,
+        doomsdayClockWarnTicks:
+          this._config.doomsdayClockConfig().warnSeconds * 10,
+      },
+    );
     // Relations + clusters depend only on allies/embargoes/teams, which
     // change rarely (teams only when a player is added) — recompute only
     // when one of those inputs arrived this tick. buildRelationMatrix
@@ -605,7 +601,7 @@ export class GameView implements GameMap {
       f.allianceClusters = computeAllianceClusters(this._playerStates);
     }
     f.nukeTelegraphs = extractNukeTelegraphs(
-      this._unitStates,
+      this.unitSubsets.nukeTelegraphs,
       this._map.width(),
       this._myPlayer?.smallID() ?? 0,
       // The latest relation matrix — recomputed above when dirty, otherwise
@@ -615,7 +611,7 @@ export class GameView implements GameMap {
     );
     f.attackRings = this._myPlayer
       ? extractAttackRings(
-          this._unitStates,
+          this.unitSubsets.attackRings,
           this._map.width(),
           this._myPlayer.smallID(),
         )
