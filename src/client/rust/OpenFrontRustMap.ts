@@ -66,6 +66,11 @@ export class OpenFrontRustMap {
     return this.module.waterPath(this.handle, starts, goal);
   }
 
+  hierarchicalWaterPath(starts: Uint32Array, goal: number): Uint32Array {
+    this.assertLive();
+    return this.module.hierarchicalWaterPath(this.handle, starts, goal);
+  }
+
   boundedWaterPath(
     starts: Uint32Array,
     goal: number,
