@@ -114,6 +114,11 @@ export class OpenFrontRustMap {
     return this.module.airPath(this.handle, from, to, seed);
   }
 
+  railPath(starts: Uint32Array, goal: number): Uint32Array {
+    this.assertLive();
+    return this.module.railPath(this.handle, starts, goal);
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.module.destroyMap(this.handle);
