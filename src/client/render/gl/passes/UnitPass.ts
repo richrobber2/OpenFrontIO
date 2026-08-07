@@ -34,6 +34,7 @@
 
 import { assetUrl } from "src/core/AssetUrls";
 import type { Config } from "src/core/configuration/Config";
+import { getUnitRenderSubsets } from "../../frame/UnitSubsetRegistry";
 import type { RendererConfig, UnitState } from "../../types";
 import {
   SMOOTHED_NUKE_TYPES,
@@ -416,7 +417,8 @@ export class UnitPass {
     this.smoothSegs.length = 0;
     this.lastUnitsUpdateMs = performance.now();
 
-    for (const unit of units.values()) {
+    const renderUnits = getUnitRenderSubsets(units)?.mobile ?? units;
+    for (const unit of renderUnits.values()) {
       if (!unit.isActive) continue;
 
       let atlasIdx = this.typeToAtlasCol.get(unit.unitType);
