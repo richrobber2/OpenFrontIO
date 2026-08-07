@@ -13,6 +13,7 @@ const HEIGHT = 7;
 const LAND = (1 << 7) | 1;
 const SHORE_LAND = (1 << 7) | (1 << 6) | 1;
 const SHORE_WATER = 1 << 6;
+const REPEATS = 8;
 
 function expectedPath(
   map: GameMapImpl,
@@ -23,7 +24,7 @@ function expectedPath(
 }
 
 describe("rail path TypeScript/WebAssembly parity", () => {
-  it("matches exact A* routes including multi-start and shoreline costs", async () => {
+  it("matches exact A* routes across repeated queries and multi-start", async () => {
     const wasmPath = path.resolve(
       path.dirname(fileURLToPath(import.meta.url)),
       "../../resources/wasm/openfront_wasm.wasm",
@@ -32,8 +33,6 @@ describe("rail path TypeScript/WebAssembly parity", () => {
     const module = await OpenFrontWasmModule.fromBytes(wasmBytes);
     const terrain = new Uint8Array(WIDTH * HEIGHT).fill(LAND);
 
-    // Add a short shoreline/water crossing and an open-water section that rail
-    // cannot cross. This exercises both water penalty and traversability rules.
     terrain[3 * WIDTH + 3] = SHORE_LAND;
     terrain[3 * WIDTH + 4] = SHORE_WATER;
     terrain[3 * WIDTH + 5] = SHORE_LAND;
@@ -57,10 +56,12 @@ describe("rail path TypeScript/WebAssembly parity", () => {
         { starts: [WIDTH * 6, WIDTH * 6 + 8], goal: 4 },
       ];
 
-      for (const { starts, goal } of cases) {
-        expect(Array.from(rustMap.railPath(Uint32Array.from(starts), goal))).toEqual(
-          expectedPath(typescriptMap, starts, goal),
-        );
+      for (let repeat = 0; repeat < REPEATS; repeat++) {
+        for (const { starts, goal } of cases) {
+          expect(
+            Array.from(rustMap.railPath(Uint32Array.from(starts), goal)),
+          ).toEqual(expectedPath(typescriptMap, starts, goal));
+        }
       }
 
       expect(Array.from(rustMap.railPath(new Uint32Array(), 0))).toEqual([]);
