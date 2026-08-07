@@ -59,8 +59,7 @@ impl StructureRenderState {
             if current == values.as_slice() {
                 return;
             }
-            self.packed[offset..offset + STRUCTURE_FLOATS_PER_INSTANCE]
-                .copy_from_slice(&values);
+            self.packed[offset..offset + STRUCTURE_FLOATS_PER_INSTANCE].copy_from_slice(&values);
             self.mark_dirty(slot, slot + 1);
             return;
         }
@@ -97,8 +96,7 @@ impl StructureRenderState {
         }
 
         self.slot_ids.pop();
-        self.packed
-            .truncate(last * STRUCTURE_FLOATS_PER_INSTANCE);
+        self.packed.truncate(last * STRUCTURE_FLOATS_PER_INSTANCE);
         true
     }
 
@@ -115,8 +113,7 @@ impl StructureRenderState {
     }
 
     pub fn dirty_slots(&self) -> Option<Range<usize>> {
-        self.dirty
-            .then_some(self.dirty_start..self.dirty_end)
+        self.dirty.then_some(self.dirty_start..self.dirty_end)
     }
 
     fn mark_dirty(&mut self, start: usize, end: usize) {
@@ -144,16 +141,16 @@ mod tests {
         }
         assert_eq!(state.len(), 1_200);
         assert_eq!(state.dirty_slots(), Some(0..1_200));
-        assert_eq!(
-            state.packed().len(),
-            1_200 * STRUCTURE_FLOATS_PER_INSTANCE
-        );
+        assert_eq!(state.packed().len(), 1_200 * STRUCTURE_FLOATS_PER_INSTANCE);
 
         state.begin_batch();
         state.upsert(777, 55.0, 66.0, 8, true, 4, false);
         assert_eq!(state.dirty_slots(), Some(777..778));
         let off = 777 * STRUCTURE_FLOATS_PER_INSTANCE;
-        assert_eq!(&state.packed()[off..off + 6], &[55.0, 66.0, 8.0, 1.0, 4.0, 0.0]);
+        assert_eq!(
+            &state.packed()[off..off + 6],
+            &[55.0, 66.0, 8.0, 1.0, 4.0, 0.0]
+        );
     }
 
     #[test]
