@@ -114,6 +114,11 @@ export class OpenFrontRustMap {
     return this.module.airPath(this.handle, from, to, seed);
   }
 
+  waterComponents(): Uint32Array {
+    this.assertLive();
+    return this.module.waterComponents(this.handle);
+  }
+
   railPath(starts: Uint32Array, goal: number): Uint32Array {
     this.assertLive();
     return this.module.railPath(this.handle, starts, goal);
