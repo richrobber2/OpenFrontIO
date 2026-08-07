@@ -28,6 +28,7 @@ run(npm, [
   "vitest",
   "run",
   "tests/rust/AirPathParity.test.ts",
+  "tests/rust/TerritoryAnalysisParity.test.ts",
 ]);
 run(npm, [
   "exec",
