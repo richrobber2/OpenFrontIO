@@ -69,6 +69,12 @@ export interface OpenFrontWasmExports extends WebAssembly.Exports {
     handle: number,
     maximumDepth: number,
   ): number;
+  openfront_map_air_path(
+    handle: number,
+    from: number,
+    to: number,
+    seed: number,
+  ): number;
   openfront_result_ptr(): number;
   openfront_result_len(): number;
 }
