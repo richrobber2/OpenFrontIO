@@ -118,6 +118,9 @@ The command builds WebAssembly and runs a 300-tick World game with 32 bots. Rust
 consumes every real packed map-update batch. At each full-map checkpoint the
 harness also chooses the largest current territory and compares Rust's
 multi-source owned-depth result against the existing TypeScript AI algorithm.
+The checkpoint output reports the elapsed time for both implementations, and the
+final summary reports total time, average query time, and the measured Rust
+speedup for the exact same owned-depth workloads.
 
 Longer runs can override the defaults:
 
@@ -146,7 +149,7 @@ mismatch exits nonzero with the first failing checkpoint and tile or counter.
 
 ## Next slice
 
-Measure the owned-depth query against the current TypeScript implementation,
-then route AI interior-building candidate generation through the Rust result
-behind an opt-in runtime flag. Rendering, networking, and authoritative
-simulation remain in TypeScript.
+Use the owned-depth benchmark to establish the crossover point where the WASM
+call is worthwhile, then route AI interior-building candidate generation through
+the Rust result behind an opt-in runtime flag. Rendering, networking, and
+authoritative simulation remain in TypeScript.
