@@ -214,6 +214,13 @@ export class OpenFrontWasmModule {
     return result;
   }
 
+  largestOwnedDepths(handle: number, maximumDepth: number): Uint32Array {
+    return this.runTileQuery(
+      () => this.wasm.openfront_map_largest_owned_depths(handle, maximumDepth),
+      "query largest owned interior depths",
+    );
+  }
+
   private uploadU32(values: Uint32Array): number {
     if (HOST_IS_LITTLE_ENDIAN) {
       return this.upload(
