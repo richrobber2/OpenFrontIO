@@ -85,6 +85,11 @@ export interface OpenFrontWasmExports extends WebAssembly.Exports {
     upload: number,
     goal: number,
   ): number;
+  openfront_map_water_path(
+    handle: number,
+    upload: number,
+    goal: number,
+  ): number;
   openfront_result_ptr(): number;
   openfront_result_len(): number;
 }
