@@ -163,7 +163,7 @@ pub extern "C" fn openfront_defense_index_assess_path(
     match result {
         Ok(assessment) => {
             set_result([
-                u32::from(assessment.blocked),
+                if assessment.blocked { 1 } else { 0 },
                 assessment.intercepting_defenses,
                 assessment.interception_capacity,
             ]);
