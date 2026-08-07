@@ -5,7 +5,8 @@
 //! into a reusable `u32` result buffer and exposed by pointer/length accessors.
 
 use openfront_core::{
-    GameMapError, GameMapStore, PackedTile, TileRef, TileStateError, WaterPathFinder,
+    GameMapError, GameMapStore, PackedTile, RailPathFinder, TileRef, TileStateError,
+    WaterPathFinder,
 };
 use std::cell::{Cell, RefCell};
 
@@ -29,10 +30,8 @@ pub enum ErrorCode {
 
 thread_local! {
     static MAPS: RefCell<Vec<Option<GameMapStore>>> = const { RefCell::new(Vec::new()) };
-    // Pathfinding scratch is indexed by map handle and persists for the map's
-    // lifetime. This mirrors the TypeScript pathfinder's reusable stamp arrays
-    // instead of allocating full-map buffers on every WASM query.
     static WATER_FINDERS: RefCell<Vec<Option<WaterPathFinder>>> = const { RefCell::new(Vec::new()) };
+    static RAIL_FINDERS: RefCell<Vec<Option<RailPathFinder>>> = const { RefCell::new(Vec::new()) };
     static UPLOADS: RefCell<Vec<Option<Vec<u8>>>> = const { RefCell::new(Vec::new()) };
     static RESULT: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
     static LAST_ERROR: Cell<u32> = const { Cell::new(ErrorCode::None as u32) };
