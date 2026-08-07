@@ -65,6 +65,47 @@ describe("defense index TypeScript/WebAssembly parity", () => {
     }
   });
 
+  it("preserves fractional upgraded SAM coverage at the range edge", async () => {
+    const module = await loadModule();
+    const handle = module.createDefenseIndex(4);
+    const fractionalDefense = [
+      {
+        id: 40,
+        x: 10,
+        y: 0,
+        range: 2.5,
+        availableInterceptions: 2,
+      },
+    ];
+    const fractionalPath = [{ x: 12, y: 1, blocked: false }];
+    try {
+      module.replaceDefenseIndex(handle, fractionalDefense);
+      const rust = module.assessDefensePath(
+        handle,
+        fractionalPath,
+        source,
+        destination,
+        20,
+      );
+      const typescript = assessStrategicRoute({
+        path: fractionalPath,
+        source,
+        destination,
+        targetableRange: 20,
+        sams: fractionalDefense,
+      });
+
+      expect(rust).toEqual({
+        blocked: typescript.blocked,
+        interceptingDefenses: typescript.interceptingSams,
+        interceptionCapacity: typescript.interceptionCapacity,
+      });
+      expect(rust.interceptionCapacity).toBe(2);
+    } finally {
+      module.destroyDefenseIndex(handle);
+    }
+  });
+
   it("matches early blocking and clears stale coverage on replacement", async () => {
     const module = await loadModule();
     const handle = module.createDefenseIndex(4);
