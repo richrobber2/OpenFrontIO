@@ -8,6 +8,11 @@ import {
   type OpenFrontWasmExports,
 } from "./OpenFrontWasmTypes";
 
+const HOST_IS_LITTLE_ENDIAN = (() => {
+  const word = new Uint32Array([0x01020304]);
+  return new Uint8Array(word.buffer)[0] === 0x04;
+})();
+
 export class OpenFrontWasmModule {
   private constructor(private readonly wasm: OpenFrontWasmExports) {
     const exportedVersion = this.wasm.openfront_abi_version() >>> 0;
@@ -41,8 +46,6 @@ export class OpenFrontWasmModule {
   static async fromBytes(
     bytes: Uint8Array<ArrayBufferLike>,
   ): Promise<OpenFrontWasmModule> {
-    // Node Buffers and SharedArrayBuffer-backed views use ArrayBufferLike,
-    // while WebAssembly.instantiate requires an ArrayBuffer-backed view.
     const ownedBytes = new Uint8Array(bytes);
     const source = await WebAssembly.instantiate(ownedBytes, {});
     return new OpenFrontWasmModule(
@@ -212,14 +215,16 @@ export class OpenFrontWasmModule {
   }
 
   private uploadU32(values: Uint32Array): number {
-    const bytes = new Uint8Array(values.length * Uint32Array.BYTES_PER_ELEMENT);
+    if (HOST_IS_LITTLE_ENDIAN) {
+      return this.upload(
+        new Uint8Array(values.buffer, values.byteOffset, values.byteLength),
+      );
+    }
+
+    const bytes = new Uint8Array(values.byteLength);
     const view = new DataView(bytes.buffer);
     for (let index = 0; index < values.length; index++) {
-      view.setUint32(
-        index * Uint32Array.BYTES_PER_ELEMENT,
-        values[index]!,
-        true,
-      );
+      view.setUint32(index * Uint32Array.BYTES_PER_ELEMENT, values[index]!, true);
     }
     return this.upload(bytes);
   }
@@ -234,9 +239,7 @@ export class OpenFrontWasmModule {
       this.throwLastError("locate upload buffer");
     }
 
-    new Uint8Array(this.wasm.memory.buffer, pointer, bytes.byteLength).set(
-      bytes,
-    );
+    new Uint8Array(this.wasm.memory.buffer, pointer, bytes.byteLength).set(bytes);
     return handle;
   }
 
