@@ -133,16 +133,24 @@ mod tests {
         let w = 5_u8;
         let map = GameMapStore::new(
             5,
-            3,
-            vec![w, w, l, w, w, w, l, l, l, w, w, w, l, w, w],
+            4,
+            vec![
+                w, w, l, w, w,
+                w, l, l, l, w,
+                l, l, l, l, l,
+                w, l, l, l, l,
+            ],
         )
         .unwrap();
         let components = ConnectedWaterComponents::build(&map).unwrap();
 
         assert_eq!(components.component_count(), 3);
-        assert_eq!(components.component_size(1), 5);
+        assert_eq!(components.component_size(1), 3);
         assert_eq!(components.component_size(2), 3);
-        assert_eq!(components.component_size(3), 2);
-        assert_eq!(components.component_id(TileRef::new(2)), Some(LAND_COMPONENT_MARKER));
+        assert_eq!(components.component_size(3), 1);
+        assert_eq!(
+            components.component_id(TileRef::new(2)),
+            Some(LAND_COMPONENT_MARKER),
+        );
     }
 }
