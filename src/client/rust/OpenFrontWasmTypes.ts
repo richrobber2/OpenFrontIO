@@ -23,6 +23,16 @@ export interface OpenFrontWasmExports extends WebAssembly.Exports {
   openfront_upload_destroy(handle: number): number;
   openfront_upload_ptr(handle: number): number;
   openfront_upload_len(handle: number): number;
+  openfront_graphics_terrain_rgba(
+    terrainUpload: number,
+    width: number,
+    height: number,
+    ocean: number,
+    sand: number,
+    plains: number,
+    highland: number,
+    mountain: number,
+  ): number;
   openfront_map_create(width: number, height: number, upload: number): number;
   openfront_map_destroy(handle: number): number;
   openfront_map_width(handle: number): number;
