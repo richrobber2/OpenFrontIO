@@ -35,6 +35,7 @@ run(npm, [
   "tests/rust/ConnectedComponentsParity.test.ts",
   "tests/rust/AbstractGraphParity.test.ts",
   "tests/rust/HierarchicalWaterPathParity.test.ts",
+  "tests/rust/DefenseIndexParity.test.ts",
   "tests/rust/LiveRailIntegration.test.ts",
   "tests/rust/LiveWaterIntegration.test.ts",
   "tests/rust/LiveHierarchicalWaterIntegration.test.ts",
