@@ -3,6 +3,8 @@ import type { UnitState } from "../types";
 export interface UnitRenderSubsets {
   readonly mobile: ReadonlyMap<number, UnitState>;
   readonly structures: ReadonlyMap<number, UnitState>;
+  readonly warships: ReadonlyMap<number, UnitState>;
+  readonly progressStructures: ReadonlyMap<number, UnitState>;
   readonly structureRevision: number;
 }
 
