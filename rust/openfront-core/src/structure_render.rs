@@ -56,7 +56,7 @@ impl StructureRenderState {
         if let Some(&slot) = self.id_to_slot.get(&id) {
             let offset = slot * STRUCTURE_FLOATS_PER_INSTANCE;
             let current = &self.packed[offset..offset + STRUCTURE_FLOATS_PER_INSTANCE];
-            if current == values {
+            if current == values.as_slice() {
                 return;
             }
             self.packed[offset..offset + STRUCTURE_FLOATS_PER_INSTANCE]
@@ -88,7 +88,8 @@ impl StructureRenderState {
             let src = last * STRUCTURE_FLOATS_PER_INSTANCE;
             let dst = slot * STRUCTURE_FLOATS_PER_INSTANCE;
             for lane in 0..STRUCTURE_FLOATS_PER_INSTANCE {
-                self.packed[dst + lane] = self.packed[src + lane];
+                let value = self.packed[src + lane];
+                self.packed[dst + lane] = value;
             }
             self.slot_ids[slot] = moved_id;
             self.id_to_slot.insert(moved_id, slot);
