@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { Config } from "../../src/core/configuration/Config";
 import { Executor } from "../../src/core/execution/ExecutionManager";
@@ -42,6 +43,8 @@ interface OwnedDepthCheck {
   ownerID: number;
   sources: number;
   reached: number;
+  typeScriptMs: number;
+  rustMs: number;
 }
 
 function positiveInteger(value: string, flag: string): number {
@@ -158,17 +161,23 @@ function verifyOwnedDepths(
   }
   if (borders.length === 0) return null;
 
+  const typeScriptStart = performance.now();
   const expected = ownedDepthPairs(
     map,
     borders,
     selectedOwner,
     OWNED_DEPTH_LIMIT,
   );
+  const typeScriptMs = performance.now() - typeScriptStart;
+
+  const rustStart = performance.now();
   const actual = shadow.ownedDepths(
     Uint32Array.from(borders),
     selectedOwner,
     OWNED_DEPTH_LIMIT,
   );
+  const rustMs = performance.now() - rustStart;
+
   if (actual.length !== expected.length) {
     throw new Error(
       `Rust owned-depth mismatch at ${checkpoint}: result length ` +
@@ -188,6 +197,8 @@ function verifyOwnedDepths(
     ownerID: selectedOwner,
     sources: borders.length,
     reached: actual.length / 2,
+    typeScriptMs,
+    rustMs,
   };
 }
 
@@ -264,6 +275,9 @@ async function main(): Promise<void> {
   let packedUpdates = 0;
   let ticksWithUpdates = 0;
   let ownedDepthChecks = 0;
+  let typeScriptDepthMs = 0;
+  let rustDepthMs = 0;
+  let depthTilesReached = 0;
 
   const runner = new GameRunner(
     game,
@@ -305,12 +319,19 @@ async function main(): Promise<void> {
         const checkpoint = `full checkpoint ${turnNumber + 1}`;
         shadow.assertFullParity(game.map(), checkpoint);
         const depthCheck = verifyOwnedDepths(game.map(), shadow, checkpoint);
-        if (depthCheck !== null) ownedDepthChecks++;
+        if (depthCheck !== null) {
+          ownedDepthChecks++;
+          typeScriptDepthMs += depthCheck.typeScriptMs;
+          rustDepthMs += depthCheck.rustMs;
+          depthTilesReached += depthCheck.reached;
+        }
         const depthSummary =
           depthCheck === null
             ? "no owned-depth territory available"
             : `owned-depth owner ${depthCheck.ownerID}: ` +
-              `${depthCheck.sources} borders, ${depthCheck.reached} tiles`;
+              `${depthCheck.sources} borders, ${depthCheck.reached} tiles, ` +
+              `TS ${depthCheck.typeScriptMs.toFixed(3)}ms, ` +
+              `Rust ${depthCheck.rustMs.toFixed(3)}ms`;
         console.log(
           `Checkpoint ${turnNumber + 1}/${options.ticks}: ` +
             `${packedUpdates} packed updates verified; ${depthSummary}`,
@@ -330,6 +351,19 @@ async function main(): Promise<void> {
       );
     }
 
+    const averageTypeScriptMs = typeScriptDepthMs / ownedDepthChecks;
+    const averageRustMs = rustDepthMs / ownedDepthChecks;
+    const rustSpeedup =
+      rustDepthMs > 0 ? typeScriptDepthMs / rustDepthMs : Number.POSITIVE_INFINITY;
+    console.log(
+      `Owned-depth benchmark: ${ownedDepthChecks} queries, ` +
+        `${depthTilesReached} total reached tiles; ` +
+        `TS ${typeScriptDepthMs.toFixed(3)}ms total ` +
+        `(${averageTypeScriptMs.toFixed(3)}ms avg), ` +
+        `Rust ${rustDepthMs.toFixed(3)}ms total ` +
+        `(${averageRustMs.toFixed(3)}ms avg), ` +
+        `${rustSpeedup.toFixed(2)}x Rust/TS speed ratio.`,
+    );
     console.log(
       `Rust shadow game passed: ${options.ticks} ticks, ` +
         `${packedUpdates} packed updates across ${ticksWithUpdates} ticks, ` +
