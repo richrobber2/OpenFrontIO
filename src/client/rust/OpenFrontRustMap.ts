@@ -51,6 +51,11 @@ export class OpenFrontRustMap {
     return this.module.waterComponents(this.handle);
   }
 
+  abstractGraphSnapshot(clusterSize: number): Uint32Array {
+    this.assertLive();
+    return this.module.abstractGraphSnapshot(this.handle, clusterSize);
+  }
+
   railPath(starts: Uint32Array, goal: number): Uint32Array {
     this.assertLive();
     return this.module.railPath(this.handle, starts, goal);
