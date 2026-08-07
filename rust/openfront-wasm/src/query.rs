@@ -206,15 +206,11 @@ pub extern "C" fn openfront_map_largest_owned_depths(
                 continue;
             }
             let neighbors = map.neighbors4(tile)?;
-            if neighbors
-                .as_slice()
-                .iter()
-                .any(|neighbor| {
-                    map.state(*neighbor)
-                        .map(|state| state.owner_id() != selected_owner)
-                        .unwrap_or(false)
-                })
-            {
+            if neighbors.as_slice().iter().any(|neighbor| {
+                map.state(*neighbor)
+                    .map(|state| state.owner_id() != selected_owner)
+                    .unwrap_or(false)
+            }) {
                 borders.push(tile);
             }
         }
@@ -245,6 +241,39 @@ pub extern "C" fn openfront_map_largest_owned_depths(
         }
         Err(error) => {
             fail(map_error(error));
+            0
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn openfront_map_air_path(
+    handle: u32,
+    from: u32,
+    to: u32,
+    seed: u32,
+) -> u32 {
+    begin_call();
+
+    let Some(result) = with_map(handle, |map| {
+        openfront_core::air_path(
+            map.geometry(),
+            TileRef::new(from),
+            TileRef::new(to),
+            seed as i32,
+        )
+    }) else {
+        fail(ErrorCode::InvalidHandle);
+        return 0;
+    };
+
+    match result {
+        Ok(path) => {
+            set_result(path.into_iter().map(TileRef::get));
+            1
+        }
+        Err(_) => {
+            fail(ErrorCode::InvalidTile);
             0
         }
     }
