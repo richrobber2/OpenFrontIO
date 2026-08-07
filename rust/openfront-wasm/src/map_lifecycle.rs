@@ -24,6 +24,13 @@ pub extern "C" fn openfront_map_create(width: u32, height: u32, upload_handle: u
                 }
                 finders[index] = Some(WaterPathFinder::new(tile_count));
             });
+            RAIL_FINDERS.with(|finders| {
+                let mut finders = finders.borrow_mut();
+                if finders.len() <= index {
+                    finders.resize_with(index + 1, || None);
+                }
+                finders[index] = Some(RailPathFinder::new(width, height));
+            });
             handle
         }
         Err(error) => {
@@ -42,6 +49,10 @@ pub extern "C" fn openfront_map_destroy(handle: u32) -> u32 {
     });
     if removed {
         WATER_FINDERS.with(|finders| {
+            let mut finders = finders.borrow_mut();
+            let _ = remove_slot(finders.as_mut_slice(), handle);
+        });
+        RAIL_FINDERS.with(|finders| {
             let mut finders = finders.borrow_mut();
             let _ = remove_slot(finders.as_mut_slice(), handle);
         });
