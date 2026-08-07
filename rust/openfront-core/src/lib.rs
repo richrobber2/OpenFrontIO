@@ -29,7 +29,8 @@ pub use bfs_grid::{BfsGrid, BfsVisit};
 pub use connected_components::{ConnectedWaterComponents, LAND_COMPONENT_MARKER};
 pub use geometry::{Coord, GridError, GridGeometry, NeighborRefs, TileRef};
 pub use graphics::{
-    build_terrain_rgba, encode_terrain_rgba, TerrainGraphicsError, TerrainPalette,
+    build_terrain_rgba, build_terrain_rgba_in_place, encode_terrain_rgba,
+    TerrainGraphicsError, TerrainPalette,
 };
 pub use hierarchical_water::HierarchicalWaterPathFinder;
 pub use map::{GameMapError, GameMapStore};
