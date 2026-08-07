@@ -2,6 +2,7 @@ import { assetUrl } from "../AssetUrls";
 import { FetchGameMapLoader } from "../game/FetchGameMapLoader";
 import { ErrorUpdate, GameUpdateViewData } from "../game/GameUpdates";
 import { createGameRunner, GameRunner } from "../GameRunner";
+import { initializeRustPathfinding } from "../rust/RustPathfindingService";
 import {
   AttackClusteredPositionsResultMessage,
   InitializedMessage,
@@ -151,7 +152,11 @@ ctx.addEventListener("message", async (e: MessageEvent<MainThreadMessage>) => {
           message.clientID,
           mapLoader,
           gameUpdate,
-        ).then((gr) => {
+        ).then(async (gr) => {
+          await initializeRustPathfinding(
+            gr.game,
+            assetUrl("wasm/openfront_wasm.wasm"),
+          );
           sendMessage({
             type: "initialized",
             id: message.id,
