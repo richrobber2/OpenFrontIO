@@ -134,12 +134,7 @@ mod tests {
         let map = GameMapStore::new(
             5,
             4,
-            vec![
-                w, w, l, w, w,
-                w, l, l, l, w,
-                l, l, l, l, l,
-                w, l, l, l, l,
-            ],
+            vec![w, w, l, w, w, w, l, l, l, w, l, l, l, l, l, w, l, l, l, l],
         )
         .unwrap();
         let components = ConnectedWaterComponents::build(&map).unwrap();

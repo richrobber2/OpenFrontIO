@@ -208,7 +208,8 @@ impl WaterPathFinder {
                     let h = this.heuristic_weight
                         * BASE_COST
                         * (nx.abs_diff(goal_coord.x) + ny.abs_diff(goal_coord.y));
-                    this.heap.push(neighbor, tentative_g + h + cross_tie(nx, ny));
+                    this.heap
+                        .push(neighbor, tentative_g + h + cross_tie(nx, ny));
                 }
             };
 

@@ -6,8 +6,8 @@
 
 use openfront_core::{
     build_terrain_rgba_in_place, BoundedWaterPathFinder, GameMapError, GameMapStore,
-    HierarchicalWaterPathFinder, PackedTile, RailPathFinder, TerrainGraphicsError,
-    TerrainPalette, TileRef, TileStateError, WaterPathFinder, DEFAULT_CLUSTER_SIZE,
+    HierarchicalWaterPathFinder, PackedTile, RailPathFinder, TerrainGraphicsError, TerrainPalette,
+    TileRef, TileStateError, WaterPathFinder, DEFAULT_CLUSTER_SIZE,
 };
 use std::cell::{Cell, RefCell};
 

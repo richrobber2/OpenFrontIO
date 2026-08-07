@@ -101,7 +101,10 @@ impl HierarchicalWaterPathFinder {
         else {
             return Ok(None);
         };
-        let Some(winning_source) = node_path.first().and_then(|id| node_to_source.get(id)).copied()
+        let Some(winning_source) = node_path
+            .first()
+            .and_then(|id| node_to_source.get(id))
+            .copied()
         else {
             return Ok(None);
         };
@@ -191,9 +194,9 @@ impl HierarchicalWaterPathFinder {
             );
         }
 
-        let Some(node_path) = self
-            .abstract_astar
-            .find_path(&self.graph, &[start_node.id], end_node.id)
+        let Some(node_path) =
+            self.abstract_astar
+                .find_path(&self.graph, &[start_node.id], end_node.id)
         else {
             return Ok(None);
         };
@@ -209,7 +212,8 @@ impl HierarchicalWaterPathFinder {
             fx / cluster_size,
             fy / cluster_size,
             false,
-        )? else {
+        )?
+        else {
             return Ok(None);
         };
 
@@ -226,7 +230,8 @@ impl HierarchicalWaterPathFinder {
                 edge.cluster_x,
                 edge.cluster_y,
                 false,
-            )? else {
+            )?
+            else {
                 return Ok(None);
             };
             path.extend(segment.into_iter().skip(1));
@@ -243,7 +248,8 @@ impl HierarchicalWaterPathFinder {
             tx / cluster_size,
             ty / cluster_size,
             false,
-        )? else {
+        )?
+        else {
             return Ok(None);
         };
         path.extend(end_segment.into_iter().skip(1));
@@ -264,7 +270,9 @@ impl HierarchicalWaterPathFinder {
         if candidates.is_empty() {
             return None;
         }
-        let max_distance = cluster_size.saturating_mul(cluster_size).min(u16::MAX as u32) as u16;
+        let max_distance = cluster_size
+            .saturating_mul(cluster_size)
+            .min(u16::MAX as u32) as u16;
         let width = map.width();
         let height = map.height();
         let terrain = map.terrain_buffer();
@@ -382,7 +390,9 @@ mod tests {
         let path = finder.find_path(&map, &[start], goal).unwrap().unwrap();
         assert_eq!(path.first(), Some(&start));
         assert_eq!(path.last(), Some(&goal));
-        assert!(path.iter().all(|tile| *tile == goal || !map.terrain(*tile).unwrap().is_land()));
+        assert!(path
+            .iter()
+            .all(|tile| *tile == goal || !map.terrain(*tile).unwrap().is_land()));
     }
 
     #[test]

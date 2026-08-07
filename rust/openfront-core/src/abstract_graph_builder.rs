@@ -39,9 +39,7 @@ impl AbstractGraphBuilder {
                 x,
                 y,
                 tile,
-                component_id: u32::from(
-                    components.component_id(TileRef::new(tile)).unwrap_or(0),
-                ),
+                component_id: u32::from(components.component_id(TileRef::new(tile)).unwrap_or(0)),
             };
             next_node_id += 1;
             tile_to_node.insert(tile, node);
@@ -85,12 +83,7 @@ impl AbstractGraphBuilder {
                                 span_start = Some(y);
                             }
                         } else {
-                            finish_span(
-                                &mut span_start,
-                                y,
-                                &mut cluster_nodes,
-                                &mut get_or_create,
-                            );
+                            finish_span(&mut span_start, y, &mut cluster_nodes, &mut get_or_create);
                         }
                     }
                     finish_span(
@@ -133,12 +126,7 @@ impl AbstractGraphBuilder {
                                 span_start = Some(x);
                             }
                         } else {
-                            finish_span(
-                                &mut span_start,
-                                x,
-                                &mut cluster_nodes,
-                                &mut get_or_create,
-                            );
+                            finish_span(&mut span_start, x, &mut cluster_nodes, &mut get_or_create);
                         }
                     }
                     finish_span(
@@ -174,7 +162,9 @@ impl AbstractGraphBuilder {
 
         for cy in 0..clusters_y {
             for cx in 0..clusters_x {
-                let Some(cluster) = graph.cluster(cx, cy) else { continue; };
+                let Some(cluster) = graph.cluster(cx, cy) else {
+                    continue;
+                };
                 let node_ids = cluster.node_ids.clone();
                 if node_ids.is_empty() {
                     continue;
@@ -216,7 +206,8 @@ impl AbstractGraphBuilder {
                         |tile, dist| {
                             let x = tile % width;
                             let y = tile / width;
-                            let is_start_or_target = tile == from.tile || target_by_tile.contains_key(&tile);
+                            let is_start_or_target =
+                                tile == from.tile || target_by_tile.contains_key(&tile);
                             if !is_start_or_target
                                 && (x < min_x || x > max_x || y < min_y || y > max_y)
                             {

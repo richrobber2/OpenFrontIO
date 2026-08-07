@@ -29,11 +29,11 @@ impl GameMapStore {
                 continue;
             }
             let neighbors = self.neighbors4(tile)?;
-            if neighbors
-                .as_slice()
-                .iter()
-                .any(|neighbor| self.state(*neighbor).map(|state| state.owner_id() != owner_id).unwrap_or(false))
-            {
+            if neighbors.as_slice().iter().any(|neighbor| {
+                self.state(*neighbor)
+                    .map(|state| state.owner_id() != owner_id)
+                    .unwrap_or(false)
+            }) {
                 borders.push(tile);
             }
         }
@@ -56,11 +56,11 @@ impl GameMapStore {
             }
             tile_count += 1;
             let neighbors = self.neighbors4(tile)?;
-            if neighbors
-                .as_slice()
-                .iter()
-                .any(|neighbor| self.state(*neighbor).map(|state| state.owner_id() != owner_id).unwrap_or(false))
-            {
+            if neighbors.as_slice().iter().any(|neighbor| {
+                self.state(*neighbor)
+                    .map(|state| state.owner_id() != owner_id)
+                    .unwrap_or(false)
+            }) {
                 borders.push(tile);
             }
         }
@@ -101,7 +101,10 @@ mod tests {
         assert_eq!(analysis.tile_count, 12);
         assert!(!analysis.borders.is_empty());
         assert_eq!(analysis.depths.first().map(|entry| entry.1), Some(0));
-        assert!(analysis.depths.iter().all(|(t, _)| map.state(*t).unwrap().owner_id() == 7));
+        assert!(analysis
+            .depths
+            .iter()
+            .all(|(t, _)| map.state(*t).unwrap().owner_id() == 7));
     }
 
     #[test]

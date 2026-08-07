@@ -338,7 +338,7 @@ mod tests {
 
     fn graph() -> AbstractGraph {
         let mut graph = AbstractGraph::new(32, 2, 1);
-        for (id, x) in [0_u32, 10, 20, 30] .into_iter().enumerate() {
+        for (id, x) in [0_u32, 10, 20, 30].into_iter().enumerate() {
             graph.add_node(AbstractNode {
                 id: id as u32,
                 x,
@@ -347,10 +347,38 @@ mod tests {
                 component_id: 1,
             });
         }
-        graph.add_edge(AbstractEdge { id: 0, node_a: 0, node_b: 1, cost: 10.0, cluster_x: 0, cluster_y: 0 });
-        graph.add_edge(AbstractEdge { id: 1, node_a: 1, node_b: 2, cost: 10.0, cluster_x: 0, cluster_y: 0 });
-        graph.add_edge(AbstractEdge { id: 2, node_a: 2, node_b: 3, cost: 10.0, cluster_x: 1, cluster_y: 0 });
-        graph.add_edge(AbstractEdge { id: 3, node_a: 0, node_b: 3, cost: 100.0, cluster_x: 0, cluster_y: 0 });
+        graph.add_edge(AbstractEdge {
+            id: 0,
+            node_a: 0,
+            node_b: 1,
+            cost: 10.0,
+            cluster_x: 0,
+            cluster_y: 0,
+        });
+        graph.add_edge(AbstractEdge {
+            id: 1,
+            node_a: 1,
+            node_b: 2,
+            cost: 10.0,
+            cluster_x: 0,
+            cluster_y: 0,
+        });
+        graph.add_edge(AbstractEdge {
+            id: 2,
+            node_a: 2,
+            node_b: 3,
+            cost: 10.0,
+            cluster_x: 1,
+            cluster_y: 0,
+        });
+        graph.add_edge(AbstractEdge {
+            id: 3,
+            node_a: 0,
+            node_b: 3,
+            cost: 100.0,
+            cluster_x: 0,
+            cluster_y: 0,
+        });
         graph
     }
 

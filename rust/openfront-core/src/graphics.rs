@@ -153,14 +153,26 @@ mod tests {
     fn matches_renderer_terrain_branches() {
         assert_eq!(encode_terrain_rgba(0, PALETTE), [71, 133, 181, 255]);
         assert_eq!(encode_terrain_rgba(10, PALETTE), [61, 123, 171, 255]);
-        assert_eq!(encode_terrain_rgba(SHORELINE_MASK, PALETTE), [126, 170, 203, 255]);
+        assert_eq!(
+            encode_terrain_rgba(SHORELINE_MASK, PALETTE),
+            [126, 170, 203, 255]
+        );
         assert_eq!(
             encode_terrain_rgba(LAND_MASK | SHORELINE_MASK, PALETTE),
             [204, 203, 158, 255]
         );
-        assert_eq!(encode_terrain_rgba(LAND_MASK | 5, PALETTE), [190, 210, 138, 255]);
-        assert_eq!(encode_terrain_rgba(LAND_MASK | 15, PALETTE), [230, 213, 168, 255]);
-        assert_eq!(encode_terrain_rgba(LAND_MASK | 20, PALETTE), [240, 240, 240, 255]);
+        assert_eq!(
+            encode_terrain_rgba(LAND_MASK | 5, PALETTE),
+            [190, 210, 138, 255]
+        );
+        assert_eq!(
+            encode_terrain_rgba(LAND_MASK | 15, PALETTE),
+            [230, 213, 168, 255]
+        );
+        assert_eq!(
+            encode_terrain_rgba(LAND_MASK | 20, PALETTE),
+            [240, 240, 240, 255]
+        );
         assert_eq!(
             encode_terrain_rgba(LAND_MASK | IMPASSABLE_MAGNITUDE, PALETTE),
             [60, 60, 60, 255]
@@ -173,7 +185,10 @@ mod tests {
             plains: [0, 0, 0],
             ..PALETTE
         };
-        assert_eq!(encode_terrain_rgba(LAND_MASK | 9, palette), [0, 238, 0, 255]);
+        assert_eq!(
+            encode_terrain_rgba(LAND_MASK | 9, palette),
+            [0, 238, 0, 255]
+        );
     }
 
     #[test]

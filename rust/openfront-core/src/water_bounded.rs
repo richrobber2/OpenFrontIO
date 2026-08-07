@@ -196,7 +196,11 @@ impl BoundedWaterPathFinder {
         let bounds_height = bounds.max_y - bounds.min_y + 1;
         let num_local_nodes = usize::try_from(bounds_width)
             .ok()
-            .and_then(|w| usize::try_from(bounds_height).ok().and_then(|h| w.checked_mul(h)))
+            .and_then(|w| {
+                usize::try_from(bounds_height)
+                    .ok()
+                    .and_then(|h| w.checked_mul(h))
+            })
             .unwrap_or(usize::MAX);
         if num_local_nodes > self.closed_stamp.len() {
             return Ok(None);
@@ -229,9 +233,7 @@ impl BoundedWaterPathFinder {
         let to_global = |local: u32| -> TileRef {
             let local_x = local % bounds_width;
             let local_y = local / bounds_width;
-            TileRef::new(
-                (local_y + bounds.min_y) * map_width + (local_x + bounds.min_x),
-            )
+            TileRef::new((local_y + bounds.min_y) * map_width + (local_x + bounds.min_x))
         };
 
         let goal_local = to_local(goal, true);
@@ -264,9 +266,7 @@ impl BoundedWaterPathFinder {
             self.came_from[start_local] = -1;
             let sx = start.get() % map_width;
             let sy = start.get() / map_width;
-            let h = self.heuristic_weight
-                * BASE_COST
-                * (sx.abs_diff(goal_x) + sy.abs_diff(goal_y));
+            let h = self.heuristic_weight * BASE_COST * (sx.abs_diff(goal_x) + sy.abs_diff(goal_y));
             self.heap.push(start_local as u32, h);
         }
 
@@ -284,7 +284,11 @@ impl BoundedWaterPathFinder {
             }
             self.closed_stamp[current_index] = stamp;
             if current_local == goal_local {
-                return Ok(Some(self.build_path(goal_local, &to_global, num_local_nodes)));
+                return Ok(Some(self.build_path(
+                    goal_local,
+                    &to_global,
+                    num_local_nodes,
+                )));
             }
 
             let current = to_global(current_local);
@@ -292,11 +296,7 @@ impl BoundedWaterPathFinder {
             let current_y = current.get() / map_width;
             let current_g = self.g_score[current_index];
 
-            let visit = |neighbor: u32,
-                         neighbor_local: u32,
-                         nx: u32,
-                         ny: u32,
-                         this: &mut Self| {
+            let visit = |neighbor: u32, neighbor_local: u32, nx: u32, ny: u32, this: &mut Self| {
                 let local_index = neighbor_local as usize;
                 if this.closed_stamp[local_index] == stamp {
                     return;
@@ -305,9 +305,8 @@ impl BoundedWaterPathFinder {
                 if neighbor != goal.get() && neighbor_terrain.is_land() {
                     return;
                 }
-                let tentative_g = current_g
-                    + BASE_COST
-                    + magnitude_penalty(neighbor_terrain.magnitude());
+                let tentative_g =
+                    current_g + BASE_COST + magnitude_penalty(neighbor_terrain.magnitude());
                 if this.g_score_stamp[local_index] != stamp
                     || tentative_g < this.g_score[local_index]
                 {

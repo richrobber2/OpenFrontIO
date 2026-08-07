@@ -138,7 +138,13 @@ mod tests {
             &[8],
             1,
             |_| true,
-            |node, _| if node == 5 { BfsVisit::Found(node) } else { BfsVisit::Continue },
+            |node, _| {
+                if node == 5 {
+                    BfsVisit::Found(node)
+                } else {
+                    BfsVisit::Continue
+                }
+            },
         );
         assert_eq!(second, Some(5));
     }
@@ -155,7 +161,11 @@ mod tests {
             |_| true,
             |node, _| {
                 seen.push(node);
-                if node == 1 { BfsVisit::<u32>::Reject } else { BfsVisit::Continue }
+                if node == 1 {
+                    BfsVisit::<u32>::Reject
+                } else {
+                    BfsVisit::Continue
+                }
             },
         );
         assert!(seen.contains(&4));
