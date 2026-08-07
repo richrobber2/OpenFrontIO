@@ -1,3 +1,5 @@
+import { assessStrategicRouteRust } from "../rust/OpenFrontWasmDefense";
+
 export type StrategicWeaponKind = "nuke" | "mirv";
 
 export interface StrategicStrikeContext {
@@ -173,7 +175,9 @@ export function planStrategicCapability(
 /**
  * Evaluates the exact engine-produced parabolic path. SAMs can only target the
  * portion within range of the source or destination; impassable terrain blocks
- * the entire trajectory, including its untargetable middle.
+ * the entire trajectory, including its untargetable middle. Browser callers
+ * use the persistent Rust spatial index once its Wasm module is ready; tests,
+ * headless runs, and load failures retain this exact TypeScript fallback.
  */
 export function assessStrategicRoute({
   path,
@@ -188,6 +192,15 @@ export function assessStrategicRoute({
   targetableRange: number;
   sams: readonly StrategicRouteSam[];
 }): StrategicRouteAssessment {
+  const rust = assessStrategicRouteRust({
+    path,
+    source,
+    destination,
+    targetableRange,
+    sams,
+  });
+  if (rust !== null) return rust;
+
   const rangeSquared = targetableRange ** 2;
   const intercepting = new Map<number, number>();
   const distanceSquared = (
