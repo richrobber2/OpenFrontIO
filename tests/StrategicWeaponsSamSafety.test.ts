@@ -1,11 +1,38 @@
-import { describe, expect, it } from "vitest";
+// @vitest-environment node
+
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   assessStrategicRoute,
   assessStrategicStrike,
 } from "../src/client/ai/StrategicWeaponsPolicy";
+import {
+  isRustDefenseIndexReady,
+  preloadRustDefenseIndex,
+} from "../src/client/rust/OpenFrontWasmDefense";
+import { OpenFrontWasmModule } from "../src/client/rust/OpenFrontWasmModule";
+
+async function loadDefenseModule(): Promise<OpenFrontWasmModule> {
+  const wasmPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../resources/wasm/openfront_wasm.wasm",
+  );
+  return OpenFrontWasmModule.fromBytes(
+    new Uint8Array(await readFile(wasmPath)),
+  );
+}
 
 describe("strategic weapons against upgraded SAMs", () => {
-  it("counts every ready interception slot on an upgraded SAM route", () => {
+  beforeAll(async () => {
+    await preloadRustDefenseIndex(loadDefenseModule);
+    expect(isRustDefenseIndexReady()).toBe(true);
+  });
+
+  it("counts every ready interception slot on an upgraded SAM route in Rust", () => {
+    expect(isRustDefenseIndexReady()).toBe(true);
+
     const route = assessStrategicRoute({
       path: [
         { x: 0, y: 0, blocked: false },
