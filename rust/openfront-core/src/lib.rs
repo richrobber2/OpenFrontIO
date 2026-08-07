@@ -14,6 +14,7 @@ pub mod hierarchical_water;
 pub mod map;
 pub mod rail_path;
 pub mod random;
+pub mod structure_render;
 pub mod territory;
 pub mod tile;
 pub mod traversal;
@@ -35,6 +36,7 @@ pub use hierarchical_water::HierarchicalWaterPathFinder;
 pub use map::{GameMapError, GameMapStore};
 pub use rail_path::{rail_path, RailPathFinder};
 pub use random::PseudoRandom;
+pub use structure_render::{StructureRenderState, STRUCTURE_FLOATS_PER_INSTANCE};
 pub use territory::OwnerTerritoryAnalysis;
 pub use tile::{
     apply_packed_update, PackedTile, Terrain, TerrainType, TileState, TileStateError,
