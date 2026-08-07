@@ -135,6 +135,7 @@ include!("upload.rs");
 include!("map_lifecycle.rs");
 include!("map_mutation.rs");
 include!("query.rs");
+include!("components_query.rs");
 include!("rail_query.rs");
 include!("water_query.rs");
 include!("tests.rs");
