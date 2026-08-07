@@ -159,6 +159,97 @@ pub extern "C" fn openfront_map_owned_depths(
     }
 }
 
+/// Performs the whole production-shaped interior-depth preparation in Rust:
+/// count territories, select the largest owner in tile-scan insertion order,
+/// discover that owner's border tiles, and run the multi-source depth search.
+///
+/// Result layout is `[owner_id, border_count, tile, depth, tile, depth, ...]`.
+#[unsafe(no_mangle)]
+pub extern "C" fn openfront_map_largest_owned_depths(
+    handle: u32,
+    maximum_depth: u32,
+) -> u32 {
+    begin_call();
+
+    let Some(result) = with_map(handle, |map| -> Result<Vec<u32>, GameMapError> {
+        let mut owner_counts = vec![0_u32; usize::from(openfront_core::OWNER_ID_MASK) + 1];
+        for tile in map.tiles() {
+            let owner_id = usize::from(map.state(tile)?.owner_id());
+            if owner_id != 0 {
+                owner_counts[owner_id] += 1;
+            }
+        }
+
+        let mut selected_owner = 0_u16;
+        let mut selected_tiles = 0_u32;
+        let mut owner_seen = vec![false; owner_counts.len()];
+        for tile in map.tiles() {
+            let owner_id = map.state(tile)?.owner_id();
+            if owner_id == 0 || owner_seen[usize::from(owner_id)] {
+                continue;
+            }
+            owner_seen[usize::from(owner_id)] = true;
+            let count = owner_counts[usize::from(owner_id)];
+            if count > selected_tiles {
+                selected_owner = owner_id;
+                selected_tiles = count;
+            }
+        }
+
+        if selected_owner == 0 {
+            return Ok(vec![0, 0]);
+        }
+
+        let mut borders = Vec::new();
+        for tile in map.tiles() {
+            if map.state(tile)?.owner_id() != selected_owner {
+                continue;
+            }
+            let neighbors = map.neighbors4(tile)?;
+            if neighbors
+                .as_slice()
+                .iter()
+                .any(|neighbor| {
+                    map.state(*neighbor)
+                        .map(|state| state.owner_id() != selected_owner)
+                        .unwrap_or(false)
+                })
+            {
+                borders.push(tile);
+            }
+        }
+
+        if borders.is_empty() {
+            return Ok(vec![u32::from(selected_owner), 0]);
+        }
+
+        let depths = map.owned_depths(&borders, selected_owner, maximum_depth)?;
+        let mut output = Vec::with_capacity(2 + depths.len() * 2);
+        output.push(u32::from(selected_owner));
+        output.push(borders.len() as u32);
+        output.extend(
+            depths
+                .into_iter()
+                .flat_map(|(tile, depth)| [tile.get(), depth]),
+        );
+        Ok(output)
+    }) else {
+        fail(ErrorCode::InvalidHandle);
+        return 0;
+    };
+
+    match result {
+        Ok(values) => {
+            set_result(values);
+            1
+        }
+        Err(error) => {
+            fail(map_error(error));
+            0
+        }
+    }
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn openfront_result_ptr() -> u32 {
     RESULT.with(|result| result.borrow().as_ptr() as usize as u32)
