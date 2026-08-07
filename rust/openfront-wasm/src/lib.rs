@@ -2,7 +2,7 @@
 //!
 //! JavaScript uploads byte buffers directly into WebAssembly linear memory,
 //! while Rust retains ownership of every allocation. Query results are copied
-//! into a reusable `u32` result buffer and exposed by pointer/length accessors.
+//! into reusable result buffers and exposed by pointer/length accessors.
 
 use openfront_core::{
     build_terrain_rgba_in_place, BoundedWaterPathFinder, GameMapError, GameMapStore,
@@ -31,6 +31,7 @@ pub enum ErrorCode {
     DefenseRecordLengthMismatch = 11,
     PathRecordLengthMismatch = 12,
     InvalidCellSize = 13,
+    TrajectoryRecordLengthMismatch = 14,
     InternalInvariant = 255,
 }
 
@@ -44,6 +45,7 @@ thread_local! {
     static STRUCTURE_RENDERERS: RefCell<Vec<Option<WasmStructureRenderer>>> = const { RefCell::new(Vec::new()) };
     static UPLOADS: RefCell<Vec<Option<Vec<u8>>>> = const { RefCell::new(Vec::new()) };
     static RESULT: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
+    static RESULT_F64: RefCell<Vec<f64>> = const { RefCell::new(Vec::new()) };
     static LAST_ERROR: Cell<u32> = const { Cell::new(ErrorCode::None as u32) };
 }
 
@@ -118,6 +120,14 @@ fn set_result(values: impl IntoIterator<Item = u32>) {
     });
 }
 
+fn set_f64_result(values: impl IntoIterator<Item = f64>) {
+    RESULT_F64.with(|result| {
+        let mut result = result.borrow_mut();
+        result.clear();
+        result.extend(values);
+    });
+}
+
 fn query_tiles(
     map_handle: u32,
     query: impl FnOnce(&GameMapStore) -> Result<Vec<TileRef>, GameMapError>,
@@ -155,4 +165,5 @@ include!("water_query.rs");
 include!("hierarchical_water_query.rs");
 include!("bounded_water_query.rs");
 include!("defense_query.rs");
+include!("trajectory.rs");
 include!("tests.rs");
