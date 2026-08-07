@@ -9,6 +9,7 @@ interface RustPathfindingState {
   map: OpenFrontRustMap;
   landCount: number;
   railQueries: number;
+  waterQueries: number;
   waterRefinementQueries: number;
   rebuilds: number;
   failures: number;
@@ -39,6 +40,7 @@ function install(game: Game, module: OpenFrontWasmModule): void {
     map: createRustMap(module, miniMap),
     landCount: miniMap.numLandTiles(),
     railQueries: 0,
+    waterQueries: 0,
     waterRefinementQueries: 0,
     rebuilds: 0,
     failures: 0,
@@ -131,6 +133,35 @@ export function rustRailPath(
   }
 }
 
+/** Rust-first flat water A* with the same undefined-on-failure fallback contract. */
+export function rustWaterPath(
+  game: Game,
+  starts: readonly TileRef[],
+  goal: TileRef,
+): TileRef[] | undefined {
+  const state = states.get(game);
+  if (!state) return undefined;
+
+  try {
+    ensureFresh(game, state);
+    const path = state.map.waterPath(Uint32Array.from(starts), goal);
+    state.waterQueries++;
+    if (state.waterQueries === 1) {
+      console.info("[RustPathfinding] first live simple water query executed in Rust");
+    }
+    return Array.from(path) as TileRef[];
+  } catch (error) {
+    state.failures++;
+    if (state.failures <= 3) {
+      console.warn(
+        `[RustPathfinding] simple water query failed; falling back to TypeScript (failure ${state.failures})`,
+        error,
+      );
+    }
+    return undefined;
+  }
+}
+
 /**
  * Runs the bounded local water A* used by endpoint smoothing in Rust. This is
  * deliberately narrower than replacing the full HPA chain: the existing
@@ -175,6 +206,7 @@ export function rustBoundedWaterPath(
 export interface RustPathfindingStats {
   enabled: boolean;
   railQueries: number;
+  waterQueries: number;
   waterRefinementQueries: number;
   rebuilds: number;
   failures: number;
@@ -186,6 +218,7 @@ export function rustPathfindingStats(game: Game): RustPathfindingStats {
     ? {
         enabled: true,
         railQueries: state.railQueries,
+        waterQueries: state.waterQueries,
         waterRefinementQueries: state.waterRefinementQueries,
         rebuilds: state.rebuilds,
         failures: state.failures,
@@ -193,6 +226,7 @@ export function rustPathfindingStats(game: Game): RustPathfindingStats {
     : {
         enabled: false,
         railQueries: 0,
+        waterQueries: 0,
         waterRefinementQueries: 0,
         rebuilds: 0,
         failures: 0,
