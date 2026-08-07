@@ -1,3 +1,4 @@
+import type { RustSearchBounds } from "../../client/rust/OpenFrontWasmModule";
 import { OpenFrontWasmModule } from "../../client/rust/OpenFrontWasmModule";
 import type { OpenFrontRustMap } from "../../client/rust/OpenFrontRustMap";
 import type { Game } from "../game/Game";
@@ -8,6 +9,7 @@ interface RustPathfindingState {
   map: OpenFrontRustMap;
   landCount: number;
   railQueries: number;
+  waterRefinementQueries: number;
   rebuilds: number;
   failures: number;
 }
@@ -37,6 +39,7 @@ function install(game: Game, module: OpenFrontWasmModule): void {
     map: createRustMap(module, miniMap),
     landCount: miniMap.numLandTiles(),
     railQueries: 0,
+    waterRefinementQueries: 0,
     rebuilds: 0,
     failures: 0,
   });
@@ -59,12 +62,12 @@ export async function initializeRustPathfinding(
     install(game, module);
     const miniMap = game.miniMap();
     console.info(
-      `[RustPathfinding] live rail enabled on ${miniMap.width()}x${miniMap.height()} mini-map`,
+      `[RustPathfinding] live pathfinding enabled on ${miniMap.width()}x${miniMap.height()} mini-map`,
     );
     return true;
   } catch (error) {
     failedGames.add(game);
-    console.warn("[RustPathfinding] unavailable; using TypeScript rail fallback", error);
+    console.warn("[RustPathfinding] unavailable; using TypeScript pathfinding fallback", error);
     return false;
   }
 }
@@ -89,7 +92,7 @@ function ensureFresh(game: Game, state: RustPathfindingState): void {
   state.landCount = currentLandCount;
   state.rebuilds++;
   console.info(
-    `[RustPathfinding] rebuilt rail mirror after mini-map terrain change (${state.rebuilds})`,
+    `[RustPathfinding] rebuilt pathfinding mirror after mini-map terrain change (${state.rebuilds})`,
   );
 }
 
@@ -128,9 +131,51 @@ export function rustRailPath(
   }
 }
 
+/**
+ * Runs the bounded local water A* used by endpoint smoothing in Rust. This is
+ * deliberately narrower than replacing the full HPA chain: the existing
+ * TypeScript graph, shore coercion, LOS smoothing, and stepper semantics stay
+ * authoritative while the hot local search moves across the Wasm boundary.
+ */
+export function rustBoundedWaterPath(
+  game: Game,
+  starts: readonly TileRef[],
+  goal: TileRef,
+  bounds: RustSearchBounds,
+): TileRef[] | undefined {
+  const state = states.get(game);
+  if (!state) return undefined;
+
+  try {
+    ensureFresh(game, state);
+    const path = state.map.boundedWaterPath(
+      Uint32Array.from(starts),
+      goal,
+      bounds,
+    );
+    state.waterRefinementQueries++;
+    if (state.waterRefinementQueries === 1) {
+      console.info(
+        "[RustPathfinding] first live bounded water refinement executed in Rust",
+      );
+    }
+    return Array.from(path) as TileRef[];
+  } catch (error) {
+    state.failures++;
+    if (state.failures <= 3) {
+      console.warn(
+        `[RustPathfinding] bounded water refinement failed; falling back to TypeScript (failure ${state.failures})`,
+        error,
+      );
+    }
+    return undefined;
+  }
+}
+
 export interface RustPathfindingStats {
   enabled: boolean;
   railQueries: number;
+  waterRefinementQueries: number;
   rebuilds: number;
   failures: number;
 }
@@ -141,10 +186,17 @@ export function rustPathfindingStats(game: Game): RustPathfindingStats {
     ? {
         enabled: true,
         railQueries: state.railQueries,
+        waterRefinementQueries: state.waterRefinementQueries,
         rebuilds: state.rebuilds,
         failures: state.failures,
       }
-    : { enabled: false, railQueries: 0, rebuilds: 0, failures: 0 };
+    : {
+        enabled: false,
+        railQueries: 0,
+        waterRefinementQueries: 0,
+        rebuilds: 0,
+        failures: 0,
+      };
 }
 
 export function disposeRustPathfinding(game: Game): void {
