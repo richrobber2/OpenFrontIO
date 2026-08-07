@@ -5,7 +5,21 @@ export { GraphicsOverridesSchema } from "./GraphicsOverrides";
 export type { GraphicsOverrides, GraphicsPresets } from "./GraphicsOverrides";
 export { GLUnavailableError, showGLGate, trackGLInit } from "./initGL";
 export { MapRenderer } from "./MapRenderer";
-export { preloadAtlasData } from "./passes/name-pass/AtlasData";
+import { preloadAtlasData as preloadNameAtlasData } from "./passes/name-pass/AtlasData";
+import { preloadRustTerrainEncoder } from "./utils/ColorUtils";
+
+// ClientGameRunner already awaits this graphics preload before constructing
+// GPURenderer. Fold the main-thread Rust graphics instance into the same gate
+// so the very first terrain texture build uses Rust rather than only later
+// theme/context rebuilds.
+export async function preloadAtlasData() {
+  const [atlasData] = await Promise.all([
+    preloadNameAtlasData(),
+    preloadRustTerrainEncoder(),
+  ]);
+  return atlasData;
+}
+
 export type { SpawnCenter } from "./passes/SpawnOverlayPass";
 export { applyGraphicsOverrides } from "./RenderOverrides";
 export { createRenderSettings, dumpSettings } from "./RenderSettings";
