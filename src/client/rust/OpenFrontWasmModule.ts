@@ -123,6 +123,13 @@ export class OpenFrontWasmModule {
     return this.runTileQuery(() => this.wasm.openfront_map_water_components(handle), "query water connected components");
   }
 
+  abstractGraphSnapshot(handle: number, clusterSize: number): Uint32Array {
+    return this.runTileQuery(
+      () => this.wasm.openfront_map_abstract_graph(handle, clusterSize),
+      "query abstract water graph",
+    );
+  }
+
   railPath(handle: number, starts: Uint32Array, goal: number): Uint32Array {
     if (starts.length <= 4) {
       return this.runSmallPathQuery(starts, (count, start0, start1, start2, start3) => this.wasm.openfront_map_rail_path_small(handle, count, start0, start1, start2, start3, goal), "query rail path");
