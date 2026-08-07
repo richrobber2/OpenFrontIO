@@ -12,6 +12,7 @@ export const ERROR_MESSAGES: Record<number, string> = {
   7: "upload buffer index is out of range",
   8: "uploaded tile list length is not divisible by four",
   9: "uploaded unit record buffer is too short",
+  10: "uploaded structure render record buffer is too short",
   255: "Rust map invariant failed",
 };
 
@@ -35,6 +36,19 @@ export interface OpenFrontWasmExports extends WebAssembly.Exports {
     mountain: number,
   ): number;
   openfront_units_classify(upload: number, count: number): number;
+  openfront_structure_renderer_create(mapWidth: number): number;
+  openfront_structure_renderer_destroy(handle: number): number;
+  openfront_structure_renderer_update(
+    handle: number,
+    upload: number,
+    count: number,
+  ): number;
+  openfront_structure_renderer_instance_count(handle: number): number;
+  openfront_structure_renderer_data_ptr(handle: number): number;
+  openfront_structure_renderer_data_len(handle: number): number;
+  openfront_structure_renderer_dirty_start(handle: number): number;
+  openfront_structure_renderer_dirty_len(handle: number): number;
+  openfront_structure_renderer_floats_per_instance(): number;
   openfront_map_create(width: number, height: number, upload: number): number;
   openfront_map_destroy(handle: number): number;
   openfront_map_width(handle: number): number;
