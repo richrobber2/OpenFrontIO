@@ -1,6 +1,7 @@
 import { Game } from "../game/Game";
 import { GameMap, TileRef } from "../game/GameMap";
 import { TrainStation } from "../game/TrainStation";
+import { rustRailPath } from "../rust/RustPathfindingService";
 import { AStarRail } from "./algorithms/AStar.Rail";
 import { AStarWater } from "./algorithms/AStar.Water";
 import { AirPathFinder } from "./PathFinder.Air";
@@ -77,6 +78,27 @@ function sharedWaterChain(game: Game): PathFinder<TileRef> {
   return chain;
 }
 
+/** Rust-first mini-map rail pathfinder with deterministic TypeScript fallback. */
+class LiveRailPathFinder implements PathFinder<TileRef> {
+  private readonly fallback: AStarRail;
+
+  constructor(
+    private readonly game: Game,
+    miniMap: GameMap,
+  ) {
+    this.fallback = new AStarRail(miniMap);
+  }
+
+  findPath(from: TileRef | TileRef[], to: TileRef): TileRef[] | null {
+    const starts = Array.isArray(from) ? from : [from];
+    const rustPath = rustRailPath(this.game, starts, to);
+    if (rustPath !== undefined) {
+      return rustPath.length === 0 ? null : rustPath;
+    }
+    return this.fallback.findPath(from, to);
+  }
+}
+
 /**
  * Pathfinders that require Game - simulation layer only
  */
@@ -96,7 +118,7 @@ export class PathFinding {
 
   static Rail(game: Game): SteppingPathFinder<TileRef> {
     const miniMap = game.miniMap();
-    const pf = new AStarRail(miniMap);
+    const pf = new LiveRailPathFinder(game, miniMap);
 
     return PathFinderBuilder.create(pf)
       .wrap((pf) => new MiniMapTransformer(pf, game.map(), miniMap))
