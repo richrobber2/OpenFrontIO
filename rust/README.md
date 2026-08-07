@@ -37,6 +37,14 @@ as a second implementation of the entire game.
 - multi-source FIFO owned-land depths matching the AI's
   `interiorBuildCandidates` helper
 
+`openfront-core::graphics` now owns the first renderer-side bulk transform:
+
+- exact terrain-byte to RGBA8 conversion matching `ColorUtils.ts`
+- land, shoreline, water-depth, highland, mountain, and impassable branches
+- configurable terrain palettes with JavaScript `Uint8Array` compatibility
+- in-place backwards expansion from one terrain byte per tile to four RGBA bytes
+  per tile, avoiding a second map-sized Wasm allocation
+
 `openfront-wasm` exposes the proven core through a dependency-free WebAssembly
 ABI:
 
@@ -46,10 +54,13 @@ ABI:
 - cardinal and diagonal neighbor queries
 - owner and mask based connected-region traversal
 - flat `[tile, depth]` owned-interior query results
-- a typed browser wrapper in `src/client/rust/OpenFrontWasm.ts`
+- renderer-side terrain RGBA generation through the same upload-handle ABI
+- typed browser wrappers in `src/client/rust/OpenFrontWasm.ts`
 
-The TypeScript implementation remains authoritative while this boundary is
-validated against live games and replay data.
+The browser keeps WebGL state, texture ownership, shaders, and small per-tile
+terrain deltas in TypeScript. Full terrain texture builds run through a separate
+main-thread Wasm instance after the existing renderer preload gate, with the
+TypeScript encoder retained as a compatibility fallback.
 
 ## Local checks
 
@@ -88,8 +99,9 @@ node scripts/smoke-rust-wasm.mjs
 ```
 
 The smoke test instantiates the module, writes terrain, traversal masks, and tile
-lists into linear memory, exercises map mutation and query exports, checks packed
-state and counters, and validates invalid-handle error reporting.
+lists into linear memory, exercises map mutation and query exports, validates the
+terrain graphics ABI, checks packed state and counters, and verifies
+invalid-handle error reporting.
 
 ## TypeScript and Rust parity
 
@@ -149,7 +161,7 @@ mismatch exits nonzero with the first failing checkpoint and tile or counter.
 
 ## Next slice
 
-Use the owned-depth benchmark to establish the crossover point where the WASM
-call is worthwhile, then route AI interior-building candidate generation through
-the Rust result behind an opt-in runtime flag. Rendering, networking, and
-authoritative simulation remain in TypeScript.
+Keep browser and WebGL ownership in TypeScript while moving deterministic,
+batch-oriented renderer geometry across the Wasm boundary. Nuke trajectory
+control points and threshold sampling are the next candidate because they are
+pure numerical work and already duplicate simulation/pathfinder math.
