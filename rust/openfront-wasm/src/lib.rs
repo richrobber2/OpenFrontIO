@@ -5,8 +5,9 @@
 //! into a reusable `u32` result buffer and exposed by pointer/length accessors.
 
 use openfront_core::{
-    BoundedWaterPathFinder, GameMapError, GameMapStore, HierarchicalWaterPathFinder, PackedTile,
-    RailPathFinder, TileRef, TileStateError, WaterPathFinder, DEFAULT_CLUSTER_SIZE,
+    build_terrain_rgba, BoundedWaterPathFinder, GameMapError, GameMapStore,
+    HierarchicalWaterPathFinder, PackedTile, RailPathFinder, TerrainGraphicsError,
+    TerrainPalette, TileRef, TileStateError, WaterPathFinder, DEFAULT_CLUSTER_SIZE,
 };
 use std::cell::{Cell, RefCell};
 
@@ -134,6 +135,7 @@ fn query_tiles(
 
 include!("abi.rs");
 include!("upload.rs");
+include!("graphics.rs");
 include!("map_lifecycle.rs");
 include!("map_mutation.rs");
 include!("query.rs");
