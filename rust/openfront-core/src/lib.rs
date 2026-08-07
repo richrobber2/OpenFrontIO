@@ -9,6 +9,7 @@ pub mod air_path;
 pub mod bfs_grid;
 pub mod connected_components;
 pub mod geometry;
+pub mod graphics;
 pub mod hierarchical_water;
 pub mod map;
 pub mod rail_path;
@@ -27,6 +28,9 @@ pub use air_path::{air_path, AirPathError};
 pub use bfs_grid::{BfsGrid, BfsVisit};
 pub use connected_components::{ConnectedWaterComponents, LAND_COMPONENT_MARKER};
 pub use geometry::{Coord, GridError, GridGeometry, NeighborRefs, TileRef};
+pub use graphics::{
+    build_terrain_rgba, encode_terrain_rgba, TerrainGraphicsError, TerrainPalette,
+};
 pub use hierarchical_water::HierarchicalWaterPathFinder;
 pub use map::{GameMapError, GameMapStore};
 pub use rail_path::{rail_path, RailPathFinder};
