@@ -14,8 +14,10 @@ import {
   rustPathfindingStats,
 } from "../../src/core/rust/RustPathfindingService";
 
-const WIDTH = 96;
-const HEIGHT = 16;
+const MINI_WIDTH = 96;
+const MINI_HEIGHT = 16;
+const MAIN_WIDTH = MINI_WIDTH * 2;
+const MAIN_HEIGHT = MINI_HEIGHT * 2;
 const WATER = 5;
 
 async function wasmBytes(): Promise<Uint8Array> {
@@ -27,9 +29,10 @@ async function wasmBytes(): Promise<Uint8Array> {
 }
 
 function makeGame() {
-  const terrain = new Uint8Array(WIDTH * HEIGHT).fill(WATER);
-  const mainMap = new GameMapImpl(WIDTH, HEIGHT, terrain.slice(), 0);
-  const miniMap = new GameMapImpl(WIDTH, HEIGHT, terrain.slice(), 0);
+  const miniTerrain = new Uint8Array(MINI_WIDTH * MINI_HEIGHT).fill(WATER);
+  const mainTerrain = new Uint8Array(MAIN_WIDTH * MAIN_HEIGHT).fill(WATER);
+  const mainMap = new GameMapImpl(MAIN_WIDTH, MAIN_HEIGHT, mainTerrain, 0);
+  const miniMap = new GameMapImpl(MINI_WIDTH, MINI_HEIGHT, miniTerrain, 0);
 
   const row = 8;
   const rawPath = Array.from(
@@ -45,6 +48,12 @@ function makeGame() {
     getComponentId: (_tile: TileRef) => 1,
   };
 
+  const start = mainMap.ref(miniMap.x(rawPath[0]) * 2, row * 2);
+  const goal = mainMap.ref(
+    miniMap.x(rawPath[rawPath.length - 1]) * 2,
+    row * 2,
+  );
+
   const game = {
     map: () => mainMap,
     miniMap: () => miniMap,
@@ -55,7 +64,7 @@ function makeGame() {
     isValidRef: (tile: TileRef) => mainMap.isValidRef(tile),
   } as unknown as Game;
 
-  return { game, mainMap, start: rawPath[0], goal: rawPath[rawPath.length - 1] };
+  return { game, start, goal };
 }
 
 describe("live Rust water refinement integration", () => {
