@@ -28,7 +28,7 @@ impl PseudoRandom {
             s3: split(),
         };
         for _ in 0..12 {
-            random.next_u32();
+            let _ = random.next_u32();
         }
         random
     }
