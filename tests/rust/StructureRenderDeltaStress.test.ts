@@ -59,14 +59,18 @@ describe("Rust incremental structure render table", () => {
     );
     expect(upload).not.toBe(0);
 
-    try {
+    const uploadWords = (): Uint32Array => {
       const pointer = wasm.openfront_upload_ptr(upload);
       expect(wasm.openfront_last_error()).toBe(0);
-      const words = new Uint32Array(
+      return new Uint32Array(
         wasm.memory.buffer,
         pointer,
         BUILDING_COUNT * WORDS_PER_RECORD,
       );
+    };
+
+    try {
+      let words = uploadWords();
 
       for (let index = 0; index < BUILDING_COUNT; index++) {
         writeRecord(
@@ -92,7 +96,9 @@ describe("Rust incremental structure render table", () => {
       expect(wasm.openfront_structure_renderer_instance_count(renderer)).toBe(
         BUILDING_COUNT,
       );
-      expect(wasm.openfront_structure_renderer_dirty_start(renderer)).toBe(0);
+      expect(wasm.openfront_structure_renderer_dirty_start(renderer) >>> 0).toBe(
+        0,
+      );
       expect(wasm.openfront_structure_renderer_dirty_len(renderer)).toBe(
         BUILDING_COUNT,
       );
@@ -115,13 +121,17 @@ describe("Rust incremental structure render table", () => {
         0,
       ]);
 
-      // Update ID 778. Since the initial insert order is stable, only slot
-      // 777 should need a VBO patch instead of all 1,200 buildings.
+      // Rust may grow linear memory while expanding its persistent table.
+      // Recreate the upload view before every later write, matching the
+      // production wrapper's behavior instead of holding a detached buffer.
+      words = uploadWords();
       writeRecord(words, 0, 778, CITY_KIND + 4, true, 88_888, 11, true, true);
       expect(wasm.openfront_structure_renderer_update(renderer, upload, 1)).toBe(
         1,
       );
-      expect(wasm.openfront_structure_renderer_dirty_start(renderer)).toBe(777);
+      expect(wasm.openfront_structure_renderer_dirty_start(renderer) >>> 0).toBe(
+        777,
+      );
       expect(wasm.openfront_structure_renderer_dirty_len(renderer)).toBe(1);
 
       dataPtr = wasm.openfront_structure_renderer_data_ptr(renderer);
@@ -142,6 +152,7 @@ describe("Rust incremental structure render table", () => {
 
       // Removing a middle slot swap-compacts the final record into that slot,
       // so exactly one replacement slot is dirty and instanceCount drops.
+      words = uploadWords();
       writeRecord(words, 0, 500, CITY_KIND, false, 0, 0, false, false);
       expect(wasm.openfront_structure_renderer_update(renderer, upload, 1)).toBe(
         1,
@@ -149,7 +160,9 @@ describe("Rust incremental structure render table", () => {
       expect(wasm.openfront_structure_renderer_instance_count(renderer)).toBe(
         BUILDING_COUNT - 1,
       );
-      expect(wasm.openfront_structure_renderer_dirty_start(renderer)).toBe(499);
+      expect(wasm.openfront_structure_renderer_dirty_start(renderer) >>> 0).toBe(
+        499,
+      );
       expect(wasm.openfront_structure_renderer_dirty_len(renderer)).toBe(1);
 
       dataPtr = wasm.openfront_structure_renderer_data_ptr(renderer);
