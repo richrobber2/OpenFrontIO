@@ -1,3 +1,4 @@
+import type { RustStructureRenderDelta } from "../../rust/OpenFrontWasmUnits";
 import type { UnitState } from "../types";
 
 export interface UnitRenderSubsets {
@@ -6,6 +7,8 @@ export interface UnitRenderSubsets {
   readonly warships: ReadonlyMap<number, UnitState>;
   readonly progressStructures: ReadonlyMap<number, UnitState>;
   readonly structureRevision: number;
+  /** Latest JS-owned patch from Rust's persistent structure instance table. */
+  readonly structureRenderDelta: RustStructureRenderDelta | null;
 }
 
 const subsetsByMasterMap = new WeakMap<object, UnitRenderSubsets>();
