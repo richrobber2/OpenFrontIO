@@ -48,158 +48,209 @@ fn edge_cost(
     Ok(cost)
 }
 
-fn rail_neighbors(map: &GameMapStore, node: TileRef) -> Result<Vec<TileRef>, GameMapError> {
-    let geometry = map.geometry();
-    if !geometry.is_valid_ref(node) {
-        return Err(GameMapError::InvalidTile { tile: node });
-    }
-    let coord = map.coord(node)?;
-    let from_shoreline = map.terrain(node)?.is_shoreline();
-    let mut output = Vec::with_capacity(4);
-
-    if coord.y > 0 {
-        let n = TileRef::new(node.get() - map.width());
-        if traversable(map, n, from_shoreline)? {
-            output.push(n);
-        }
-    }
-    if coord.y + 1 < map.height() {
-        let n = TileRef::new(node.get() + map.width());
-        if traversable(map, n, from_shoreline)? {
-            output.push(n);
-        }
-    }
-    if coord.x > 0 {
-        let n = TileRef::new(node.get() - 1);
-        if traversable(map, n, from_shoreline)? {
-            output.push(n);
-        }
-    }
-    if coord.x + 1 < map.width() {
-        let n = TileRef::new(node.get() + 1);
-        if traversable(map, n, from_shoreline)? {
-            output.push(n);
-        }
-    }
-    Ok(output)
+#[derive(Debug)]
+pub struct RailPathFinder {
+    stamp: u32,
+    closed_stamp: Vec<u32>,
+    g_score_stamp: Vec<u32>,
+    g_score: Vec<u32>,
+    came_from: Vec<i32>,
+    buckets: Vec<Vec<u32>>,
+    active_buckets: Vec<usize>,
+    min_bucket: usize,
+    queue_size: usize,
 }
 
-/// Finds the same rail route as the TypeScript generic A* + RailAdapter.
-/// Equal-priority entries are popped LIFO, matching `BucketQueue` exactly.
+impl RailPathFinder {
+    #[must_use]
+    pub fn new(width: u32, height: u32) -> Self {
+        let node_count = width.saturating_mul(height) as usize;
+        let max_cost = 1 + WATER_PENALTY + DIRECTION_CHANGE_PENALTY;
+        let max_priority = HEURISTIC_WEIGHT * (width + height) * max_cost;
+        let bucket_count = max_priority as usize + 1;
+        Self {
+            stamp: 1,
+            closed_stamp: vec![0; node_count],
+            g_score_stamp: vec![0; node_count],
+            g_score: vec![0; node_count],
+            came_from: vec![-1; node_count],
+            buckets: (0..bucket_count).map(|_| Vec::new()).collect(),
+            active_buckets: Vec::new(),
+            min_bucket: bucket_count,
+            queue_size: 0,
+        }
+    }
+
+    fn reset_queue(&mut self) {
+        for bucket in self.active_buckets.drain(..) {
+            self.buckets[bucket].clear();
+        }
+        self.min_bucket = self.buckets.len();
+        self.queue_size = 0;
+    }
+
+    fn push(&mut self, node: u32, priority: u32) {
+        let bucket = (priority as usize).min(self.buckets.len() - 1);
+        if self.buckets[bucket].is_empty() {
+            self.active_buckets.push(bucket);
+        }
+        self.buckets[bucket].push(node);
+        self.queue_size += 1;
+        if bucket < self.min_bucket {
+            self.min_bucket = bucket;
+        }
+    }
+
+    fn pop(&mut self) -> Option<u32> {
+        while self.min_bucket < self.buckets.len() && self.buckets[self.min_bucket].is_empty() {
+            self.min_bucket += 1;
+        }
+        if self.min_bucket >= self.buckets.len() {
+            return None;
+        }
+        self.queue_size -= 1;
+        self.buckets[self.min_bucket].pop()
+    }
+
+    fn build_path(&self, goal: TileRef) -> Vec<TileRef> {
+        let mut path = Vec::new();
+        let mut cursor = goal.get() as i32;
+        while cursor != -1 {
+            path.push(TileRef::new(cursor as u32));
+            cursor = self.came_from[cursor as usize];
+        }
+        path.reverse();
+        path
+    }
+
+    pub fn find_path(
+        &mut self,
+        map: &GameMapStore,
+        starts: &[TileRef],
+        goal: TileRef,
+    ) -> Result<Option<Vec<TileRef>>, GameMapError> {
+        let geometry = map.geometry();
+        if !geometry.is_valid_ref(goal) {
+            return Err(GameMapError::InvalidTile { tile: goal });
+        }
+        for start in starts {
+            if !geometry.is_valid_ref(*start) {
+                return Err(GameMapError::InvalidTile { tile: *start });
+            }
+        }
+        if starts.is_empty() {
+            return Ok(None);
+        }
+
+        self.stamp = self.stamp.wrapping_add(1);
+        if self.stamp == 0 {
+            self.closed_stamp.fill(0);
+            self.g_score_stamp.fill(0);
+            self.stamp = 1;
+        }
+        let stamp = self.stamp;
+        self.reset_queue();
+
+        for start in starts {
+            let index = start.get() as usize;
+            self.g_score[index] = 0;
+            self.g_score_stamp[index] = stamp;
+            self.came_from[index] = -1;
+            self.push(start.get(), heuristic(map, *start, goal)?);
+        }
+
+        let width = map.width();
+        let height = map.height();
+        let mut iterations = MAX_ITERATIONS;
+        while self.queue_size > 0 {
+            if iterations == 0 {
+                return Ok(None);
+            }
+            iterations -= 1;
+
+            let Some(current_raw) = self.pop() else {
+                break;
+            };
+            let current = TileRef::new(current_raw);
+            let current_index = current_raw as usize;
+            if self.closed_stamp[current_index] == stamp {
+                continue;
+            }
+            self.closed_stamp[current_index] = stamp;
+
+            if current == goal {
+                return Ok(Some(self.build_path(goal)));
+            }
+
+            let current_g = self.g_score[current_index];
+            let prev = if self.came_from[current_index] == -1 {
+                None
+            } else {
+                Some(TileRef::new(self.came_from[current_index] as u32))
+            };
+            let coord = map.coord(current)?;
+            let from_shoreline = map.terrain(current)?.is_shoreline();
+            let mut neighbors = [TileRef::new(0); 4];
+            let mut count = 0usize;
+
+            if coord.y > 0 {
+                let n = TileRef::new(current_raw - width);
+                if traversable(map, n, from_shoreline)? {
+                    neighbors[count] = n;
+                    count += 1;
+                }
+            }
+            if coord.y + 1 < height {
+                let n = TileRef::new(current_raw + width);
+                if traversable(map, n, from_shoreline)? {
+                    neighbors[count] = n;
+                    count += 1;
+                }
+            }
+            if coord.x > 0 {
+                let n = TileRef::new(current_raw - 1);
+                if traversable(map, n, from_shoreline)? {
+                    neighbors[count] = n;
+                    count += 1;
+                }
+            }
+            if coord.x + 1 < width {
+                let n = TileRef::new(current_raw + 1);
+                if traversable(map, n, from_shoreline)? {
+                    neighbors[count] = n;
+                    count += 1;
+                }
+            }
+
+            for neighbor in &neighbors[..count] {
+                let neighbor_index = neighbor.get() as usize;
+                if self.closed_stamp[neighbor_index] == stamp {
+                    continue;
+                }
+                let tentative = current_g + edge_cost(map, current, *neighbor, prev)?;
+                if self.g_score_stamp[neighbor_index] != stamp
+                    || tentative < self.g_score[neighbor_index]
+                {
+                    self.came_from[neighbor_index] = current_raw as i32;
+                    self.g_score[neighbor_index] = tentative;
+                    self.g_score_stamp[neighbor_index] = stamp;
+                    let priority = tentative + heuristic(map, *neighbor, goal)?;
+                    self.push(neighbor.get(), priority);
+                }
+            }
+        }
+
+        Ok(None)
+    }
+}
+
+/// Compatibility wrapper for callers that do not retain a pathfinder.
 pub fn rail_path(
     map: &GameMapStore,
     starts: &[TileRef],
     goal: TileRef,
 ) -> Result<Option<Vec<TileRef>>, GameMapError> {
-    let geometry = map.geometry();
-    if !geometry.is_valid_ref(goal) {
-        return Err(GameMapError::InvalidTile { tile: goal });
-    }
-    for start in starts {
-        if !geometry.is_valid_ref(*start) {
-            return Err(GameMapError::InvalidTile { tile: *start });
-        }
-    }
-    if starts.is_empty() {
-        return Ok(None);
-    }
-
-    let node_count = map.tile_count() as usize;
-    let max_cost = 1 + WATER_PENALTY + DIRECTION_CHANGE_PENALTY;
-    let max_priority = HEURISTIC_WEIGHT * (map.width() + map.height()) * max_cost;
-    let mut buckets: Vec<Vec<u32>> = (0..=max_priority).map(|_| Vec::new()).collect();
-    let mut min_bucket = buckets.len();
-    let mut queue_size = 0usize;
-    let mut closed = vec![false; node_count];
-    let mut g_score = vec![u32::MAX; node_count];
-    let mut came_from = vec![-1_i32; node_count];
-
-    let push = |buckets: &mut Vec<Vec<u32>>,
-                min_bucket: &mut usize,
-                queue_size: &mut usize,
-                node: u32,
-                priority: u32| {
-        let bucket = (priority as usize).min(buckets.len() - 1);
-        buckets[bucket].push(node);
-        *queue_size += 1;
-        if bucket < *min_bucket {
-            *min_bucket = bucket;
-        }
-    };
-
-    for start in starts {
-        let index = start.get() as usize;
-        g_score[index] = 0;
-        came_from[index] = -1;
-        push(
-            &mut buckets,
-            &mut min_bucket,
-            &mut queue_size,
-            start.get(),
-            heuristic(map, *start, goal)?,
-        );
-    }
-
-    let mut iterations = MAX_ITERATIONS;
-    while queue_size > 0 {
-        if iterations == 0 {
-            return Ok(None);
-        }
-        iterations -= 1;
-
-        while min_bucket < buckets.len() && buckets[min_bucket].is_empty() {
-            min_bucket += 1;
-        }
-        if min_bucket >= buckets.len() {
-            break;
-        }
-        let current = TileRef::new(buckets[min_bucket].pop().expect("non-empty bucket"));
-        queue_size -= 1;
-        let current_index = current.get() as usize;
-        if closed[current_index] {
-            continue;
-        }
-        closed[current_index] = true;
-
-        if current == goal {
-            let mut path = Vec::new();
-            let mut cursor = goal.get() as i32;
-            while cursor != -1 {
-                path.push(TileRef::new(cursor as u32));
-                cursor = came_from[cursor as usize];
-            }
-            path.reverse();
-            return Ok(Some(path));
-        }
-
-        let current_g = g_score[current_index];
-        let prev = if came_from[current_index] == -1 {
-            None
-        } else {
-            Some(TileRef::new(came_from[current_index] as u32))
-        };
-        for neighbor in rail_neighbors(map, current)? {
-            let neighbor_index = neighbor.get() as usize;
-            if closed[neighbor_index] {
-                continue;
-            }
-            let tentative = current_g + edge_cost(map, current, neighbor, prev)?;
-            if tentative < g_score[neighbor_index] {
-                came_from[neighbor_index] = current.get() as i32;
-                g_score[neighbor_index] = tentative;
-                let priority = tentative + heuristic(map, neighbor, goal)?;
-                push(
-                    &mut buckets,
-                    &mut min_bucket,
-                    &mut queue_size,
-                    neighbor.get(),
-                    priority,
-                );
-            }
-        }
-    }
-
-    Ok(None)
+    RailPathFinder::new(map.width(), map.height()).find_path(map, starts, goal)
 }
 
 #[cfg(test)]
@@ -212,14 +263,17 @@ mod tests {
     }
 
     #[test]
-    fn finds_land_route() {
+    fn finds_land_route_and_reuses_scratch() {
         let map = GameMapStore::new(5, 5, vec![TERRAIN_LAND_MASK | 1; 25]).unwrap();
-        let path = rail_path(&map, &[tile(&map, 0, 0)], tile(&map, 4, 4))
-            .unwrap()
-            .unwrap();
-        assert_eq!(path.first(), Some(&tile(&map, 0, 0)));
-        assert_eq!(path.last(), Some(&tile(&map, 4, 4)));
-        assert_eq!(path.len(), 9);
+        let start = tile(&map, 0, 0);
+        let goal = tile(&map, 4, 4);
+        let mut finder = RailPathFinder::new(map.width(), map.height());
+        let first = finder.find_path(&map, &[start], goal).unwrap().unwrap();
+        let second = finder.find_path(&map, &[start], goal).unwrap().unwrap();
+        assert_eq!(first, second);
+        assert_eq!(first.first(), Some(&start));
+        assert_eq!(first.last(), Some(&goal));
+        assert_eq!(first.len(), 9);
     }
 
     #[test]
