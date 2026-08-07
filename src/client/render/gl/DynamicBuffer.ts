@@ -23,8 +23,9 @@ export class DynamicInstanceBuffer {
     gl.bufferData(gl.ARRAY_BUFFER, this.data.byteLength, gl.DYNAMIC_DRAW);
   }
 
-  ensureCapacity(needed: number): void {
-    if (needed <= this.capacity) return;
+  /** Ensure capacity and return true when the underlying GPU buffer was reallocated. */
+  ensureCapacity(needed: number): boolean {
+    if (needed <= this.capacity) return false;
     while (this.capacity < needed) this.capacity *= 2;
     const newData = new Float32Array(this.capacity * this.floatsPerInstance);
     newData.set(this.data);
@@ -33,6 +34,7 @@ export class DynamicInstanceBuffer {
     const gl = this.gl;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
     gl.bufferData(gl.ARRAY_BUFFER, this.data.byteLength, gl.DYNAMIC_DRAW);
+    return true;
   }
 
   get float32(): Float32Array {
