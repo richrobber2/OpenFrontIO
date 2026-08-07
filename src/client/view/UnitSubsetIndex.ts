@@ -71,6 +71,8 @@ function fallbackFlags(unitType: string, isActive: boolean): number {
 export class UnitSubsetIndex {
   readonly mobile = new Map<number, UnitState>();
   readonly structures = new Map<number, UnitState>();
+  readonly warships = new Map<number, UnitState>();
+  readonly progressStructures = new Map<number, UnitState>();
   readonly trails = new Map<number, UnitState>();
   readonly nukeActive = new Map<number, UnitState>();
   readonly nukeTelegraphs = new Map<number, UnitState>();
@@ -109,6 +111,22 @@ export class UnitSubsetIndex {
         state,
         flags & UNIT_CLASS_STRUCTURE,
       );
+      this.syncBoolean(
+        this.warships,
+        update.id,
+        state,
+        (flags & UNIT_CLASS_MOBILE) !== 0 && update.unitType === UnitType.Warship,
+      );
+      this.syncBoolean(
+        this.progressStructures,
+        update.id,
+        state,
+        isStructure &&
+          (state?.underConstruction === true ||
+            state?.markedForDeletion !== false ||
+            update.unitType === UnitType.SAMLauncher ||
+            update.unitType === UnitType.MissileSilo),
+      );
       this.sync(this.trails, update.id, state, flags & UNIT_CLASS_TRAIL);
       this.sync(
         this.nukeActive,
@@ -144,7 +162,16 @@ export class UnitSubsetIndex {
     state: UnitState | undefined,
     member: number,
   ): void {
-    if (member !== 0 && state?.isActive) {
+    this.syncBoolean(target, id, state, member !== 0);
+  }
+
+  private syncBoolean(
+    target: Map<number, UnitState>,
+    id: number,
+    state: UnitState | undefined,
+    member: boolean,
+  ): void {
+    if (member && state?.isActive) {
       target.set(id, state);
     } else {
       target.delete(id);
