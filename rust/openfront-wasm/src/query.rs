@@ -159,6 +159,53 @@ pub extern "C" fn openfront_map_owned_depths(
     }
 }
 
+/// Result layout:
+/// `[owner_id, tile_count, border_count, depth_count, borders..., tile, depth, ...]`.
+#[unsafe(no_mangle)]
+pub extern "C" fn openfront_map_owner_territory_analysis(
+    handle: u32,
+    owner_id: u32,
+    maximum_depth: u32,
+) -> u32 {
+    begin_call();
+    if owner_id > u32::from(openfront_core::OWNER_ID_MASK) {
+        fail(ErrorCode::OwnerIdOutOfRange);
+        return 0;
+    }
+
+    let Some(result) = with_map(handle, |map| {
+        map.analyze_owner_territory(owner_id as u16, maximum_depth)
+    }) else {
+        fail(ErrorCode::InvalidHandle);
+        return 0;
+    };
+
+    match result {
+        Ok(analysis) => {
+            let mut output = Vec::with_capacity(
+                4 + analysis.borders.len() + analysis.depths.len() * 2,
+            );
+            output.push(owner_id);
+            output.push(analysis.tile_count);
+            output.push(analysis.borders.len() as u32);
+            output.push(analysis.depths.len() as u32);
+            output.extend(analysis.borders.into_iter().map(TileRef::get));
+            output.extend(
+                analysis
+                    .depths
+                    .into_iter()
+                    .flat_map(|(tile, depth)| [tile.get(), depth]),
+            );
+            set_result(output);
+            1
+        }
+        Err(error) => {
+            fail(map_error(error));
+            0
+        }
+    }
+}
+
 /// Performs the whole production-shaped interior-depth preparation in Rust:
 /// count territories, select the largest owner in tile-scan insertion order,
 /// discover that owner's border tiles, and run the multi-source depth search.
