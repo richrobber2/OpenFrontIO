@@ -8,6 +8,11 @@
  * Float32Array(PALETTE_SIZE × 2 × 4) to the GPURenderer constructor.
  */
 
+import { assetUrl } from "../../../../core/AssetUrls";
+import {
+  OpenFrontWasmGraphics,
+  type RustTerrainPalette,
+} from "../../../rust/OpenFrontWasmGraphics";
 import renderDefaults from "../render-settings.json";
 
 /** Must cover 12-bit smallID range (0-4095). */
@@ -81,6 +86,49 @@ export interface TerrainColorOverrides {
   plainsColor?: readonly [number, number, number];
   highlandColor?: readonly [number, number, number];
   mountainColor?: readonly [number, number, number];
+}
+
+let rustGraphics: OpenFrontWasmGraphics | null = null;
+let rustGraphicsLoad: Promise<void> | null = null;
+let rustGraphicsFailureLogged = false;
+
+/**
+ * Start the main-thread graphics Wasm instance before GPURenderer is created.
+ * Failure is deliberately non-fatal: the TypeScript encoder below remains the
+ * compatibility fallback for stale dev assets and unsupported environments.
+ */
+export function preloadRustTerrainEncoder(): Promise<void> {
+  if (rustGraphics !== null) return Promise.resolve();
+  if (rustGraphicsLoad !== null) return rustGraphicsLoad;
+
+  rustGraphicsLoad = OpenFrontWasmGraphics.load(
+    assetUrl("wasm/openfront_wasm.wasm"),
+  )
+    .then((graphics) => {
+      rustGraphics = graphics;
+    })
+    .catch((error: unknown) => {
+      if (!rustGraphicsFailureLogged) {
+        rustGraphicsFailureLogged = true;
+        console.warn(
+          "Rust terrain encoder unavailable; using TypeScript fallback",
+          error,
+        );
+      }
+    });
+  return rustGraphicsLoad;
+}
+
+function resolvedRustTerrainPalette(
+  colors?: TerrainColorOverrides,
+): RustTerrainPalette {
+  return {
+    ocean: colors?.oceanColor ?? DEEP_WATER_BASE,
+    sand: colors?.sandColor ?? [204, 203, 158],
+    plains: colors?.plainsColor ?? [190, 220, 138],
+    highland: colors?.highlandColor ?? [200, 183, 138],
+    mountain: colors?.mountainColor ?? [230, 230, 230],
+  };
 }
 
 export function encodeTerrainTile(
@@ -172,6 +220,28 @@ export function buildTerrainRGBA(
   h: number,
   colors?: TerrainColorOverrides,
 ): Uint8Array {
+  if (rustGraphics !== null) {
+    try {
+      return rustGraphics.buildTerrainRGBA(
+        terrainBytes,
+        w,
+        h,
+        resolvedRustTerrainPalette(colors),
+      );
+    } catch (error) {
+      // A runtime ABI/buffer problem must not make the map disappear. Disable
+      // the Rust path for this page and fall back to the known-good encoder.
+      rustGraphics = null;
+      if (!rustGraphicsFailureLogged) {
+        rustGraphicsFailureLogged = true;
+        console.warn(
+          "Rust terrain encoder failed; using TypeScript fallback",
+          error,
+        );
+      }
+    }
+  }
+
   const pixels = new Uint8Array(w * h * 4);
   for (let i = 0; i < w * h; i++) {
     encodeTerrainTile(terrainBytes[i], pixels, i * 4, colors);
