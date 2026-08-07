@@ -27,6 +27,21 @@ function createRustMap(module: OpenFrontWasmModule, map: GameMap): OpenFrontRust
   return module.createMap(map.width(), map.height(), snapshotTerrain(map));
 }
 
+function install(game: Game, module: OpenFrontWasmModule): void {
+  const previous = states.get(game);
+  previous?.map.dispose();
+
+  const miniMap = game.miniMap();
+  states.set(game, {
+    module,
+    map: createRustMap(module, miniMap),
+    landCount: miniMap.numLandTiles(),
+    railQueries: 0,
+    rebuilds: 0,
+    failures: 0,
+  });
+}
+
 /**
  * Initializes the Rust pathfinding mirror used by the deterministic simulation
  * worker. Failure is deliberately non-fatal: gameplay continues through the
@@ -41,16 +56,8 @@ export async function initializeRustPathfinding(
 
   try {
     const module = await OpenFrontWasmModule.load(wasmUrl);
+    install(game, module);
     const miniMap = game.miniMap();
-    const map = createRustMap(module, miniMap);
-    states.set(game, {
-      module,
-      map,
-      landCount: miniMap.numLandTiles(),
-      railQueries: 0,
-      rebuilds: 0,
-      failures: 0,
-    });
     console.info(
       `[RustPathfinding] live rail enabled on ${miniMap.width()}x${miniMap.height()} mini-map`,
     );
@@ -60,6 +67,15 @@ export async function initializeRustPathfinding(
     console.warn("[RustPathfinding] unavailable; using TypeScript rail fallback", error);
     return false;
   }
+}
+
+/** Test/headless entrypoint that avoids HTTP and installs the exact same service. */
+export async function initializeRustPathfindingFromBytes(
+  game: Game,
+  wasmBytes: Uint8Array<ArrayBufferLike>,
+): Promise<void> {
+  const module = await OpenFrontWasmModule.fromBytes(wasmBytes);
+  install(game, module);
 }
 
 function ensureFresh(game: Game, state: RustPathfindingState): void {
