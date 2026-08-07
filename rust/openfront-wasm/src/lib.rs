@@ -5,7 +5,7 @@
 //! into a reusable `u32` result buffer and exposed by pointer/length accessors.
 
 use openfront_core::{
-    build_terrain_rgba, BoundedWaterPathFinder, GameMapError, GameMapStore,
+    build_terrain_rgba_in_place, BoundedWaterPathFinder, GameMapError, GameMapStore,
     HierarchicalWaterPathFinder, PackedTile, RailPathFinder, TerrainGraphicsError,
     TerrainPalette, TileRef, TileStateError, WaterPathFinder, DEFAULT_CLUSTER_SIZE,
 };
