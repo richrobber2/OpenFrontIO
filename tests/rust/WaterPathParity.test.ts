@@ -11,6 +11,7 @@ import { AStarWater } from "../../src/core/pathfinding/algorithms/AStar.Water";
 const WIDTH = 11;
 const HEIGHT = 9;
 const LAND = (1 << 7) | 1;
+const REPEATS = 8;
 
 function expectedPath(
   map: GameMapImpl,
@@ -21,7 +22,7 @@ function expectedPath(
 }
 
 describe("water path TypeScript/WebAssembly parity", () => {
-  it("matches exact A* routes across magnitude penalties and multi-start", async () => {
+  it("matches exact A* routes across repeated queries and multi-start", async () => {
     const wasmPath = path.resolve(
       path.dirname(fileURLToPath(import.meta.url)),
       "../../resources/wasm/openfront_wasm.wasm",
@@ -29,18 +30,15 @@ describe("water path TypeScript/WebAssembly parity", () => {
     const wasmBytes = new Uint8Array(await readFile(wasmPath));
     const module = await OpenFrontWasmModule.fromBytes(wasmBytes);
 
-    // Mostly water. Magnitude 5 is the preferred band. The barriers and
-    // penalty bands force the pathfinder to exercise shore avoidance,
-    // deep-water cost, the cross-product tie-breaker, and land-goal handling.
     const terrain = new Uint8Array(WIDTH * HEIGHT).fill(5);
     for (let y = 1; y < HEIGHT - 1; y++) {
       if (y !== HEIGHT - 2) terrain[y * WIDTH + 5] = LAND;
     }
     for (let x = 1; x < WIDTH - 1; x++) {
-      terrain[2 * WIDTH + x] = 1; // too close to shore, large penalty
-      terrain[6 * WIDTH + x] = 14; // deep water, slight penalty
+      terrain[2 * WIDTH + x] = 1;
+      terrain[6 * WIDTH + x] = 14;
     }
-    terrain[4 * WIDTH + 10] = LAND; // legal destination despite being land
+    terrain[4 * WIDTH + 10] = LAND;
 
     const typescriptMap = new GameMapImpl(
       WIDTH,
@@ -59,10 +57,12 @@ describe("water path TypeScript/WebAssembly parity", () => {
         { starts: [3 * WIDTH + 2, 5 * WIDTH + 2], goal: 4 * WIDTH + 8 },
       ];
 
-      for (const { starts, goal } of cases) {
-        expect(
-          Array.from(rustMap.waterPath(Uint32Array.from(starts), goal)),
-        ).toEqual(expectedPath(typescriptMap, starts, goal));
+      for (let repeat = 0; repeat < REPEATS; repeat++) {
+        for (const { starts, goal } of cases) {
+          expect(
+            Array.from(rustMap.waterPath(Uint32Array.from(starts), goal)),
+          ).toEqual(expectedPath(typescriptMap, starts, goal));
+        }
       }
 
       expect(Array.from(rustMap.waterPath(new Uint32Array(), 0))).toEqual([]);
