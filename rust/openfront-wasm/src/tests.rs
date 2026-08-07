@@ -1,7 +1,10 @@
 #[cfg(test)]
 mod tests {
     use super::*;
-    use openfront_core::TERRAIN_LAND_MASK;
+    use openfront_core::{
+        UnitKind, TERRAIN_LAND_MASK, UNIT_CLASS_ATTACK_RING, UNIT_CLASS_LIGHT,
+        UNIT_CLASS_MOBILE, UNIT_CLASS_STRUCTURE, UNIT_CLASS_TRAIL,
+    };
 
     fn reset() {
         MAPS.with(|maps| maps.borrow_mut().clear());
@@ -35,6 +38,17 @@ mod tests {
         upload
     }
 
+    fn uploaded_u32s(handle: u32) -> Vec<u32> {
+        UPLOADS.with(|uploads| {
+            let uploads = uploads.borrow();
+            let bytes = uploads[(handle - 1) as usize].as_ref().unwrap();
+            bytes
+                .chunks_exact(4)
+                .map(|word| u32::from_le_bytes([word[0], word[1], word[2], word[3]]))
+                .collect()
+        })
+    }
+
     #[test]
     fn creates_updates_and_destroys_maps() {
         reset();
@@ -56,6 +70,44 @@ mod tests {
         assert_eq!(openfront_map_destroy(map), 1);
         assert_eq!(openfront_map_width(map), INVALID_RESULT);
         assert_eq!(openfront_last_error(), ErrorCode::InvalidHandle as u32);
+    }
+
+    #[test]
+    fn classifies_batched_unit_records_in_place() {
+        reset();
+        let upload = upload_u32s(&[
+            101,
+            UnitKind::Transport as u32,
+            1,
+            202,
+            UnitKind::City as u32,
+            1,
+            303,
+            UnitKind::AtomBomb as u32,
+            0,
+        ]);
+
+        assert_eq!(openfront_units_classify(upload, 3), 1);
+        let words = uploaded_u32s(upload);
+        assert_eq!(words[0], 101);
+        assert_eq!(words[1], UnitKind::Transport as u32);
+        assert_eq!(
+            words[2],
+            UNIT_CLASS_MOBILE | UNIT_CLASS_TRAIL | UNIT_CLASS_ATTACK_RING | UNIT_CLASS_LIGHT
+        );
+        assert_eq!(words[3], 202);
+        assert_eq!(words[4], UnitKind::City as u32);
+        assert_eq!(words[5], UNIT_CLASS_STRUCTURE | UNIT_CLASS_LIGHT);
+        assert_eq!(words[6], 303);
+        assert_eq!(words[7], UnitKind::AtomBomb as u32);
+        assert_eq!(words[8], 0);
+
+        let short = upload_u32s(&[1, UnitKind::Transport as u32]);
+        assert_eq!(openfront_units_classify(short, 1), 0);
+        assert_eq!(
+            openfront_last_error(),
+            ErrorCode::UnitRecordLengthMismatch as u32
+        );
     }
 
     #[test]
