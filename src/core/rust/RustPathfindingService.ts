@@ -110,6 +110,9 @@ export function rustRailPath(
     ensureFresh(game, state);
     const path = state.map.railPath(Uint32Array.from(starts), goal);
     state.railQueries++;
+    if (state.railQueries === 1) {
+      console.info("[RustPathfinding] first live rail query executed in Rust");
+    }
     return Array.from(path) as TileRef[];
   } catch (error) {
     state.failures++;
