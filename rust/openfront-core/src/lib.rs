@@ -8,6 +8,7 @@ pub mod abstract_graph_builder;
 pub mod air_path;
 pub mod bfs_grid;
 pub mod connected_components;
+pub mod defense_index;
 pub mod geometry;
 pub mod graphics;
 pub mod hierarchical_water;
@@ -27,6 +28,9 @@ pub use abstract_graph_builder::{AbstractGraphBuilder, DEFAULT_CLUSTER_SIZE};
 pub use air_path::{air_path, AirPathError};
 pub use bfs_grid::{BfsGrid, BfsVisit};
 pub use connected_components::{ConnectedWaterComponents, LAND_COMPONENT_MARKER};
+pub use defense_index::{
+    Defense, DefenseIndex, DefensePathAssessment, DefensePathPoint, DefensePoint,
+};
 pub use geometry::{Coord, GridError, GridGeometry, NeighborRefs, TileRef};
 pub use graphics::{
     build_terrain_rgba, build_terrain_rgba_in_place, encode_terrain_rgba, TerrainGraphicsError,
