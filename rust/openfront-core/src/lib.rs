@@ -11,6 +11,7 @@ pub mod random;
 pub mod territory;
 pub mod tile;
 pub mod traversal;
+pub mod water_path;
 
 pub use air_path::{air_path, AirPathError};
 pub use geometry::{Coord, GridError, GridGeometry, NeighborRefs, TileRef};
@@ -24,3 +25,4 @@ pub use tile::{
     TERRAIN_LAND_MASK, TERRAIN_MAGNITUDE_MASK, TERRAIN_OCEAN_MASK, TERRAIN_SHORELINE_MASK,
 };
 pub use traversal::NeighborRefs8;
+pub use water_path::WaterPathFinder;
