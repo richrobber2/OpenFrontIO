@@ -1,0 +1,43 @@
+name: Rustfmt Agent
+
+on:
+  push:
+    branches:
+      - agent/rust-port
+    paths:
+      - .github/workflows/rustfmt-agent.yml
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out rust port
+        uses: actions/checkout@v7
+        with:
+          ref: agent/rust-port
+          fetch-depth: 0
+
+      - name: Install rustfmt
+        run: rustup toolchain install stable --profile minimal --component rustfmt
+
+      - name: Select Rust
+        run: rustup default stable
+
+      - name: Format workspace
+        run: cargo fmt --all
+
+      - name: Commit formatting
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "Rust workspace already formatted"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- rust
+          git commit -m "style(rust): apply rustfmt"
+          git push origin HEAD:agent/rust-port
