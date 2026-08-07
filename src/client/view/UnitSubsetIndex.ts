@@ -5,6 +5,7 @@ import {
   classifyUnitDeltasRust,
   type RustStructureRenderDelta,
   type StructureRenderInput,
+  type UnitClassificationInput,
   UNIT_CLASS_ATTACK_RING,
   UNIT_CLASS_MOBILE,
   UNIT_CLASS_NUKE_ACTIVE,
@@ -93,7 +94,7 @@ export class UnitSubsetIndex {
   private readonly structureDeltaScratch: StructureRenderInput[] = [];
 
   applyUpdates(
-    updates: readonly StructureRenderInput[],
+    updates: readonly UnitClassificationInput[],
     states: ReadonlyMap<number, UnitState>,
   ): void {
     // The master state map is long-lived. Registering each call is cheap and
@@ -108,13 +109,14 @@ export class UnitSubsetIndex {
     for (let index = 0; index < updates.length; index++) {
       const update = updates[index]!;
       const state = states.get(update.id);
+      const previousStructure = this.structures.get(update.id);
       const rustOffset = index * 3;
       const flags =
         validRust && rust![rustOffset] === (update.id >>> 0)
           ? rust![rustOffset + 2]!
           : fallbackFlags(update.unitType, update.isActive);
 
-      const wasStructure = this.structures.has(update.id);
+      const wasStructure = previousStructure !== undefined;
       const isStructure = (flags & UNIT_CLASS_STRUCTURE) !== 0;
 
       this.sync(this.mobile, update.id, state, flags & UNIT_CLASS_MOBILE);
@@ -162,7 +164,21 @@ export class UnitSubsetIndex {
 
       if (wasStructure || isStructure) {
         this.structureRevision++;
-        structureDeltas.push(update);
+        const renderState = state ?? previousStructure;
+        if (renderState !== undefined) {
+          structureDeltas.push(renderState);
+        } else {
+          // Removal records only need identity/type/active in Rust. Keep a
+          // complete record shape so the public classifier input contract does
+          // not have to grow render-specific fields.
+          structureDeltas.push({
+            ...update,
+            pos: 0,
+            ownerID: 0,
+            underConstruction: false,
+            markedForDeletion: false,
+          });
+        }
       }
     }
 
