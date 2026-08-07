@@ -74,11 +74,10 @@ export class OpenFrontWasmGraphics {
       );
     }
 
-    const input = this.wasm.openfront_upload_create(terrainBytes.byteLength);
-    if (input === 0) this.throwLastError("allocate terrain upload buffer");
-    let output = 0;
+    const upload = this.wasm.openfront_upload_create(terrainBytes.byteLength);
+    if (upload === 0) this.throwLastError("allocate terrain upload buffer");
     try {
-      const inputPtr = this.wasm.openfront_upload_ptr(input);
+      const inputPtr = this.wasm.openfront_upload_ptr(upload);
       if (this.wasm.openfront_last_error() !== 0) {
         this.throwLastError("locate terrain upload buffer");
       }
@@ -88,8 +87,8 @@ export class OpenFrontWasmGraphics {
         terrainBytes.byteLength,
       ).set(terrainBytes);
 
-      output = this.wasm.openfront_graphics_terrain_rgba(
-        input,
+      const output = this.wasm.openfront_graphics_terrain_rgba(
+        upload,
         width,
         height,
         packRgb(palette.ocean),
@@ -99,8 +98,13 @@ export class OpenFrontWasmGraphics {
         packRgb(palette.mountain),
       );
       if (output === 0) this.throwLastError("build terrain RGBA texture");
+      if (output !== upload) {
+        throw new Error(
+          `Unable to build Rust terrain texture: encoder returned unexpected buffer ${output}`,
+        );
+      }
 
-      const outputLen = this.wasm.openfront_upload_len(output) >>> 0;
+      const outputLen = this.wasm.openfront_upload_len(upload) >>> 0;
       if (this.wasm.openfront_last_error() !== 0) {
         this.throwLastError("read terrain RGBA length");
       }
@@ -110,7 +114,7 @@ export class OpenFrontWasmGraphics {
           `Unable to build Rust terrain texture: expected ${expectedBytes} RGBA bytes, got ${outputLen}`,
         );
       }
-      const outputPtr = this.wasm.openfront_upload_ptr(output);
+      const outputPtr = this.wasm.openfront_upload_ptr(upload);
       if (this.wasm.openfront_last_error() !== 0) {
         this.throwLastError("locate terrain RGBA buffer");
       }
@@ -118,8 +122,7 @@ export class OpenFrontWasmGraphics {
         new Uint8Array(this.wasm.memory.buffer, outputPtr, outputLen),
       );
     } finally {
-      if (output !== 0) this.wasm.openfront_upload_destroy(output);
-      this.wasm.openfront_upload_destroy(input);
+      this.wasm.openfront_upload_destroy(upload);
     }
   }
 
