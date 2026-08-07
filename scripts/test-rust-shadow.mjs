@@ -39,6 +39,7 @@ run(npm, [
   "tests/rust/LiveWaterIntegration.test.ts",
   "tests/rust/LiveHierarchicalWaterIntegration.test.ts",
   "tests/rust/UnitClassificationBuildingStress.test.ts",
+  "tests/rust/BuildingPopulationStress.test.ts",
   "tests/rust/PathfindingBenchmark.test.ts",
   "tests/rust/FullWorldPathfindingBenchmark.test.ts",
 ]);
