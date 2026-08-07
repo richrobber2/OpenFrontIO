@@ -33,6 +33,7 @@ run(npm, [
   "tests/rust/WaterPathParity.test.ts",
   "tests/rust/ConnectedComponentsParity.test.ts",
   "tests/rust/PathfindingBenchmark.test.ts",
+  "tests/rust/FullWorldPathfindingBenchmark.test.ts",
 ]);
 run(npm, [
   "exec",
