@@ -244,6 +244,13 @@ export class OpenFrontWasmModule {
     );
   }
 
+  waterComponents(handle: number): Uint32Array {
+    return this.runTileQuery(
+      () => this.wasm.openfront_map_water_components(handle),
+      "query water connected components",
+    );
+  }
+
   railPath(handle: number, starts: Uint32Array, goal: number): Uint32Array {
     if (starts.length <= 4) {
       return this.runSmallPathQuery(
