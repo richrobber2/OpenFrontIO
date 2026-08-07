@@ -221,6 +221,13 @@ export class OpenFrontWasmModule {
     );
   }
 
+  airPath(handle: number, from: number, to: number, seed: number): Uint32Array {
+    return this.runTileQuery(
+      () => this.wasm.openfront_map_air_path(handle, from, to, seed >>> 0),
+      "query deterministic air path",
+    );
+  }
+
   private uploadU32(values: Uint32Array): number {
     if (HOST_IS_LITTLE_ENDIAN) {
       return this.upload(
