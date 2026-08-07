@@ -4,7 +4,6 @@ const STRUCTURE_RECORD_WORDS: usize = 7;
 const STRUCTURE_RECORD_BYTES: usize = STRUCTURE_RECORD_WORDS * 4;
 
 struct WasmStructureRenderer {
-    map_width: u32,
     state: StructureRenderState,
 }
 
@@ -31,17 +30,12 @@ fn read_u32(record: &[u8], word: usize) -> u32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn openfront_structure_renderer_create(map_width: u32) -> u32 {
+pub extern "C" fn openfront_structure_renderer_create() -> u32 {
     begin_call();
-    if map_width == 0 {
-        fail(ErrorCode::InvalidDimensions);
-        return 0;
-    }
     STRUCTURE_RENDERERS.with(|renderers| {
         insert_slot(
             &mut renderers.borrow_mut(),
             WasmStructureRenderer {
-                map_width,
                 state: StructureRenderState::new(),
             },
         )
@@ -66,6 +60,10 @@ pub extern "C" fn openfront_structure_renderer_destroy(handle: u32) -> u32 {
 ///
 /// Upload layout is `count` little-endian u32 records:
 /// `[id, canonical_kind, active, tile, owner_id, under_construction, marked_for_deletion]`.
+/// The packed render table keeps the tile ref in lane 0 and reserves lane 1;
+/// the browser converts that dirty lane pair to x/y using its renderer map
+/// width immediately before the WebGL upload. Keeping this state map-agnostic
+/// avoids coupling the incremental unit index to GameView construction order.
 /// Non-structure and inactive records remove any existing structure slot.
 #[unsafe(no_mangle)]
 pub extern "C" fn openfront_structure_renderer_update(
@@ -116,12 +114,10 @@ pub extern "C" fn openfront_structure_renderer_update(
                     continue;
                 }
 
-                let x = (tile % renderer.map_width) as f32;
-                let y = (tile / renderer.map_width) as f32;
                 renderer.state.upsert(
                     id,
-                    x,
-                    y,
+                    tile as f32,
+                    0.0,
                     owner_id,
                     under_construction,
                     atlas_idx,
