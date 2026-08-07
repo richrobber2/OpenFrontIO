@@ -91,15 +91,16 @@ pub fn encode_terrain_rgba(terrain: u8, palette: TerrainPalette) -> [u8; 4] {
     [rgb[0], rgb[1], rgb[2], 255]
 }
 
-/// Convert a map-sized terrain-byte buffer into the RGBA8 texture uploaded by
-/// TerrainPass. Dimensions are checked here so malformed inputs never become
-/// out-of-bounds writes in the Wasm caller.
-pub fn build_terrain_rgba(
-    terrain: &[u8],
+/// Expand a terrain-byte vector into RGBA in place. The loop runs backwards so
+/// each one-byte source tile is consumed before its four-byte destination can
+/// overwrite it. This is the Wasm-friendly path: one allocation grows from
+/// `w*h` bytes to `w*h*4` instead of retaining input + cloned input + output.
+pub fn build_terrain_rgba_in_place(
+    terrain: &mut Vec<u8>,
     width: u32,
     height: u32,
     palette: TerrainPalette,
-) -> Result<Vec<u8>, TerrainGraphicsError> {
+) -> Result<(), TerrainGraphicsError> {
     let pixel_count = (width as usize)
         .checked_mul(height as usize)
         .ok_or(TerrainGraphicsError::SizeOverflow)?;
@@ -112,10 +113,27 @@ pub fn build_terrain_rgba(
     let byte_count = pixel_count
         .checked_mul(4)
         .ok_or(TerrainGraphicsError::SizeOverflow)?;
-    let mut rgba = vec![0; byte_count];
-    for (&tile, pixel) in terrain.iter().zip(rgba.chunks_exact_mut(4)) {
-        pixel.copy_from_slice(&encode_terrain_rgba(tile, palette));
+    terrain.resize(byte_count, 0);
+
+    for index in (0..pixel_count).rev() {
+        let rgba = encode_terrain_rgba(terrain[index], palette);
+        let offset = index * 4;
+        terrain[offset..offset + 4].copy_from_slice(&rgba);
     }
+    Ok(())
+}
+
+/// Convert a map-sized terrain-byte slice into the RGBA8 texture uploaded by
+/// TerrainPass. The owned Wasm upload path uses `build_terrain_rgba_in_place`
+/// directly to avoid the copy performed here.
+pub fn build_terrain_rgba(
+    terrain: &[u8],
+    width: u32,
+    height: u32,
+    palette: TerrainPalette,
+) -> Result<Vec<u8>, TerrainGraphicsError> {
+    let mut rgba = terrain.to_vec();
+    build_terrain_rgba_in_place(&mut rgba, width, height, palette)?;
     Ok(rgba)
 }
 
@@ -156,6 +174,15 @@ mod tests {
             ..PALETTE
         };
         assert_eq!(encode_terrain_rgba(LAND_MASK | 9, palette), [0, 238, 0, 255]);
+    }
+
+    #[test]
+    fn expands_texture_in_place_without_corrupting_unread_tiles() {
+        let source = vec![0, LAND_MASK | 5, SHORELINE_MASK, LAND_MASK | 20];
+        let expected = build_terrain_rgba(&source, 2, 2, PALETTE).unwrap();
+        let mut in_place = source;
+        build_terrain_rgba_in_place(&mut in_place, 2, 2, PALETTE).unwrap();
+        assert_eq!(in_place, expected);
     }
 
     #[test]
