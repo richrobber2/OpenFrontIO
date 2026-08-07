@@ -244,6 +244,18 @@ export class OpenFrontWasmModule {
     );
   }
 
+  railPath(handle: number, starts: Uint32Array, goal: number): Uint32Array {
+    const upload = this.uploadU32(starts);
+    try {
+      return this.runTileQuery(
+        () => this.wasm.openfront_map_rail_path(handle, upload, goal),
+        "query rail path",
+      );
+    } finally {
+      this.wasm.openfront_upload_destroy(upload);
+    }
+  }
+
   private uploadU32(values: Uint32Array): number {
     if (HOST_IS_LITTLE_ENDIAN) {
       return this.upload(
