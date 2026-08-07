@@ -65,6 +65,11 @@ export interface OpenFrontWasmExports extends WebAssembly.Exports {
     ownerID: number,
     maximumDepth: number,
   ): number;
+  openfront_map_owner_territory_analysis(
+    handle: number,
+    ownerID: number,
+    maximumDepth: number,
+  ): number;
   openfront_map_largest_owned_depths(
     handle: number,
     maximumDepth: number,
