@@ -13,7 +13,19 @@ pub extern "C" fn openfront_map_create(width: u32, height: u32, upload_handle: u
     };
 
     match GameMapStore::new(width, height, terrain) {
-        Ok(map) => MAPS.with(|maps| insert_slot(&mut maps.borrow_mut(), map)),
+        Ok(map) => {
+            let tile_count = map.tile_count() as usize;
+            let handle = MAPS.with(|maps| insert_slot(&mut maps.borrow_mut(), map));
+            let index = slot_index(handle).expect("new map handles are nonzero");
+            WATER_FINDERS.with(|finders| {
+                let mut finders = finders.borrow_mut();
+                if finders.len() <= index {
+                    finders.resize_with(index + 1, || None);
+                }
+                finders[index] = Some(WaterPathFinder::new(tile_count));
+            });
+            handle
+        }
         Err(error) => {
             fail(map_error(error));
             0
@@ -29,6 +41,10 @@ pub extern "C" fn openfront_map_destroy(handle: u32) -> u32 {
         remove_slot(maps.as_mut_slice(), handle)
     });
     if removed {
+        WATER_FINDERS.with(|finders| {
+            let mut finders = finders.borrow_mut();
+            let _ = remove_slot(finders.as_mut_slice(), handle);
+        });
         1
     } else {
         fail(ErrorCode::InvalidHandle);
