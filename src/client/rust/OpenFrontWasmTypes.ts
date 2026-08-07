@@ -31,84 +31,24 @@ export interface OpenFrontWasmExports extends WebAssembly.Exports {
   openfront_map_num_land_tiles(handle: number): number;
   openfront_map_num_tiles_with_fallout(handle: number): number;
   openfront_map_packed_tile(handle: number, tile: number): number;
-  openfront_map_update_tile(
-    handle: number,
-    tile: number,
-    packed: number,
-  ): number;
-  openfront_map_set_owner_id(
-    handle: number,
-    tile: number,
-    ownerID: number,
-  ): number;
-  openfront_map_set_fallout(
-    handle: number,
-    tile: number,
-    value: number,
-  ): number;
-  openfront_map_set_defense_bonus(
-    handle: number,
-    tile: number,
-    value: number,
-  ): number;
+  openfront_map_update_tile(handle: number, tile: number, packed: number): number;
+  openfront_map_set_owner_id(handle: number, tile: number, ownerID: number): number;
+  openfront_map_set_fallout(handle: number, tile: number, value: number): number;
+  openfront_map_set_defense_bonus(handle: number, tile: number, value: number): number;
   openfront_map_neighbors4(handle: number, tile: number): number;
   openfront_map_neighbors8(handle: number, tile: number): number;
   openfront_map_connected_owner(handle: number, start: number): number;
-  openfront_map_connected_mask(
-    handle: number,
-    start: number,
-    upload: number,
-  ): number;
-  openfront_map_owned_depths(
-    handle: number,
-    upload: number,
-    ownerID: number,
-    maximumDepth: number,
-  ): number;
-  openfront_map_owner_territory_analysis(
-    handle: number,
-    ownerID: number,
-    maximumDepth: number,
-  ): number;
-  openfront_map_largest_owned_depths(
-    handle: number,
-    maximumDepth: number,
-  ): number;
-  openfront_map_air_path(
-    handle: number,
-    from: number,
-    to: number,
-    seed: number,
-  ): number;
+  openfront_map_connected_mask(handle: number, start: number, upload: number): number;
+  openfront_map_owned_depths(handle: number, upload: number, ownerID: number, maximumDepth: number): number;
+  openfront_map_owner_territory_analysis(handle: number, ownerID: number, maximumDepth: number): number;
+  openfront_map_largest_owned_depths(handle: number, maximumDepth: number): number;
+  openfront_map_air_path(handle: number, from: number, to: number, seed: number): number;
   openfront_map_water_components(handle: number): number;
-  openfront_map_rail_path(
-    handle: number,
-    upload: number,
-    goal: number,
-  ): number;
-  openfront_map_rail_path_small(
-    handle: number,
-    count: number,
-    start0: number,
-    start1: number,
-    start2: number,
-    start3: number,
-    goal: number,
-  ): number;
-  openfront_map_water_path(
-    handle: number,
-    upload: number,
-    goal: number,
-  ): number;
-  openfront_map_water_path_small(
-    handle: number,
-    count: number,
-    start0: number,
-    start1: number,
-    start2: number,
-    start3: number,
-    goal: number,
-  ): number;
+  openfront_map_rail_path(handle: number, upload: number, goal: number): number;
+  openfront_map_rail_path_small(handle: number, count: number, start0: number, start1: number, start2: number, start3: number, goal: number): number;
+  openfront_map_water_path(handle: number, upload: number, goal: number): number;
+  openfront_map_water_path_small(handle: number, count: number, start0: number, start1: number, start2: number, start3: number, goal: number): number;
+  openfront_map_water_path_bounded(handle: number, upload: number, goal: number, minX: number, maxX: number, minY: number, maxY: number): number;
   openfront_result_ptr(): number;
   openfront_result_len(): number;
 }
