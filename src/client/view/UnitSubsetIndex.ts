@@ -176,6 +176,15 @@ export class UnitSubsetIndex {
 
   private updateRustStructures(changed: StructureRenderInput[]): void {
     if (!this.rustStructureInitialized) {
+      // Do not switch ordering on a frame where StructurePass will not run.
+      // Waiting for a real structure delta guarantees GameView also marks the
+      // frame structuresDirty, so the full Rust seed and GPU upload happen
+      // atomically before later slot-sized patches are accepted.
+      if (changed.length === 0) {
+        this.structureRenderDelta = null;
+        return;
+      }
+
       // Rust may finish preloading after GameView already received initial unit
       // snapshots. Seed from the current structure subset once so the persistent
       // table can safely switch from full rebuilds to delta patches mid-match.
@@ -199,7 +208,7 @@ export class UnitSubsetIndex {
     const delta = updateStructureRenderDeltasRust(changed);
     if (delta === null) {
       // The live StructurePass will rebuild from the TypeScript structure map
-      // on the next dirty update. Do not keep advertising a stale Rust patch.
+      // on this dirty update. Do not keep advertising a stale Rust patch.
       this.rustStructureInitialized = false;
       this.structureRenderDelta = null;
       return;
