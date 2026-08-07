@@ -5,17 +5,18 @@ export { GraphicsOverridesSchema } from "./GraphicsOverrides";
 export type { GraphicsOverrides, GraphicsPresets } from "./GraphicsOverrides";
 export { GLUnavailableError, showGLGate, trackGLInit } from "./initGL";
 export { MapRenderer } from "./MapRenderer";
+import { preloadRustUnitClassifier } from "../../rust/OpenFrontWasmUnits";
 import { preloadAtlasData as preloadNameAtlasData } from "./passes/name-pass/AtlasData";
 import { preloadRustTerrainEncoder } from "./utils/ColorUtils";
 
 // ClientGameRunner already awaits this graphics preload before constructing
-// GPURenderer. Fold the main-thread Rust graphics instance into the same gate
-// so the very first terrain texture build uses Rust rather than only later
-// theme/context rebuilds.
+// GPURenderer/GameView. Fold main-thread Rust helpers into the same gate so
+// terrain encoding and unit-delta classification are ready for the first tick.
 export async function preloadAtlasData() {
   const [atlasData] = await Promise.all([
     preloadNameAtlasData(),
     preloadRustTerrainEncoder(),
+    preloadRustUnitClassifier(),
   ]);
   return atlasData;
 }
