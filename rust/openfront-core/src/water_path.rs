@@ -143,6 +143,7 @@ impl WaterPathFinder {
 
         let width = map.width();
         let num_nodes = map.tile_count();
+        let terrain = map.terrain_buffer();
         let goal_coord = geometry.coord(goal).expect("validated goal");
         let first_coord = geometry.coord(starts[0]).expect("validated start");
         let dx_goal = i64::from(goal_coord.x) - i64::from(first_coord.x);
@@ -188,14 +189,14 @@ impl WaterPathFinder {
             let current_coord = geometry.coord(current_ref).expect("current is valid");
             let current_g = self.g_score[current_index];
 
-            let visit = |neighbor: u32, nx: u32, ny: u32, this: &mut Self| -> Result<(), GameMapError> {
+            let visit = |neighbor: u32, nx: u32, ny: u32, this: &mut Self| {
                 let neighbor_index = neighbor as usize;
                 if this.closed_stamp[neighbor_index] == stamp {
-                    return Ok(());
+                    return;
                 }
-                let terrain = map.terrain(TileRef::new(neighbor))?;
+                let terrain = terrain[neighbor_index];
                 if neighbor != goal.get() && terrain.is_land() {
-                    return Ok(());
+                    return;
                 }
                 let tentative_g = current_g + BASE_COST + magnitude_penalty(terrain.magnitude());
                 if this.g_score_stamp[neighbor_index] != stamp
@@ -209,20 +210,19 @@ impl WaterPathFinder {
                         * (nx.abs_diff(goal_coord.x) + ny.abs_diff(goal_coord.y));
                     this.heap.push(neighbor, tentative_g + h + cross_tie(nx, ny));
                 }
-                Ok(())
             };
 
             if current >= width {
-                visit(current - width, current_coord.x, current_coord.y - 1, self)?;
+                visit(current - width, current_coord.x, current_coord.y - 1, self);
             }
             if current < num_nodes - width {
-                visit(current + width, current_coord.x, current_coord.y + 1, self)?;
+                visit(current + width, current_coord.x, current_coord.y + 1, self);
             }
             if current_coord.x != 0 {
-                visit(current - 1, current_coord.x - 1, current_coord.y, self)?;
+                visit(current - 1, current_coord.x - 1, current_coord.y, self);
             }
             if current_coord.x + 1 < width {
-                visit(current + 1, current_coord.x + 1, current_coord.y, self)?;
+                visit(current + 1, current_coord.x + 1, current_coord.y, self);
             }
         }
 
