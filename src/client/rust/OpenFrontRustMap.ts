@@ -97,6 +97,11 @@ export class OpenFrontRustMap {
     return this.module.largestOwnedDepths(this.handle, maximumDepth);
   }
 
+  airPath(from: number, to: number, seed: number): Uint32Array {
+    this.assertLive();
+    return this.module.airPath(this.handle, from, to, seed);
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.module.destroyMap(this.handle);
