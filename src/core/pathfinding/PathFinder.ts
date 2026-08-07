@@ -1,7 +1,10 @@
 import { Game } from "../game/Game";
 import { GameMap, TileRef } from "../game/GameMap";
 import { TrainStation } from "../game/TrainStation";
-import { rustRailPath } from "../rust/RustPathfindingService";
+import {
+  rustBoundedWaterPath,
+  rustRailPath,
+} from "../rust/RustPathfindingService";
 import { AStarRail } from "./algorithms/AStar.Rail";
 import { AStarWater } from "./algorithms/AStar.Water";
 import { AirPathFinder } from "./PathFinder.Air";
@@ -61,7 +64,16 @@ function buildWaterChain(game: Game): PathFinder<TileRef> {
   const componentCheckFn = (t: TileRef) => graph.getComponentId(t);
   return PathFinderBuilder.create(hpa)
     .wrap((pf) => new ComponentCheckTransformer(pf, componentCheckFn))
-    .wrap((pf) => new SmoothingWaterTransformer(pf, miniMap))
+    .wrap(
+      (pf) =>
+        new SmoothingWaterTransformer(
+          pf,
+          miniMap,
+          undefined,
+          (from, to, bounds) =>
+            rustBoundedWaterPath(game, [from], to, bounds),
+        ),
+    )
     .wrap((pf) => new ShoreCoercingTransformer(pf, miniMap))
     .wrap((pf) => new MiniMapTransformer(pf, game.map(), miniMap))
     .build();
