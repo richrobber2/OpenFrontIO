@@ -3,13 +3,15 @@ import { registerUnitRenderSubsets } from "../render/frame/UnitSubsetRegistry";
 import type { UnitState } from "../render/types";
 import {
   classifyUnitDeltasRust,
+  type RustStructureRenderDelta,
+  type StructureRenderInput,
   UNIT_CLASS_ATTACK_RING,
   UNIT_CLASS_MOBILE,
   UNIT_CLASS_NUKE_ACTIVE,
   UNIT_CLASS_NUKE_TELEGRAPH,
   UNIT_CLASS_STRUCTURE,
   UNIT_CLASS_TRAIL,
-  type UnitClassificationInput,
+  updateStructureRenderDeltasRust,
 } from "../rust/OpenFrontWasmUnits";
 
 const STRUCTURE_TYPES = new Set<string>([
@@ -67,6 +69,10 @@ function fallbackFlags(unitType: string, isActive: boolean): number {
  * Incremental indexes for unit subsets used by per-tick derivation and render
  * passes. UnitState objects are shared with GameView's master map, so moving
  * units do not require copying state: only unit deltas update membership.
+ *
+ * The same changed-unit stream also feeds Rust's persistent structure render
+ * table. After its one-time seed, structure rendering receives only changed
+ * packed slots rather than walking and repacking every building.
  */
 export class UnitSubsetIndex {
   readonly mobile = new Map<number, UnitState>();
@@ -80,9 +86,16 @@ export class UnitSubsetIndex {
 
   /** Advances whenever a structure receives a delta, including removal. */
   structureRevision = 0;
+  /** Latest copied dirty slot range produced by the Rust structure table. */
+  structureRenderDelta: RustStructureRenderDelta | null = null;
+
+  private rustStructureInitialized = false;
+  private readonly structureDeltaScratch: StructureRenderInput[] = [];
+
+  constructor(private readonly mapWidth: number) {}
 
   applyUpdates(
-    updates: readonly UnitClassificationInput[],
+    updates: readonly StructureRenderInput[],
     states: ReadonlyMap<number, UnitState>,
   ): void {
     // The master state map is long-lived. Registering each call is cheap and
@@ -91,6 +104,8 @@ export class UnitSubsetIndex {
 
     const rust = classifyUnitDeltasRust(updates);
     const validRust = rust !== null && rust.length === updates.length * 3;
+    const structureDeltas = this.structureDeltaScratch;
+    structureDeltas.length = 0;
 
     for (let index = 0; index < updates.length; index++) {
       const update = updates[index]!;
@@ -147,13 +162,51 @@ export class UnitSubsetIndex {
         flags & UNIT_CLASS_ATTACK_RING,
       );
 
-      if (wasStructure || isStructure) this.structureRevision++;
+      if (wasStructure || isStructure) {
+        this.structureRevision++;
+        structureDeltas.push(update);
+      }
     }
+
+    this.updateRustStructures(structureDeltas);
   }
 
   trailIdsInto(out: number[]): void {
     out.length = 0;
     for (const id of this.trails.keys()) out.push(id);
+  }
+
+  private updateRustStructures(changed: StructureRenderInput[]): void {
+    if (!this.rustStructureInitialized) {
+      // Rust may finish preloading after GameView already received initial unit
+      // snapshots. Seed from the current structure subset once so the persistent
+      // table can safely switch from full rebuilds to delta patches mid-match.
+      changed.length = 0;
+      for (const state of this.structures.values()) changed.push(state);
+      const initial = updateStructureRenderDeltasRust(changed, this.mapWidth);
+      if (initial === null) {
+        this.structureRenderDelta = null;
+        return;
+      }
+      this.rustStructureInitialized = true;
+      this.structureRenderDelta = initial;
+      return;
+    }
+
+    if (changed.length === 0) {
+      this.structureRenderDelta = null;
+      return;
+    }
+
+    const delta = updateStructureRenderDeltasRust(changed, this.mapWidth);
+    if (delta === null) {
+      // The live StructurePass will rebuild from the TypeScript structure map
+      // on the next dirty update. Do not keep advertising a stale Rust patch.
+      this.rustStructureInitialized = false;
+      this.structureRenderDelta = null;
+      return;
+    }
+    this.structureRenderDelta = delta;
   }
 
   private sync(
