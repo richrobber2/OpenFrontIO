@@ -37,6 +37,7 @@ run(npm, [
   "tests/rust/HierarchicalWaterPathParity.test.ts",
   "tests/rust/LiveRailIntegration.test.ts",
   "tests/rust/LiveWaterIntegration.test.ts",
+  "tests/rust/LiveHierarchicalWaterIntegration.test.ts",
   "tests/rust/PathfindingBenchmark.test.ts",
   "tests/rust/FullWorldPathfindingBenchmark.test.ts",
 ]);
