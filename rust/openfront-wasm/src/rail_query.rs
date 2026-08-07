@@ -19,9 +19,25 @@ pub extern "C" fn openfront_map_rail_path(
         Err(QueryInputError::InvalidMapHandle) => unreachable!(),
     };
 
-    let Some(result) = with_map(handle, |map| {
-        openfront_core::rail_path(map, &starts, TileRef::new(goal))
-    }) else {
+    let Some(map_index) = slot_index(handle) else {
+        fail(ErrorCode::InvalidHandle);
+        return 0;
+    };
+
+    let result = MAPS.with(|maps| {
+        let maps = maps.borrow();
+        let Some(map) = maps.get(map_index).and_then(Option::as_ref) else {
+            return None;
+        };
+
+        RAIL_FINDERS.with(|finders| {
+            let mut finders = finders.borrow_mut();
+            let finder = finders.get_mut(map_index)?.as_mut()?;
+            Some(finder.find_path(map, &starts, TileRef::new(goal)))
+        })
+    });
+
+    let Some(result) = result else {
         fail(ErrorCode::InvalidHandle);
         return 0;
     };
