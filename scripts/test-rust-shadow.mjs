@@ -27,6 +27,7 @@ run(npm, [
   "--",
   "vitest",
   "run",
+  "tests/StrategicWeaponsSamSafety.test.ts",
   "tests/rust/AirPathParity.test.ts",
   "tests/rust/TerritoryAnalysisParity.test.ts",
   "tests/rust/RailPathParity.test.ts",
