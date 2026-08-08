@@ -18,6 +18,9 @@ const TARGETABLE_RANGE = 150;
 const TARGETABLE_RANGE_SQ = TARGETABLE_RANGE * TARGETABLE_RANGE;
 const THRESHOLD_SAMPLES = 64;
 
+export const NUKE_TRAJECTORY_SEGMENTS = 128;
+export const NUKE_TRAJECTORY_FLOATS_PER_PAIR = 6;
+
 // SAM range formula: 150 - 480 / (level + 5)
 const MAX_SAM_RANGE = 150;
 const SAM_RANGE_DIVISOR = 480;
@@ -238,6 +241,60 @@ export function computeTrajectoryThresholds(
   }
 
   return { tUntargetableStart, tUntargetableEnd, tSamIntercept };
+}
+
+/** Fill the renderer's two-vertex-per-sample trajectory strip. */
+export function fillNukeTrajectoryStripVertices(
+  data: NukeTrajectoryData,
+  destination: Float32Array,
+  segments = NUKE_TRAJECTORY_SEGMENTS,
+): void {
+  if (!Number.isInteger(segments) || segments <= 0) {
+    throw new Error(`Invalid nuke trajectory strip segment count: ${segments}`);
+  }
+  const expectedLength = (segments + 1) * NUKE_TRAJECTORY_FLOATS_PER_PAIR;
+  if (destination.length !== expectedLength) {
+    throw new Error(
+      `Nuke trajectory strip destination length mismatch: expected ${expectedLength}, got ${destination.length}`,
+    );
+  }
+
+  let cumulativeDistance = 0;
+  let previousX = data.p0x;
+  let previousY = data.p0y;
+
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    const T = 1 - t;
+    const TT = T * T;
+    const tt = t * t;
+    const x =
+      TT * T * data.p0x +
+      3 * TT * t * data.p1x +
+      3 * T * tt * data.p2x +
+      tt * t * data.p3x;
+    const y =
+      TT * T * data.p0y +
+      3 * TT * t * data.p1y +
+      3 * T * tt * data.p2y +
+      tt * t * data.p3y;
+
+    if (i > 0) {
+      const dx = x - previousX;
+      const dy = y - previousY;
+      cumulativeDistance += Math.sqrt(dx * dx + dy * dy);
+    }
+    previousX = x;
+    previousY = y;
+
+    const offset = i * NUKE_TRAJECTORY_FLOATS_PER_PAIR;
+    destination[offset] = t;
+    destination[offset + 1] = -1;
+    destination[offset + 2] = cumulativeDistance;
+    destination[offset + 3] = t;
+    destination[offset + 4] = 1;
+    destination[offset + 5] = cumulativeDistance;
+  }
 }
 
 /**
