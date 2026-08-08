@@ -11,6 +11,7 @@
 import terrainFragSrc from "../shaders/terrain/terrain.frag.glsl?raw";
 import terrainVertSrc from "../shaders/terrain/terrain.vert.glsl?raw";
 import {
+  buildTerrainDeltaRecords,
   buildTerrainRGBA,
   encodeTerrainTile,
   TerrainColorOverrides,
@@ -35,7 +36,7 @@ export class TerrainPass {
   private mapH: number;
   // Base ocean (deep water) color; reused by applyTerrainDelta and rebuilds.
   private terrainColors: TerrainColorOverrides | undefined;
-  // Scratch buffer for 1×1 sub-uploads; reused across applyTerrainDelta calls.
+  // Scratch buffer retained only for the compatibility direct-update path.
   private readonly pixelScratch = new Uint8Array(4);
 
   constructor(
@@ -73,6 +74,21 @@ export class TerrainPass {
     this.vao = createMapQuad(gl, mapW, mapH);
   }
 
+  getTexture(): WebGLTexture {
+    return this.tex;
+  }
+
+  /** Build the shared sparse scatter payload using the currently active colors. */
+  buildDeltaRecords(refs: readonly number[], bytes: Uint8Array): Uint32Array {
+    return buildTerrainDeltaRecords(
+      refs,
+      bytes,
+      this.mapW,
+      this.mapH,
+      this.terrainColors,
+    );
+  }
+
   /**
    * Replace the base terrain colors and re-upload the whole terrain texture.
    * Called when the user changes the terrain colors in graphics settings.
@@ -101,11 +117,9 @@ export class TerrainPass {
   }
 
   /**
-   * Update a subset of terrain tiles in-place (e.g. land→water from a water
-   * nuke). `bytes[i]` is the new terrain byte for `refs[i]` (parallel arrays).
-   * One 1×1 texSubImage2D per ref — fine for the small bursts a single nuke
-   * produces. A later full re-upload (setTerrainColors) regenerates from
-   * terrainSource, whose backing game map already reflects these conversions.
+   * Direct compatibility update path. GPURenderer routes sparse deltas through
+   * TerrainDeltaScatterPass; this remains for full uploads and any standalone
+   * callers that do not own the shared scatter pass.
    */
   applyTerrainDelta(refs: readonly number[], bytes: Uint8Array): void {
     if (refs.length === 0) return;
