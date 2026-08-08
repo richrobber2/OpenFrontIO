@@ -259,23 +259,19 @@ export class MatchPerformanceTracker {
     this.patchRuntimeTargets();
     this.ensurePanel();
 
-    if (this.rafId === null) {
-      this.lastRafTime = 0;
-      this.rafId = requestAnimationFrame(this.onAnimationFrame);
-    }
-    if (this.sampleTimer === null) {
-      this.sampleTimer = setInterval(
-        () => this.captureSample(),
-        SAMPLE_INTERVAL_MS,
-      );
-    }
+    if (this.rafId === null) this.lastRafTime = 0;
+    this.rafId ??= requestAnimationFrame(this.onAnimationFrame);
+    this.sampleTimer ??= setInterval(
+      () => this.captureSample(),
+      SAMPLE_INTERVAL_MS,
+    );
     if (this.lagTimer === null) {
       this.nextLagExpectedAt = performance.now() + EVENT_LOOP_INTERVAL_MS;
-      this.lagTimer = setInterval(
-        () => this.measureEventLoopLag(),
-        EVENT_LOOP_INTERVAL_MS,
-      );
     }
+    this.lagTimer ??= setInterval(
+      () => this.measureEventLoopLag(),
+      EVENT_LOOP_INTERVAL_MS,
+    );
   }
 
   private stopSampling(): void {
@@ -358,8 +354,8 @@ export class MatchPerformanceTracker {
     const frames = this.frameTimes.splice(0, this.frameTimes.length);
     const frameAvgMs = average(frames);
     const heapUsedBytes = this.readHeapUsedBytes();
-    if (this.baselineHeapBytes === null && heapUsedBytes !== null) {
-      this.baselineHeapBytes = heapUsedBytes;
+    if (heapUsedBytes !== null) {
+      this.baselineHeapBytes ??= heapUsedBytes;
     }
 
     const gpuFrameAvgMs =
