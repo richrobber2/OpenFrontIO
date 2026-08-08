@@ -19,6 +19,10 @@
 
 import type { UnitState } from "../types";
 import { SMOOTHED_NUKE_TYPES, UT_MIRV_WARHEAD } from "../types";
+import {
+  buildSpiralSegmentRust,
+  preloadRustSpiral,
+} from "../../rust/OpenFrontWasmSpiral";
 
 export const MAX_TRAIL_STRANDS = 8;
 
@@ -90,6 +94,7 @@ export class SpiralTrails {
    * call; in-flight ribbons keep their geometry.
    */
   setParams(ownerID: number, params: SpiralParams): void {
+    if (typeof window !== "undefined") void preloadRustSpiral();
     this.params.set(ownerID, {
       radius: params.radius,
       strands: Math.min(
@@ -186,6 +191,28 @@ export class SpiralTrails {
     if (segLen === 0) return;
     const ndx = dx / segLen;
     const ndy = dy / segLen;
+
+    const rustSamples = buildSpiralSegmentRust({
+      x0,
+      y0,
+      x1,
+      y1,
+      segmentLength: segLen,
+      previousDirX: r.dirX,
+      previousDirY: r.dirY,
+      hasPreviousDir: r.hasDir,
+      includeStart: r.sampleCount === 0,
+      headDistance: r.headDist,
+    });
+    if (rustSamples !== null) {
+      this.appendSamples(r, rustSamples);
+      r.dirX = ndx;
+      r.dirY = ndy;
+      r.hasDir = true;
+      r.headDist += segLen;
+      return;
+    }
+
     const fromDirX = r.hasDir ? r.dirX : ndx;
     const fromDirY = r.hasDir ? r.dirY : ndy;
     const dirAt = (f: number): [number, number] => {
@@ -218,6 +245,29 @@ export class SpiralTrails {
     r.headDist += segLen;
   }
 
+  /** Copy a borrowed Wasm sample stream into this ribbon's long-lived storage. */
+  private appendSamples(r: RibbonState, samples: Float32Array): void {
+    if (samples.length % SAMPLE_FLOATS !== 0) {
+      throw new Error(
+        `Invalid spiral sample buffer length: ${samples.length}`,
+      );
+    }
+    const count = samples.length / SAMPLE_FLOATS;
+    this.ensureSampleCapacity(r, count);
+    r.samples.set(samples, r.sampleCount * SAMPLE_FLOATS);
+    r.sampleCount += count;
+  }
+
+  private ensureSampleCapacity(r: RibbonState, additionalSamples: number): void {
+    const required = (r.sampleCount + additionalSamples) * SAMPLE_FLOATS;
+    if (required <= r.samples.length) return;
+    let length = r.samples.length;
+    while (length < required) length *= 2;
+    const grown = new Float32Array(length);
+    grown.set(r.samples);
+    r.samples = grown;
+  }
+
   private pushSample(
     r: RibbonState,
     cx: number,
@@ -226,12 +276,8 @@ export class SpiralTrails {
     py: number,
     d: number,
   ): void {
+    this.ensureSampleCapacity(r, 1);
     const off = r.sampleCount * SAMPLE_FLOATS;
-    if (off + SAMPLE_FLOATS > r.samples.length) {
-      const grown = new Float32Array(r.samples.length * 2);
-      grown.set(r.samples);
-      r.samples = grown;
-    }
     r.samples[off] = cx;
     r.samples[off + 1] = cy;
     r.samples[off + 2] = px;
