@@ -1,7 +1,9 @@
 use openfront_core::{
-    capacity_escape_city_budget, estimate_trade_route_gold, plan_economic_systems,
-    rail_city_growth_score, score_city_stack_placement, score_factory_placement,
-    should_fund_first_pressure_factory, EconomicSystemContext,
+    capacity_escape_city_budget, estimate_trade_route_gold, plan_adaptive_port_actions,
+    plan_economic_systems, rail_city_growth_score, score_adaptive_trade_port_option,
+    score_city_stack_placement, score_factory_placement, should_fund_first_pressure_factory,
+    AdaptivePortContext, AdaptiveTradePortNormalization, AdaptiveTradePortOption,
+    AdaptiveTradePortThresholds, EconomicSystemContext,
 };
 
 #[unsafe(no_mangle)]
@@ -33,7 +35,11 @@ pub extern "C" fn openfront_ai_score_city_stack_placement(
     set_result([
         score.nearby_cities,
         if score.stacked { 1 } else { 0 },
-        if score.nearest_city_distance.is_some() { 1 } else { 0 },
+        if score.nearest_city_distance.is_some() {
+            1
+        } else {
+            0
+        },
     ]);
     set_f64_result([score.score, score.nearest_city_distance.unwrap_or(0.0)]);
     1
@@ -240,6 +246,155 @@ pub extern "C" fn openfront_ai_plan_economic_systems(
         plan.infrastructure_need_score,
         plan.trade_coverage_target_ratio,
         plan.capital_deployment_pressure,
+    ]);
+    1
+}
+
+#[allow(clippy::too_many_arguments)]
+#[unsafe(no_mangle)]
+pub extern "C" fn openfront_ai_plan_adaptive_port_actions(
+    reserve_ratio: f64,
+    incoming_pressure_ratio: f64,
+    active_front_ratio: f64,
+    gold: f64,
+    spendable_gold: f64,
+    port_cost: f64,
+    ports: f64,
+    connected_ports: f64,
+    trade_partners: f64,
+    embargoed_partners: f64,
+    own_warships: f64,
+    desired_warships: f64,
+    hostile_warships: f64,
+    hostile_transports: f64,
+    trade_targets: f64,
+    damaged_warships: f64,
+    dock_capacity: f64,
+    transport_loss_rate: f64,
+    rail_productivity_ratio: f64,
+    naval_bias: f64,
+    has_economic_trade_coverage_target_ratio: u32,
+    economic_trade_coverage_target_ratio: f64,
+) -> u32 {
+    begin_call();
+    let plan = plan_adaptive_port_actions(AdaptivePortContext {
+        reserve_ratio,
+        incoming_pressure_ratio,
+        active_front_ratio,
+        gold,
+        spendable_gold,
+        port_cost,
+        ports,
+        connected_ports,
+        trade_partners,
+        embargoed_partners,
+        own_warships,
+        desired_warships,
+        hostile_warships,
+        hostile_transports,
+        trade_targets,
+        damaged_warships,
+        dock_capacity,
+        transport_loss_rate,
+        rail_productivity_ratio,
+        naval_bias,
+        economic_trade_coverage_target_ratio: if has_economic_trade_coverage_target_ratio != 0 {
+            Some(economic_trade_coverage_target_ratio)
+        } else {
+            None
+        },
+    });
+    set_result([
+        plan.action as u32,
+        if plan.require_factory_connection { 1 } else { 0 },
+    ]);
+    set_f64_result([
+        plan.urgency,
+        plan.scores[0],
+        plan.scores[1],
+        plan.scores[2],
+        plan.scores[3],
+        plan.scores[4],
+        plan.connected_port_ratio,
+        plan.fleet_coverage_ratio,
+        plan.repair_load_ratio,
+        plan.naval_threat_ratio,
+        plan.trade_coverage_ratio,
+        plan.budget_coverage_ratio,
+        plan.target_partner_coverage_ratio,
+        plan.candidate_sample_ratio,
+        plan.target_coverage_ratio,
+        plan.minimum_site_quality,
+        plan.minimum_budget_coverage,
+        plan.required_return_ratio,
+        plan.maximum_payback_ticks,
+        plan.repair_health_threshold,
+        plan.stacking_load_threshold,
+        plan.construction_pressure,
+    ]);
+    1
+}
+
+#[allow(clippy::too_many_arguments)]
+#[unsafe(no_mangle)]
+pub extern "C" fn openfront_ai_score_adaptive_trade_port_option(
+    minimum_site_quality: f64,
+    required_return_ratio: f64,
+    maximum_payback_ticks: f64,
+    require_factory_connection: u32,
+    expected_gold: f64,
+    build_cost: f64,
+    route_distance: f64,
+    closest_friendly_port_distance: f64,
+    factory_connected: u32,
+    survival_ratio: f64,
+    spawn_interval_ticks: f64,
+    reachable_partners: f64,
+    partner_concentration: f64,
+    minimum_route: f64,
+    maximum_route: f64,
+    minimum_spacing: f64,
+    maximum_spacing: f64,
+    minimum_gold_rate: f64,
+    maximum_gold_rate: f64,
+) -> u32 {
+    begin_call();
+    let score = score_adaptive_trade_port_option(
+        AdaptiveTradePortThresholds {
+            minimum_site_quality,
+            required_return_ratio,
+            maximum_payback_ticks,
+            require_factory_connection: require_factory_connection != 0,
+        },
+        AdaptiveTradePortOption {
+            expected_gold,
+            build_cost,
+            route_distance,
+            closest_friendly_port_distance,
+            factory_connected: factory_connected != 0,
+            survival_ratio,
+            spawn_interval_ticks,
+            reachable_partners,
+            partner_concentration,
+        },
+        AdaptiveTradePortNormalization {
+            minimum_route,
+            maximum_route,
+            minimum_spacing,
+            maximum_spacing,
+            minimum_gold_rate,
+            maximum_gold_rate,
+        },
+    );
+    set_result([if score.eligible { 1 } else { 0 }]);
+    set_f64_result([
+        score.score,
+        score.return_ratio,
+        score.distance_efficiency,
+        score.spacing_quality,
+        score.expected_gold_per_tick,
+        score.payback_ticks,
+        score.diversity_quality,
     ]);
     1
 }
