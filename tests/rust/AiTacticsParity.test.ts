@@ -1,4 +1,5 @@
 // @vitest-environment node
+// Raw Wasm calls keep parity coverage independent of the browser AI facade.
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
