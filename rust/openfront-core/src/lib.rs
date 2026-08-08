@@ -6,6 +6,7 @@
 pub mod abstract_graph;
 pub mod abstract_graph_builder;
 pub mod ai_strategy;
+pub mod ai_tactics;
 pub mod air_path;
 pub mod bfs_grid;
 pub mod connected_components;
@@ -33,6 +34,15 @@ pub use ai_strategy::{
     evaluate_coalition_target, model_opponent, plan_strategic_action, CoalitionHelper,
     CoalitionTargetEvaluation, OpponentModel, PredictedChoice, StrategicAction, StrategicPlan,
     StrategicPlanInput,
+};
+pub use ai_tactics::{
+    assess_attack_capacity, desired_banked_troops, desired_capacity_escape_city_count,
+    desired_defensive_city_count, desired_factory_count, desired_fleet_troop_bank,
+    desired_warship_count, estimate_land_attack_ticks, is_strategically_trapped,
+    minimum_defense_post_depth, nation_front_policy, nation_land_front_allowed,
+    plan_capacity_escape_raid, should_accept_alliance, should_build_capacity_city,
+    should_risk_denial_raid, should_trade_land_for_time, tribe_attack_commitment_multiplier,
+    AttackCapacity, CapacityEscapeRaidPlan, NationFrontPolicy,
 };
 pub use air_path::{air_path, AirPathError};
 pub use bfs_grid::{BfsGrid, BfsVisit};
