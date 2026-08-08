@@ -143,7 +143,7 @@ mod graphics_tests {
         begin_call();
 
         let input = openfront_upload_create(16);
-        let words = [0_u32, 0_u32, 3_u32, u32::from(0x80 | 5)];
+        let words = [0_u32, 0_u32, 3_u32, 0x85_u32];
         for (word_index, word) in words.into_iter().enumerate() {
             for (byte_index, byte) in word.to_le_bytes().into_iter().enumerate() {
                 assert_eq!(
@@ -181,7 +181,7 @@ mod graphics_tests {
                     0,
                     u32::from_le_bytes([71, 133, 181, 255]),
                     3,
-                    u32::from(0x80 | 5),
+                    0x85_u32,
                     u32::from_le_bytes([190, 210, 138, 255]),
                 ]
             );
