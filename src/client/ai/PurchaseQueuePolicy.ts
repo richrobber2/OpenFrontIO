@@ -1,9 +1,9 @@
 import {
-  preloadRustEconomyAi,
+  preloadRustPurchaseQueueAi,
   selectPurchaseQueueRust,
-} from "../rust/OpenFrontWasmEconomyAi";
+} from "../rust/OpenFrontWasmPurchaseQueueAi";
 
-void preloadRustEconomyAi();
+void preloadRustPurchaseQueueAi();
 
 export interface PurchaseQueueCandidate {
   index: number;
