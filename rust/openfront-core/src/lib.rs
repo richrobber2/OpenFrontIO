@@ -91,8 +91,8 @@ pub use defense_index::{
 };
 pub use geometry::{Coord, GridError, GridGeometry, NeighborRefs, TileRef};
 pub use graphics::{
-    build_terrain_rgba, build_terrain_rgba_in_place, encode_terrain_rgba, TerrainGraphicsError,
-    TerrainPalette,
+    build_terrain_delta_records_in_place, build_terrain_rgba, build_terrain_rgba_in_place,
+    encode_terrain_rgba, TerrainGraphicsError, TerrainPalette,
 };
 pub use hierarchical_water::HierarchicalWaterPathFinder;
 pub use map::{GameMapError, GameMapStore};
