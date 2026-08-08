@@ -45,6 +45,88 @@ describe("coalition target selection", () => {
     expect(decision?.offensiveCostMultiplier).toBeLessThan(1);
   });
 
+  it("prefers a strong proven helper over a barely eligible ally", () => {
+    const decision = selectCoalitionTarget([
+      {
+        targetId: "weak-help",
+        basePriority: 7.6,
+        ownCanReach: true,
+        enemyActiveWars: 1,
+        helpers: [
+          {
+            allyId: "uncertain",
+            reliability: 0.46,
+            reserveRatio: 0.51,
+            canReach: true,
+            treatyBlocked: false,
+          },
+        ],
+      },
+      {
+        targetId: "strong-help",
+        basePriority: 7,
+        ownCanReach: true,
+        enemyActiveWars: 1,
+        helpers: [
+          {
+            allyId: "trusted",
+            reliability: 0.92,
+            reserveRatio: 0.9,
+            canReach: true,
+            treatyBlocked: false,
+          },
+        ],
+      },
+    ]);
+
+    expect(decision?.targetId).toBe("strong-help");
+    expect(decision?.availableHelperIds).toEqual(["trusted"]);
+    expect(decision?.offensiveCostMultiplier).toBeLessThan(0.9);
+  });
+
+  it("does not turn a marginal ally into a large offensive discount", () => {
+    const decision = selectCoalitionTarget([
+      {
+        targetId: "target",
+        basePriority: 5,
+        ownCanReach: true,
+        enemyActiveWars: 0,
+        helpers: [
+          {
+            allyId: "marginal",
+            reliability: 0.45,
+            reserveRatio: 0.5,
+            canReach: true,
+            treatyBlocked: false,
+          },
+        ],
+      },
+    ]);
+
+    expect(decision?.offensiveCostMultiplier).toBeGreaterThan(0.94);
+  });
+
+  it("does not chase a distracted target without coalition support", () => {
+    const decision = selectCoalitionTarget([
+      {
+        targetId: "random-dogpile",
+        basePriority: 5,
+        ownCanReach: true,
+        enemyActiveWars: 3,
+        helpers: [],
+      },
+      {
+        targetId: "better-own-target",
+        basePriority: 5.4,
+        ownCanReach: true,
+        enemyActiveWars: 0,
+        helpers: [],
+      },
+    ]);
+
+    expect(decision?.targetId).toBe("better-own-target");
+  });
+
   it("does not count distant, exhausted, or treaty-blocked allies", () => {
     const decision = selectCoalitionTarget([
       {
