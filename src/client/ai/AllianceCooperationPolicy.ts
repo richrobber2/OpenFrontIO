@@ -1,3 +1,9 @@
+import {
+  allianceResponseWindowTicksRust,
+  assessAllianceCooperationRust,
+  preloadRustAllianceAi,
+} from "../rust/OpenFrontWasmAllianceAi";
+
 export interface AllianceCooperationContext {
   requestsAnswered: number;
   ignoredRequests: number;
@@ -18,6 +24,8 @@ export interface AllianceCooperationAssessment {
 const clamp = (value: number, minimum = 0, maximum = 1): number =>
   Math.max(minimum, Math.min(maximum, value));
 
+void preloadRustAllianceAi();
+
 /**
  * Measures whether an ally responds to explicit requests or independently
  * applies pressure on a shared front. Confidence grows with resolved requests
@@ -26,6 +34,9 @@ const clamp = (value: number, minimum = 0, maximum = 1): number =>
 export function assessAllianceCooperation(
   context: AllianceCooperationContext,
 ): AllianceCooperationAssessment {
+  const rust = assessAllianceCooperationRust(context);
+  if (rust !== null) return rust;
+
   const resolvedRequests = context.requestsAnswered + context.ignoredRequests;
   const requestResponseRate =
     resolvedRequests === 0 ? 0.5 : context.requestsAnswered / resolvedRequests;
@@ -78,6 +89,11 @@ export function allianceResponseWindowTicks({
   quickChatCooldownTicks: number;
   allianceDurationTicks: number;
 }): number {
+  const rust = allianceResponseWindowTicksRust(
+    quickChatCooldownTicks,
+    allianceDurationTicks,
+  );
+  if (rust !== null) return rust;
   return Math.ceil(
     Math.max(
       Math.max(1, quickChatCooldownTicks) * 4,
