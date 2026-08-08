@@ -233,6 +233,7 @@ export class GoldBudgetModule implements AiModule {
       signals: {
         goldReserveFloor: decision.reserveFloor,
         goldSpendCap: decision.spendCap,
+        goldMinimumQueuedPurchases: decision.minimumQueuedPurchases,
         goldCategory: decision.category,
         allowProductiveStacking: decision.allowProductiveStacking,
       },

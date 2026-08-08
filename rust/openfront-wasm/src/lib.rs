@@ -36,6 +36,7 @@ pub enum ErrorCode {
     InvalidSpiralSegment = 16,
     AiCoalitionRecordLengthMismatch = 17,
     AiOpponentRecordLengthMismatch = 18,
+    AiPurchaseRecordLengthMismatch = 19,
     InternalInvariant = 255,
 }
 
@@ -164,6 +165,7 @@ include!("ai.rs");
 include!("ai_tactics.rs");
 include!("ai_alliance.rs");
 include!("ai_economy.rs");
+include!("ai_purchase_queue.rs");
 include!("ai_forecast.rs");
 include!("ai_learning.rs");
 include!("map_lifecycle.rs");

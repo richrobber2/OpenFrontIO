@@ -115,17 +115,19 @@ pub fn select_purchase_queue(
             (candidate, score)
         })
         .collect();
-    ranked.sort_by(|(left_candidate, left_score), (right_candidate, right_score)| {
-        right_score
-            .total_cmp(left_score)
-            .then_with(|| {
-                right_candidate
-                    .return_ratio
-                    .total_cmp(&left_candidate.return_ratio)
-            })
-            .then_with(|| left_candidate.cost.total_cmp(&right_candidate.cost))
-            .then_with(|| left_candidate.index.cmp(&right_candidate.index))
-    });
+    ranked.sort_by(
+        |(left_candidate, left_score), (right_candidate, right_score)| {
+            right_score
+                .total_cmp(left_score)
+                .then_with(|| {
+                    right_candidate
+                        .return_ratio
+                        .total_cmp(&left_candidate.return_ratio)
+                })
+                .then_with(|| left_candidate.cost.total_cmp(&right_candidate.cost))
+                .then_with(|| left_candidate.index.cmp(&right_candidate.index))
+        },
+    );
 
     let mut selected_indices = Vec::with_capacity(target);
     let mut used_groups = std::collections::BTreeSet::new();
@@ -162,7 +164,13 @@ pub fn select_purchase_queue(
 mod tests {
     use super::*;
 
-    fn candidate(index: u32, group: u32, cost: f64, value: f64, return_ratio: f64) -> PurchaseCandidate {
+    fn candidate(
+        index: u32,
+        group: u32,
+        cost: f64,
+        value: f64,
+        return_ratio: f64,
+    ) -> PurchaseCandidate {
         PurchaseCandidate {
             index,
             group,

@@ -10,6 +10,7 @@ pub mod ai_economy;
 pub mod ai_forecast;
 pub mod ai_learning;
 pub mod ai_ports;
+pub mod ai_purchase_queue;
 pub mod ai_strategy;
 pub mod ai_tactics;
 pub mod air_path;
@@ -66,6 +67,7 @@ pub use ai_ports::{
     AdaptivePortContext, AdaptivePortPlan, AdaptiveTradePortNormalization, AdaptiveTradePortOption,
     AdaptiveTradePortScore, AdaptiveTradePortThresholds,
 };
+pub use ai_purchase_queue::{select_purchase_queue, PurchaseCandidate, PurchaseQueuePlan};
 pub use ai_strategy::{
     evaluate_coalition_target, model_opponent, plan_strategic_action, CoalitionHelper,
     CoalitionTargetEvaluation, OpponentModel, PredictedChoice, StrategicAction, StrategicPlan,

@@ -11,6 +11,7 @@ export type AiModuleSignals = {
   landExpansionPriority?: number;
   goldReserveFloor?: number;
   goldSpendCap?: number;
+  goldMinimumQueuedPurchases?: number;
   goldCategory?: string;
   allowProductiveStacking?: boolean;
   shipyardFactoryConnectionPriority?: number;
