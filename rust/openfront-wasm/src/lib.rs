@@ -163,6 +163,7 @@ include!("structure_render.rs");
 include!("ai.rs");
 include!("ai_tactics.rs");
 include!("ai_alliance.rs");
+include!("ai_forecast.rs");
 include!("map_lifecycle.rs");
 include!("map_mutation.rs");
 include!("query.rs");
