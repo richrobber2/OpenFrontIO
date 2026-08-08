@@ -7,6 +7,13 @@
       "shouldRiskDenialRaid": "npm run perf:ai"
     }
   },
+  "src/client/ai/CoalitionPlanningPolicy.ts": {
+    "module": "npm run perf:ai",
+    "functions": {
+      "selectCoalitionTarget": "npm run perf:ai",
+      "planCoalitionGrowthSupport": "npm run perf:ai"
+    }
+  },
   "src/client/ai/ActionOutcomeLearning.ts": {
     "module": "npm run perf:ai",
     "functions": {
