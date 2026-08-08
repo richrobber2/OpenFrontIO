@@ -96,6 +96,127 @@ export interface OpenFrontWasmExports extends WebAssembly.Exports {
     opponentUpload: number,
     opponentCount: number,
   ): number;
+  openfront_ai_assess_attack_capacity(
+    maxTroops: number,
+    targetTroops: number,
+    requiredAdvantage: number,
+  ): number;
+  openfront_ai_plan_capacity_escape_raid(
+    noGrowthTicks: number,
+    reserveRatio: number,
+    reserveFloor: number,
+    incomingFronts: number,
+    outgoingFronts: number,
+    requiredCapacityRatio: number,
+    terrainCost: number,
+  ): number;
+  openfront_ai_desired_capacity_escape_city_count(
+    baselineDesiredCities: number,
+    ownedCities: number,
+    noGrowthTicks: number,
+    reserveRatio: number,
+    incomingFronts: number,
+    maxTroops: number,
+    requiredTroops: number,
+    cityTroopIncrease: number,
+  ): number;
+  openfront_ai_should_accept_alliance(
+    availableAllianceSlots: number,
+    activeConflict: number,
+    requestorIsTribe: number,
+    preservesBestExpansionRoute: number,
+    closesDangerousFront: number,
+    usefulRemotePartner: number,
+    crowdedBorders: number,
+  ): number;
+  openfront_ai_is_strategically_trapped(
+    hasNeutralLand: number,
+    hasSeaAccess: number,
+    hostileBorders: number,
+  ): number;
+  openfront_ai_desired_factory_count(
+    economicStops: number,
+    ownedCities: number,
+    ownedTiles: number,
+    gold: number,
+    reserveRatio: number,
+  ): number;
+  openfront_ai_should_build_capacity_city(
+    reserveRatio: number,
+    hasNeutralLand: number,
+    trapped: number,
+    railConnections: number,
+  ): number;
+  openfront_ai_desired_defensive_city_count(
+    enemyFronts: number,
+    activeWars: number,
+    incomingFronts: number,
+    ownedCities: number,
+    ownedTiles: number,
+    reserveRatio: number,
+    incomingTroopRatio: number,
+  ): number;
+  openfront_ai_tribe_attack_commitment_multiplier(
+    attackerTroops: number,
+    defenderTroops: number,
+  ): number;
+  openfront_ai_should_trade_land_for_time(
+    reserveRatio: number,
+    incomingTroopRatio: number,
+    activeIncomingFronts: number,
+  ): number;
+  openfront_ai_nation_front_policy(
+    nationFronts: number,
+    activeNationWars: number,
+  ): number;
+  openfront_ai_nation_land_front_allowed(
+    isNation: number,
+    targetInBorderWar: number,
+    targetInOffensive: number,
+    activeBorderWarCount: number,
+    activeOffensiveCount: number,
+    maxNationOffensives: number,
+  ): number;
+  openfront_ai_should_risk_denial_raid(
+    isTribe: number,
+    nationBorders: number,
+    targetTroops: number,
+    ourTroops: number,
+    targetDistracted: number,
+    reserveRatio: number,
+  ): number;
+  openfront_ai_desired_banked_troops(
+    maxTroops: number,
+    enemyTroops: number,
+    enemyMaxTroops: number,
+    enemyFronts: number,
+    reserveFloor: number,
+    isTribe: number,
+  ): number;
+  openfront_ai_desired_fleet_troop_bank(
+    maxTroops: number,
+    nearbyHostileWarships: number,
+    ownWarships: number,
+    hasTradeTarget: number,
+  ): number;
+  openfront_ai_desired_warship_count(
+    nearbyHostileWarships: number,
+    nearbyHostileTransports: number,
+    vulnerableTradeShips: number,
+    navalBias: number,
+  ): number;
+  openfront_ai_minimum_defense_post_depth(
+    canCreateLandBuffer: number,
+    defenseRange: number,
+  ): number;
+  openfront_ai_estimate_land_attack_ticks(
+    attackerTroops: number,
+    defenderTroops: number,
+    fraction: number,
+    borderWidth: number,
+    combatCost: number,
+    tilesToTake: number,
+  ): number;
   openfront_defense_index_create(cellSize: number): number;
   openfront_defense_index_destroy(handle: number): number;
   openfront_defense_index_replace(
