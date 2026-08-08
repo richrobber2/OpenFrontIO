@@ -1,3 +1,7 @@
+import {
+  planAllianceLifecycleRust,
+  preloadRustAllianceAi,
+} from "../rust/OpenFrontWasmAllianceAi";
 import { OpponentChoice, OpponentForecast } from "./OpponentForecastPolicy";
 
 export type AllianceLifecycleAction =
@@ -8,6 +12,8 @@ export type AllianceLifecyclePlan = {
   reason: string;
   safeElimination: boolean;
 };
+
+void preloadRustAllianceAi();
 
 export function planAllianceLifecycle({
   isSameTeam,
@@ -57,6 +63,31 @@ export function planAllianceLifecycle({
     "predictedChoice" | "threat" | "confidence"
   >;
 }): AllianceLifecyclePlan {
+  const rust = planAllianceLifecycleRust({
+    isSameTeam,
+    otherIsTraitor,
+    sharesBorder,
+    ticksUntilExpiry,
+    betrayalPenaltyTicks,
+    inExtensionWindow,
+    ownReserveRatio,
+    otherReserveRatio,
+    troopRatio,
+    capacityRatio,
+    territoryRatio,
+    allianceCount,
+    hostileNationBorders,
+    activeNationWars,
+    incomingFronts,
+    cooperationReliability,
+    cooperationConfidence,
+    shouldReplaceUncooperativeAlly,
+    replacementAvailable,
+    otherPlayersAlive,
+    forecast,
+  });
+  if (rust !== null) return rust;
+
   if (isSameTeam) {
     return {
       action: inExtensionWindow ? "renew" : "keep",
