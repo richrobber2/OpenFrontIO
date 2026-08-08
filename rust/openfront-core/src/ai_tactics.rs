@@ -60,8 +60,7 @@ pub fn plan_capacity_escape_raid(
         return None;
     }
 
-    let available_fraction =
-        (reserve_ratio - protected_reserve) / reserve_ratio.max(0.01);
+    let available_fraction = (reserve_ratio - protected_reserve) / reserve_ratio.max(0.01);
     let fraction = available_fraction.max(0.0).min(0.12);
     if fraction < 0.06 {
         return None;
@@ -71,9 +70,7 @@ pub fn plan_capacity_escape_raid(
         fraction,
         target_gain_ratio: (0.003 + no_growth_ticks.saturating_sub(240) as f64 / 200_000.0)
             .min(0.006),
-        deadline_ticks: (42.0 + no_growth_ticks as f64 / 120.0)
-            .max(42.0)
-            .min(72.0),
+        deadline_ticks: (42.0 + no_growth_ticks as f64 / 120.0).max(42.0).min(72.0),
     })
 }
 
@@ -99,8 +96,7 @@ pub fn desired_capacity_escape_city_count(
     let gap_cities = ((required_troops * 1.05 - max_troops) / city_troop_increase.max(1.0))
         .ceil()
         .max(1.0) as u32;
-    let paced_cities = (((no_growth_ticks as f64 - 120.0) / 480.0).ceil().max(1.0) as u32)
-        .min(6);
+    let paced_cities = (((no_growth_ticks as f64 - 120.0) / 480.0).ceil().max(1.0) as u32).min(6);
     baseline_desired_cities
         .max(owned_cities.saturating_add(gap_cities.min(paced_cities)))
         .min(16)
@@ -169,9 +165,8 @@ pub fn desired_defensive_city_count(
     reserve_ratio: f64,
     incoming_troop_ratio: f64,
 ) -> u32 {
-    let hostile_pressure = enemy_fronts as f64 * 1.5
-        + active_wars as f64 * 2.0
-        + incoming_fronts as f64 * 2.5;
+    let hostile_pressure =
+        enemy_fronts as f64 * 1.5 + active_wars as f64 * 2.0 + incoming_fronts as f64 * 2.5;
     let territory_baseline = ((owned_tiles as f64 / 1_000.0).ceil() - 1.0).max(0.0) as u32;
     let reserve_buffer = if reserve_ratio < 0.5 { 1 } else { 0 };
     let overwhelming_buffer = ((incoming_troop_ratio - 0.5).max(0.0) * 2.0).ceil() as u32;
@@ -269,12 +264,10 @@ pub fn desired_banked_troops(
 ) -> f64 {
     let safe_capacity = max_troops.max(0.0) * reserve_floor.max(0.0);
     if is_tribe {
-        return (max_troops.max(0.0) * 0.75)
-            .min(safe_capacity.max(enemy_troops.max(0.0) * 0.5));
+        return (max_troops.max(0.0) * 0.75).min(safe_capacity.max(enemy_troops.max(0.0) * 0.5));
     }
 
-    let front_slowdown_ratio =
-        (1.0 + enemy_fronts.saturating_sub(1) as f64 * 0.2).min(1.5);
+    let front_slowdown_ratio = (1.0 + enemy_fronts.saturating_sub(1) as f64 * 0.2).min(1.5);
     let current_capture_threat = enemy_troops.max(0.0) * front_slowdown_ratio;
     let future_capture_threat = enemy_max_troops.unwrap_or(enemy_troops).max(0.0) * 0.65;
     (max_troops.max(0.0) * 0.92).min(
@@ -340,7 +333,8 @@ pub fn estimate_land_attack_ticks(
         .max(0.2)
         .min(1.5)
         / 0.5;
-    let effective_tiles_per_tick = progress_budget_per_tick / (combat_cost.max(0.5) * defender_resistance);
+    let effective_tiles_per_tick =
+        progress_budget_per_tick / (combat_cost.max(0.5) * defender_resistance);
     (tiles_to_take.max(1.0) / effective_tiles_per_tick).ceil()
 }
 
@@ -366,9 +360,15 @@ mod tests {
 
     #[test]
     fn alliances_require_a_safe_useful_partner() {
-        assert!(should_accept_alliance(1, false, false, true, true, false, false));
-        assert!(!should_accept_alliance(1, true, false, true, true, true, true));
-        assert!(!should_accept_alliance(1, false, true, true, true, true, true));
+        assert!(should_accept_alliance(
+            1, false, false, true, true, false, false
+        ));
+        assert!(!should_accept_alliance(
+            1, true, false, true, true, true, true
+        ));
+        assert!(!should_accept_alliance(
+            1, false, true, true, true, true, true
+        ));
     }
 
     #[test]
@@ -408,10 +408,7 @@ mod tests {
 
     #[test]
     fn city_pressure_and_land_attack_estimate_match_policy_shape() {
-        assert_eq!(
-            desired_defensive_city_count(2, 1, 1, 3, 4_000, 0.4, 0.8),
-            9
-        );
+        assert_eq!(desired_defensive_city_count(2, 1, 1, 3, 4_000, 0.4, 0.8), 9);
         assert_eq!(
             estimate_land_attack_ticks(1_000.0, 500.0, 0.2, 4.0, 1.0, 100.0),
             17.0
