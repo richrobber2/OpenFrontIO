@@ -6,6 +6,7 @@
  */
 
 import type { Config } from "src/core/configuration/Config";
+import { getUnitRenderSubsets } from "../../frame/UnitSubsetRegistry";
 import type { RendererConfig, UnitState } from "../../types";
 import {
   SMOOTHED_NUKE_TYPES,
@@ -190,7 +191,11 @@ export class PointLightPass {
     this.smoothSegs.length = 0;
     this.lastUnitsUpdateMs = performance.now();
 
-    for (const unit of units.values()) {
+    // UnitSubsetIndex keeps this membership incrementally from Rust's LIGHT
+    // classification bit. Fall back to the master map before the registry is
+    // available so startup/Wasm failure behavior remains unchanged.
+    const lightUnits = getUnitRenderSubsets(units)?.lights ?? units;
+    for (const unit of lightUnits.values()) {
       if (!unit.isActive) continue;
       const typeIdx = this.typeToIdx.get(unit.unitType);
       if (typeIdx === undefined) continue;
