@@ -283,8 +283,8 @@ pub fn desired_fleet_troop_bank(
     own_warships: u32,
     has_trade_target: bool,
 ) -> f64 {
-    let base = if has_trade_target { 0.2 } else { 0.28 };
-    let escort_penalty = if nearby_hostile_warships > own_warships {
+    let base: f64 = if has_trade_target { 0.2 } else { 0.28 };
+    let escort_penalty: f64 = if nearby_hostile_warships > own_warships {
         0.08
     } else {
         0.0
