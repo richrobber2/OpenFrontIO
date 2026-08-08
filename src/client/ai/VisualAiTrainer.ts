@@ -121,6 +121,7 @@ import {
   transportRecallThreshold,
 } from "./OverseasExpansionPolicy";
 import { planRemnantConquest } from "./RemnantConquestPolicy";
+import { selectPurchaseQueue } from "./PurchaseQueuePolicy";
 import {
   samPlacementProtectionRadius,
   scoreSamPlacement,
@@ -3134,6 +3135,20 @@ export class VisualAiTrainer {
     });
     this.moduleCoordination = moduleCoordination;
     this.moduleSignals = moduleCoordination.signals;
+    const queuedPurchaseTarget = Math.max(
+      1,
+      Math.min(
+        32,
+        Math.floor(this.moduleSignals.goldMinimumQueuedPurchases ?? 1),
+      ),
+    );
+    const queuedGoldSpendCap = Math.max(
+      0,
+      Math.min(
+        this.economicPlan.spendableGold,
+        this.moduleSignals.goldSpendCap ?? this.economicPlan.spendableGold,
+      ),
+    );
     const moduleDecisions = moduleCoordination.decisions;
     const troopModule = moduleDecisions.find(
       ({ moduleID }) => moduleID === "troop-economy",
@@ -3341,46 +3356,70 @@ export class VisualAiTrainer {
           return { ...candidate, plan };
         }),
       );
-      const highValueFactory = factoryUpgradePlans
+      const highValueFactoryUpgrades = factoryUpgradePlans
         .filter(
           ({ productiveStops, economicScore, plan }) =>
             productiveStops >= 2 &&
             economicScore >= 2 &&
             plan?.canUpgrade !== false &&
-            plan?.canUpgrade !== undefined &&
-            this.economicPlan !== undefined &&
-            this.economicPlan.spendableGold >= Number(plan.cost),
+            plan?.canUpgrade !== undefined,
         )
         .sort(
           (a, b) =>
             b.economicScore * (1 + b.factory.level() * 0.25) -
             a.economicScore * (1 + a.factory.level() * 0.25),
-        )[0];
+        );
       if (
         !needsPressureCity &&
         !needsShipyardFactory &&
         (this.economicPlan.action === "activate-rail" ||
           this.economicPlan.action === "extend-trade") &&
-        highValueFactory?.plan.canUpgrade !== false &&
-        highValueFactory?.plan.canUpgrade !== undefined
+        highValueFactoryUpgrades.length > 0
       ) {
-        this.eventBus.emit(
-          new SendUpgradeStructureIntentEvent(
-            highValueFactory.plan.canUpgrade,
-            UnitType.Factory,
-          ),
-        );
-        this.nextEconomicCostRefreshTick = 0;
-        this.nextFactoryOpportunityTick = factoryOpportunityRetryTick(
-          this.game.ticks(),
-          "built",
-        );
-        this.follow(player, 7);
-        this.setDecision(
-          "Upgrade a protected productive factory",
-          `This level-${highValueFactory.factory.level()} factory serves ${highValueFactory.ownCities + highValueFactory.ownPorts} owned and ${highValueFactory.externalCities + highValueFactory.externalPorts} non-embargoed external stops (system score ${highValueFactory.economicScore.toFixed(1)})${highValueFactory.protectedByDefensePost ? " under defense-post coverage" : ""}. The upgrade compounds an active network instead of subsidizing an isolated factory.`,
-        );
-        return;
+        const maximumUpgrades = Math.min(4, highValueFactoryUpgrades.length);
+        const upgradeQueue = selectPurchaseQueue({
+          spendCap: queuedGoldSpendCap,
+          minimumPurchases: Math.min(queuedPurchaseTarget, maximumUpgrades),
+          maximumPurchases: maximumUpgrades,
+          risk: this.economicPlan.risk,
+          capitalPressure: this.economicPlan.capitalDeploymentPressure,
+          candidates: highValueFactoryUpgrades.map((candidate, index) => ({
+            index,
+            cost: Number(candidate.plan!.cost),
+            value:
+              candidate.economicScore *
+              (1 + candidate.factory.level() * 0.25),
+            returnRatio: Math.min(1, candidate.productiveStops / 6),
+            synergy: candidate.protectedByDefensePost ? 1 : 0.4,
+          })),
+        });
+        const queuedUpgrades = upgradeQueue.selectedIndices
+          .map((index) => highValueFactoryUpgrades[index])
+          .filter((candidate) => candidate?.plan?.canUpgrade !== undefined);
+        if (queuedUpgrades.length > 0) {
+          for (const candidate of queuedUpgrades) {
+            this.eventBus.emit(
+              new SendUpgradeStructureIntentEvent(
+                candidate!.plan!.canUpgrade as number,
+                UnitType.Factory,
+              ),
+            );
+          }
+          this.nextEconomicCostRefreshTick = 0;
+          this.nextFactoryOpportunityTick = factoryOpportunityRetryTick(
+            this.game.ticks(),
+            "built",
+          );
+          this.follow(player, 7);
+          const lead = queuedUpgrades[0]!;
+          this.setDecision(
+            queuedUpgrades.length === 1
+              ? "Upgrade a protected productive factory"
+              : `Queue ${queuedUpgrades.length} productive factory upgrades`,
+            `The queue spends about ${Math.round(upgradeQueue.totalCost).toLocaleString()} gold across ${queuedUpgrades.length} independent factory upgrade${queuedUpgrades.length === 1 ? "" : "s"}. The lead factory serves ${lead.ownCities + lead.ownPorts} owned and ${lead.externalCities + lead.externalPorts} external stops, so surplus capital compounds active rail throughput without waiting through separate decision cycles.`,
+          );
+          return;
+        }
       }
       const structureMinDistance = this.game.config().structureMinDist();
       const interiorCandidates = this.interiorBuildCandidates(
@@ -3602,38 +3641,95 @@ export class VisualAiTrainer {
             };
           }),
         );
-        const factory = factoryPlans
+        const factoryBuildOptions = factoryPlans
           .filter(
             ({ plan }) =>
               plan?.canBuild !== false &&
               plan?.canBuild !== undefined &&
-              // A factory must either snap to an existing railroad or have a
-              // legal ghost path to one; distance alone is not a rail route.
               ((plan.overlappingRailroads?.length ?? 0) > 0 ||
-                (plan.ghostRailPaths?.length ?? 0) > 0) &&
-              factorySpendableGold >= Number(plan.cost),
+                (plan.ghostRailPaths?.length ?? 0) > 0),
           )
-          .sort((a, b) => b.placement.score - a.placement.score)[0];
-        if (
-          factory?.plan.canBuild !== false &&
-          factory?.plan.canBuild !== undefined
-        ) {
-          this.eventBus.emit(
-            new BuildUnitIntentEvent(UnitType.Factory, factory.plan.canBuild),
-          );
+          .sort((a, b) => b.placement.score - a.placement.score);
+        const maximumFactoryBuilds = Math.min(
+          factoryBuildOptions.length,
+          Math.max(
+            needsShipyardFactory ? Math.min(3, unconnectedShipyards.length) : 0,
+            Math.max(0, desiredFactories - factories.length),
+          ),
+        );
+        const factoryQueueSpendCap = needsGrowthFactory
+          ? Math.min(
+              factorySpendableGold,
+              Math.max(queuedGoldSpendCap, economicCosts.factory),
+            )
+          : Math.min(factorySpendableGold, queuedGoldSpendCap);
+        const factoryQueue = selectPurchaseQueue({
+          spendCap: factoryQueueSpendCap,
+          minimumPurchases: Math.min(queuedPurchaseTarget, maximumFactoryBuilds),
+          maximumPurchases: maximumFactoryBuilds,
+          risk: this.economicPlan.risk,
+          capitalPressure: this.economicPlan.capitalDeploymentPressure,
+          candidates: factoryBuildOptions.map((candidate, index) => ({
+            index,
+            cost: Number(candidate.plan!.cost),
+            value: candidate.placement.score,
+            returnRatio: Math.min(
+              1,
+              (candidate.placement.productiveStops / 4) * 0.5 +
+                candidate.placement.railEfficiency * 0.5,
+            ),
+            synergy:
+              (candidate.plan!.overlappingRailroads?.length ?? 0) > 0
+                ? 1
+                : candidate.placement.railEfficiency,
+          })),
+        });
+        const queuedFactories: typeof factoryBuildOptions = [];
+        const queuedFactoryTiles: number[] = [];
+        for (const index of factoryQueue.selectedIndices) {
+          const candidate = factoryBuildOptions[index];
+          if (
+            candidate?.plan?.canBuild === false ||
+            candidate?.plan?.canBuild === undefined
+          )
+            continue;
+          const tile = candidate.plan.canBuild;
+          if (
+            queuedFactoryTiles.some(
+              (other) =>
+                this.game.euclideanDistSquared(tile, other) <
+                structureMinDistance ** 2,
+            )
+          )
+            continue;
+          queuedFactoryTiles.push(tile);
+          queuedFactories.push(candidate);
+        }
+        if (queuedFactories.length > 0) {
+          for (const candidate of queuedFactories) {
+            this.eventBus.emit(
+              new BuildUnitIntentEvent(
+                UnitType.Factory,
+                candidate.plan!.canBuild as number,
+              ),
+            );
+          }
           this.nextEconomicCostRefreshTick = 0;
           this.nextFactoryOpportunityTick = factoryOpportunityRetryTick(
             this.game.ticks(),
             "built",
           );
           this.follow(player, 7);
+          const lead = queuedFactories[0]!;
           this.setDecision(
-            needsShipyardFactory
-              ? "Connect the isolated shipyard to a factory"
-              : needsGrowthFactory
-                ? "Build the first growth factory"
-                : "Build a factory to activate the rail economy",
-            `This safe interior factory links ${factory.ownCities} owned cities, ${factory.ownPorts} owned ports, and ${factory.externalCities + factory.externalPorts} non-embargoed external stops within the legal ${stationMinimumRange}–${stationRange} tile band. Its actual rail plan scores ${factory.placement.score.toFixed(1)} with ${(factory.placement.railEfficiency * 100).toFixed(0)}% route efficiency and ${factory.railBends} bends${needsGrowthFactory ? `; ${noGrowthTicks >= 240 ? `${noGrowthTicks} stalled ticks` : `${enemies.size + activeNationWarIDs.size} combined fronts and wars`} make first-factory compounding more valuable than another passive full bank` : ""}.`,
+            queuedFactories.length === 1
+              ? needsShipyardFactory
+                ? "Connect the isolated shipyard to a factory"
+                : needsGrowthFactory
+                  ? "Build the first growth factory"
+                  : "Build a factory to activate the rail economy"
+              : `Queue ${queuedFactories.length} rail-growth factories`,
+            `The queue commits about ${Math.round(factoryQueue.totalCost).toLocaleString()} gold to ${queuedFactories.length} non-conflicting factory site${queuedFactories.length === 1 ? "" : "s"}. The lead site links ${lead.ownCities} owned cities, ${lead.ownPorts} owned ports, and ${lead.externalCities + lead.externalPorts} external stops at ${(lead.placement.railEfficiency * 100).toFixed(0)}% route efficiency.`,
           );
           return;
         }
@@ -3855,9 +3951,10 @@ export class VisualAiTrainer {
             plan: (await player.buildables(candidate.tile, [UnitType.Port]))[0],
           })),
         );
-        const profitablePort = portPlans.find(
+        const profitablePorts = portPlans.filter(
           ({ expectedGold, expectedGoldPerTick, plan, factoryConnected }) =>
-            plan !== undefined &&
+            plan?.canBuild !== false &&
+            plan?.canBuild !== undefined &&
             (this.moduleSignals.portRequireFactoryConnection === false ||
               factoryConnected) &&
             expectedGold / Math.max(1, Number(plan.cost)) >=
@@ -3865,25 +3962,77 @@ export class VisualAiTrainer {
             Number(plan.cost) / Math.max(0.000_001, expectedGoldPerTick) <=
               (this.moduleSignals.portMaximumPaybackTicks ?? 3_600),
         );
-        if (
-          profitablePort?.plan.canBuild !== false &&
-          profitablePort?.plan.canBuild !== undefined &&
-          this.economicPlan.spendableGold >= Number(profitablePort.plan.cost)
-        ) {
-          this.eventBus.emit(
-            new BuildUnitIntentEvent(
-              UnitType.Port,
-              profitablePort.plan.canBuild,
-            ),
-          );
+        const remainingTradePorts = Math.max(
+          0,
+          desiredTradePorts - ownedPorts.length,
+        );
+        const ownerGroups = new Map<string, number>();
+        let nextOwnerGroup = 1;
+        const portQueue = selectPurchaseQueue({
+          spendCap: queuedGoldSpendCap,
+          minimumPurchases: Math.min(queuedPurchaseTarget, remainingTradePorts),
+          maximumPurchases: Math.min(remainingTradePorts, profitablePorts.length),
+          risk: this.economicPlan.risk,
+          capitalPressure: this.economicPlan.capitalDeploymentPressure,
+          candidates: profitablePorts.map((candidate, index) => {
+            const ownerID = candidate.partner.owner().id();
+            let group = ownerGroups.get(ownerID);
+            if (group === undefined) {
+              group = nextOwnerGroup++;
+              ownerGroups.set(ownerID, group);
+            }
+            return {
+              index,
+              group,
+              cost: Number(candidate.plan!.cost),
+              value: candidate.score,
+              returnRatio: candidate.returnRatio,
+              synergy: candidate.factoryConnected ? 1 : 0.25,
+            };
+          }),
+        });
+        const queuedPorts: typeof profitablePorts = [];
+        const queuedPortTiles: number[] = [];
+        for (const index of portQueue.selectedIndices) {
+          const candidate = profitablePorts[index];
+          if (
+            candidate?.plan?.canBuild === false ||
+            candidate?.plan?.canBuild === undefined
+          )
+            continue;
+          const tile = candidate.plan.canBuild;
+          if (
+            queuedPortTiles.some(
+              (other) =>
+                this.game.euclideanDistSquared(tile, other) <
+                structureMinDistance ** 2,
+            )
+          )
+            continue;
+          queuedPortTiles.push(tile);
+          queuedPorts.push(candidate);
+        }
+        if (queuedPorts.length > 0) {
+          for (const candidate of queuedPorts) {
+            this.eventBus.emit(
+              new BuildUnitIntentEvent(
+                UnitType.Port,
+                candidate.plan!.canBuild as number,
+              ),
+            );
+          }
           this.nextEconomicCostRefreshTick = 0;
-          this.follow(profitablePort.partner.owner(), 6);
+          this.follow(queuedPorts[0]!.partner.owner(), 6);
+          const lead = queuedPorts[0]!;
           this.setDecision(
-            "Open a profitable trade port",
-            `The adaptive route scores ${Math.round(profitablePort.score * 100)}% quality over ${Math.round(profitablePort.routeDistance)} tiles and returns ${Math.round(profitablePort.returnRatio * 100)}% of build cost per arrival, implying about ${(1 / Math.max(0.01, profitablePort.returnRatio)).toFixed(1)} arrivals to repay${profitablePort.factoryConnected ? " while joining the rail network" : ""}.`,
+            queuedPorts.length === 1
+              ? "Open a profitable trade port"
+              : `Queue ${queuedPorts.length} diversified trade ports`,
+            `The queue commits about ${Math.round(portQueue.totalCost).toLocaleString()} gold across ${queuedPorts.length} distinct trade relationship${queuedPorts.length === 1 ? "" : "s"}. The lead route scores ${Math.round(lead.score * 100)}% quality and returns ${Math.round(lead.returnRatio * 100)}% of build cost per arrival.`,
           );
           return;
         }
+        const profitablePort = profitablePorts[0];
         if (
           profitablePort?.plan !== undefined &&
           this.economicPlan.spendableGold < Number(profitablePort.plan.cost) &&
@@ -4017,7 +4166,7 @@ export class VisualAiTrainer {
           };
         }),
       );
-      const city = cityPlans
+      const cityBuildOptions = cityPlans
         .sort(
           (a, b) =>
             b.defenseScore +
@@ -4034,46 +4183,102 @@ export class VisualAiTrainer {
                 )) ||
             b.depth - a.depth,
         )
-        .find(
+        .filter(
           ({ plan, railConnections }) =>
             plan?.canBuild !== false &&
             plan?.canBuild !== undefined &&
-            this.economicPlan !== undefined &&
-            cityBudget.spendableGold >= Number(plan.cost) &&
             (needsPressureCity ||
               this.economicPlan.action === "stack-capacity" ||
               (this.economicPlan.action === "activate-rail" &&
                 railConnections > 0)),
         );
-      if (city?.plan.canBuild !== false && city?.plan.canBuild !== undefined) {
-        this.eventBus.emit(
-          new BuildUnitIntentEvent(UnitType.City, city.plan.canBuild),
-        );
+      const maximumCityBuilds = Math.min(
+        cityBuildOptions.length,
+        needsPressureCity
+          ? Math.max(1, desiredCityCount - cityCount)
+          : this.moduleSignals.allowProductiveStacking
+            ? Math.min(4, queuedPurchaseTarget)
+            : 1,
+      );
+      const cityQueue = selectPurchaseQueue({
+        spendCap: cityBudget.spendableGold,
+        minimumPurchases: Math.min(queuedPurchaseTarget, maximumCityBuilds),
+        maximumPurchases: maximumCityBuilds,
+        risk: this.economicPlan.risk,
+        capitalPressure: this.economicPlan.capitalDeploymentPressure,
+        candidates: cityBuildOptions.map((candidate, index) => {
+          const overlap = candidate.plan?.overlappingRailroads.length ?? 0;
+          const railGrowth = railCityGrowthScore(
+            candidate.railConnections,
+            overlap,
+          );
+          return {
+            index,
+            cost: Number(candidate.plan!.cost),
+            value:
+              candidate.defenseScore +
+              candidate.stackPlacement.score +
+              railGrowth,
+            returnRatio: Math.min(
+              1,
+              candidate.railConnections / 3 + (overlap > 0 ? 0.35 : 0),
+            ),
+            synergy: candidate.stackPlacement.stacked
+              ? 0.85
+              : candidate.railConnections > 0
+                ? 1
+                : 0.35,
+          };
+        }),
+      });
+      const queuedCities: typeof cityBuildOptions = [];
+      const queuedCityTiles: number[] = [];
+      for (const index of cityQueue.selectedIndices) {
+        const candidate = cityBuildOptions[index];
+        if (
+          candidate?.plan?.canBuild === false ||
+          candidate?.plan?.canBuild === undefined
+        )
+          continue;
+        const tile = candidate.plan.canBuild;
+        if (
+          queuedCityTiles.some(
+            (other) =>
+              this.game.euclideanDistSquared(tile, other) <
+              structureMinDistance ** 2,
+          )
+        )
+          continue;
+        queuedCityTiles.push(tile);
+        queuedCities.push(candidate);
+      }
+      if (queuedCities.length > 0) {
+        for (const candidate of queuedCities) {
+          this.eventBus.emit(
+            new BuildUnitIntentEvent(
+              UnitType.City,
+              candidate.plan!.canBuild as number,
+            ),
+          );
+        }
         this.nextEconomicCostRefreshTick = 0;
         this.follow(player, 7);
+        const lead = queuedCities[0]!;
         this.setDecision(
-          city.stackPlacement.stacked
-            ? "Stack a defensive city cluster"
-            : needsPressureCity
-              ? "Build capacity before the enemy rush"
-              : city.railConnections >= 2
-                ? "Bridge the rail network with a city"
-                : city.railConnections === 1
-                  ? "Extend a factory rail line with a city"
-                  : trapped
-                    ? "Build capacity while boxed in"
-                    : "Invest in troop capacity",
-          city.stackPlacement.stacked
-            ? `This city is placed ${city.stackPlacement.nearestCityDistance?.toFixed(1)} tiles from the nearest city, just outside the configured ${structureMinDistance}-tile structure spacing. It joins ${city.stackPlacement.nearbyCities} nearby city anchor${city.stackPlacement.nearbyCities === 1 ? "" : "s"} at depth ${city.depth}, concentrating capacity where defenses and rails can protect several cities together${needsPressureCity ? ` while advancing the ${cityCount}/${desiredCityCount} pressure target` : ""}.`
-            : needsPressureCity
-              ? `Enemy pressure calls for ${desiredCityCount} cities; ${cityCount} are active. This safe interior site adds capacity before a rush can turn a low-reserve front into a collapse.`
-              : city.railConnections >= 2
-                ? `This city connects to ${city.railConnections} usable stations within train range, turning a safe interior site into an intermediate stop between existing cities or factories.`
-                : city.railConnections === 1
-                  ? `This city extends an existing factory-backed rail line while adding troop capacity at a safe depth of ${city.depth} tiles.`
-                  : trapped
-                    ? `Neutral land and usable shoreline are both blocked. A city ${city.depth} tiles behind the nearest edge raises troop capacity so the trainer can break containment instead of wasting troops on an impossible front.`
-                    : `A city ${city.depth} tiles behind the nearest edge turns saved gold into troop capacity without exposing the structure directly on the border.`,
+          queuedCities.length === 1
+            ? lead.stackPlacement.stacked
+              ? "Stack a defensive city cluster"
+              : needsPressureCity
+                ? "Build capacity before the enemy rush"
+                : lead.railConnections >= 2
+                  ? "Bridge the rail network with a city"
+                  : lead.railConnections === 1
+                    ? "Extend a factory rail line with a city"
+                    : trapped
+                      ? "Build capacity while boxed in"
+                      : "Invest in troop capacity"
+            : `Queue ${queuedCities.length} capacity-growth cities`,
+          `The queue commits about ${Math.round(cityQueue.totalCost).toLocaleString()} gold to ${queuedCities.length} non-conflicting city site${queuedCities.length === 1 ? "" : "s"}. The lead site has ${lead.railConnections} usable rail connection${lead.railConnections === 1 ? "" : "s"} at depth ${lead.depth}, so deep reserves become troop capacity and rail income without waiting a full planner cycle between placements.`,
         );
         return;
       }
