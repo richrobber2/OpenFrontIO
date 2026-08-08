@@ -4188,8 +4188,8 @@ export class VisualAiTrainer {
             plan?.canBuild !== false &&
             plan?.canBuild !== undefined &&
             (needsPressureCity ||
-              this.economicPlan.action === "stack-capacity" ||
-              (this.economicPlan.action === "activate-rail" &&
+              this.economicPlan!.action === "stack-capacity" ||
+              (this.economicPlan!.action === "activate-rail" &&
                 railConnections > 0)),
         );
       const maximumCityBuilds = Math.min(
