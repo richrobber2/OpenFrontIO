@@ -137,8 +137,7 @@ fn simulate_regeneration(
     let mut troops = starting_troops.max(0.0);
     for step in 0..steps {
         let progress = (step + 1) as f64 / steps as f64;
-        let step_max = current_max_troops
-            + (projected_max_troops - current_max_troops) * progress;
+        let step_max = current_max_troops + (projected_max_troops - current_max_troops) * progress;
         let rate = human_troop_regeneration(troops, step_max);
         troops = (troops + rate * step_ticks).min(step_max.max(1.0));
     }
@@ -161,7 +160,10 @@ pub fn predict_future_outcome(
     let uncertainty = clamp(1.0 + (sample - 2.0) * 0.04, 0.84, 1.16);
     let horizon_scale = clamp(safe_horizon / 120.0, 0.25, 2.5);
 
-    let attack_power = troops.max(0.0).mul_add(0.4, 0.0).min(enemy_troops.max(0.0) * 0.9)
+    let attack_power = troops
+        .max(0.0)
+        .mul_add(0.4, 0.0)
+        .min(enemy_troops.max(0.0) * 0.9)
         * uncertainty;
     let attack_time_scale = clamp(horizon_scale.sqrt(), 0.7, 1.5);
     let expected_tiles = match action {
@@ -247,8 +249,7 @@ pub fn score_mutation_outcome(
         + (growth_pace * 90.0).min(180.0);
     let economy_score = (peak_cities.max(0.0) * 8.0 + peak_factories.max(0.0) * 32.0).min(160.0);
 
-    (if won { 1_200.0 } else { 0.0 })
-        + (player_count.max(1.0) - finishing_rank.max(1.0)) * 2.0
+    (if won { 1_200.0 } else { 0.0 }) + (player_count.max(1.0) - finishing_rank.max(1.0)) * 2.0
         - if !alive { 150.0 } else { 0.0 }
         + growth_score
         + economy_score
@@ -277,9 +278,7 @@ pub fn classify_loss_cause(
     {
         return LossCause::Containment;
     }
-    if third_party_pressure_ticks >= (elapsed_ticks * 0.18).min(60.0)
-        && max_incoming_ratio >= 0.3
-    {
+    if third_party_pressure_ticks >= (elapsed_ticks * 0.18).min(60.0) && max_incoming_ratio >= 0.3 {
         return LossCause::ThirdParty;
     }
     if low_reserve_ticks >= elapsed_ticks * 0.18 && max_committed_ratio >= 0.5 {
@@ -332,12 +331,18 @@ pub fn score_delayed_action_outcome(outcome: ActionOutcome) -> f64 {
         (outcome.ending_tiles - outcome.starting_tiles) / outcome.starting_tiles.max(25.0);
     let gold_delta =
         (outcome.ending_gold - outcome.starting_gold) / outcome.starting_gold.abs().max(25_000.0);
-    let action_land_weight = if matches!(outcome.action, PredictionAction::Attack | PredictionAction::Expand) {
+    let action_land_weight = if matches!(
+        outcome.action,
+        PredictionAction::Attack | PredictionAction::Expand
+    ) {
         0.65
     } else {
         0.25
     };
-    let action_reserve_weight = if matches!(outcome.action, PredictionAction::Defend | PredictionAction::Hold) {
+    let action_reserve_weight = if matches!(
+        outcome.action,
+        PredictionAction::Defend | PredictionAction::Hold
+    ) {
         0.65
     } else {
         0.3
@@ -358,9 +363,11 @@ pub fn score_counterfactual_action_outcome(
         return -1.0;
     }
     let troop_advantage = (outcome.ending_troops - expected_troops) / outcome.max_troops.max(1.0);
-    let tile_advantage =
-        (outcome.ending_tiles - expected_tiles) / outcome.starting_tiles.max(25.0);
-    let land_weight = if matches!(outcome.action, PredictionAction::Attack | PredictionAction::Expand) {
+    let tile_advantage = (outcome.ending_tiles - expected_tiles) / outcome.starting_tiles.max(25.0);
+    let land_weight = if matches!(
+        outcome.action,
+        PredictionAction::Attack | PredictionAction::Expand
+    ) {
         0.7
     } else {
         0.3
@@ -460,12 +467,12 @@ mod tests {
     #[test]
     fn growth_pace_improves_mutation_score() {
         let fast = score_mutation_outcome(
-            false, true, 10.0, 3.0, 0.5, 0.1, 0.1, 0.0, 1_000.0, 6_000.0, 50_000.0,
-            2_000.0, 20.0, 40.0, 4.0, 2.0,
+            false, true, 10.0, 3.0, 0.5, 0.1, 0.1, 0.0, 1_000.0, 6_000.0, 50_000.0, 2_000.0, 20.0,
+            40.0, 4.0, 2.0,
         );
         let slow = score_mutation_outcome(
-            false, true, 10.0, 3.0, 0.5, 0.1, 0.1, 0.0, 1_000.0, 6_000.0, 50_000.0,
-            8_000.0, 20.0, 40.0, 4.0, 2.0,
+            false, true, 10.0, 3.0, 0.5, 0.1, 0.1, 0.0, 1_000.0, 6_000.0, 50_000.0, 8_000.0, 20.0,
+            40.0, 4.0, 2.0,
         );
         assert!(fast > slow);
     }

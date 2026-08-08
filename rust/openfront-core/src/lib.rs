@@ -48,10 +48,10 @@ pub use ai_forecast::{
 };
 pub use ai_learning::{
     apply_action_outcome_learning, classify_loss_cause, evaluate_seed_cohort,
-    human_troop_regeneration, land_troop_capacity, normalize_action_reward,
-    predict_future_outcome, score_counterfactual_action_outcome, score_delayed_action_outcome,
-    score_mutation_outcome, ActionOutcome, ActionOutcomeGenes, ActionRewardBaseline,
-    FuturePrediction, LossCause, NormalizedActionReward, PredictionAction, SeedCohortResult,
+    human_troop_regeneration, land_troop_capacity, normalize_action_reward, predict_future_outcome,
+    score_counterfactual_action_outcome, score_delayed_action_outcome, score_mutation_outcome,
+    ActionOutcome, ActionOutcomeGenes, ActionRewardBaseline, FuturePrediction, LossCause,
+    NormalizedActionReward, PredictionAction, SeedCohortResult,
 };
 pub use ai_strategy::{
     evaluate_coalition_target, model_opponent, plan_strategic_action, CoalitionHelper,
