@@ -28,6 +28,7 @@ pub mod random;
 pub mod spiral_trail;
 pub mod structure_render;
 pub mod territory;
+pub mod territory_render;
 pub mod tile;
 pub mod traversal;
 pub mod unit_classification;
@@ -110,6 +111,10 @@ pub use spiral_trail::{
 };
 pub use structure_render::{StructureRenderState, STRUCTURE_FLOATS_PER_INSTANCE};
 pub use territory::OwnerTerritoryAnalysis;
+pub use territory_render::{
+    TerritoryRenderError, TerritoryRenderQueue, TERRITORY_BORDER_CHANGE_WORDS,
+    TERRITORY_TILE_PATCH_FLOATS,
+};
 pub use tile::{
     apply_packed_update, PackedTile, Terrain, TerrainType, TileState, TileStateError,
     TileTransition, DEFENSE_BONUS_MASK, FALLOUT_MASK, IMPASSABLE_MAGNITUDE, OWNER_ID_MASK,
