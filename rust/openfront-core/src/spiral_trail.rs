@@ -66,26 +66,14 @@ pub fn write_spiral_segment_samples(
     let mut write_index = 0;
 
     if include_start {
-        let (dir_x, dir_y) = blended_direction(
-            from_dir_x,
-            from_dir_y,
-            ndx,
-            ndy,
-            0.0,
-        );
+        let (dir_x, dir_y) = blended_direction(from_dir_x, from_dir_y, ndx, ndy, 0.0);
         write_sample(output, &mut write_index, x0, y0, -dir_y, dir_x, 0.0);
     }
 
     let step_count = steps as f64;
     for step in 1..=steps {
         let fraction = step as f64 / step_count;
-        let (dir_x, dir_y) = blended_direction(
-            from_dir_x,
-            from_dir_y,
-            ndx,
-            ndy,
-            fraction,
-        );
+        let (dir_x, dir_y) = blended_direction(from_dir_x, from_dir_y, ndx, ndy, fraction);
         write_sample(
             output,
             &mut write_index,
