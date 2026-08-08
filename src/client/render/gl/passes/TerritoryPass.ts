@@ -14,11 +14,11 @@
  * owns the actual rasterization.
  */
 
-import type {
-  OpenFrontWasmTerritoryQueue,
-  RustTerritoryDrain,
-} from "../../../rust/OpenFrontWasmGraphics";
-import { OpenFrontWasmGraphics } from "../../../rust/OpenFrontWasmGraphics";
+import {
+  createRustTerritoryRenderQueue,
+  type RustTerritoryDrain,
+  type RustTerritoryRenderQueue,
+} from "../../../rust/OpenFrontWasmTerritoryRender";
 import type { RenderSettings } from "../RenderSettings";
 import { getPaletteSize } from "../utils/ColorUtils";
 import { createMapQuad, createProgram, shaderSrc } from "../utils/GlUtils";
@@ -104,7 +104,7 @@ export class TerritoryPass {
   private readonly dripQueue: TileDripQueue;
   private liveTileState: Uint16Array | null = null;
   /** Rust fast path. Null keeps stale dev Wasm assets backwards compatible. */
-  private rustQueue: OpenFrontWasmTerritoryQueue | null = null;
+  private rustQueue: RustTerritoryRenderQueue | null = null;
 
   constructor(
     gl: WebGL2RenderingContext,
@@ -136,23 +136,12 @@ export class TerritoryPass {
       mapW * mapH,
       settings.tileDrip.bucketCount,
     );
-    try {
-      this.rustQueue =
-        OpenFrontWasmGraphics.current()?.createTerritoryQueue(
-          mapW,
-          mapH,
-          settings.tileDrip.bucketCount,
-          this.cpuTileState,
-        ) ?? null;
-    } catch (error) {
-      // Keep old/stale dev Wasm assets non-fatal. The TypeScript path remains
-      // behaviourally identical and lets the renderer boot while assets rebuild.
-      console.warn(
-        "Rust territory staging unavailable; using TypeScript fallback",
-        error,
-      );
-      this.rustQueue = null;
-    }
+    this.rustQueue = createRustTerritoryRenderQueue(
+      mapW,
+      mapH,
+      settings.tileDrip.bucketCount,
+      this.cpuTileState,
+    );
 
     this.program = createProgram(
       gl,
@@ -226,7 +215,7 @@ export class TerritoryPass {
     this.liveTileState = tileState;
     this.cpuTileState.set(tileState);
     if (this.rustQueue) {
-      this.rustQueue.replaceState(tileState);
+      this.rustQueue.replace(tileState);
     } else {
       this.clearDripBuckets();
     }
