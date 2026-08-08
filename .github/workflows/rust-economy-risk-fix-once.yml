@@ -1,0 +1,46 @@
+name: Rust economy risk fix once
+
+on:
+  push:
+    branches:
+      - agent/rust-port
+    paths:
+      - .github/workflows/rust-economy-risk-fix-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/rust-port
+      - name: Apply economic risk guard
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          rust = Path("rust/openfront-core/src/ai_economy.rs")
+          text = rust.read_text()
+          anchor = '''        + capital_deployment_pressure * growth_readiness * 18.0\n        + affordability_penalty(context.factory_cost);'''
+          replacement = '''        + capital_deployment_pressure * growth_readiness * 18.0\n        - risk * 20.0\n        + affordability_penalty(context.factory_cost);'''
+          assert anchor in text
+          rust.write_text(text.replace(anchor, replacement, 1))
+
+          ts = Path("src/client/ai/EconomicSystemPolicy.ts")
+          text = ts.read_text()
+          anchor = '''      capitalDeploymentPressure * growthReadiness * 18 +\n      afford(context.factoryCost),'''
+          replacement = '''      capitalDeploymentPressure * growthReadiness * 18 -\n      risk * 20 +\n      afford(context.factoryCost),'''
+          assert anchor in text
+          ts.write_text(text.replace(anchor, replacement, 1))
+          PY
+          cargo fmt --all
+      - name: Commit risk guard
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add rust/openfront-core/src/ai_economy.rs src/client/ai/EconomicSystemPolicy.ts
+          git commit -m "Protect economy growth under attack"
+          git push origin HEAD:agent/rust-port
