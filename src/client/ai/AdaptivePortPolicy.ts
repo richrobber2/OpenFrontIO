@@ -1,3 +1,11 @@
+import {
+  planAdaptivePortActionsRust,
+  preloadRustEconomyAi,
+  scoreAdaptiveTradePortOptionRust,
+} from "../rust/OpenFrontWasmEconomyAi";
+
+void preloadRustEconomyAi();
+
 export type AdaptivePortAction =
   | "hold"
   | "connect"
@@ -95,6 +103,19 @@ const normalize = (value: number, minimum: number, maximum: number): number =>
 export function planAdaptivePortActions(
   context: AdaptivePortContext,
 ): AdaptivePortPlan {
+  const rust = planAdaptivePortActionsRust(context);
+  if (rust !== null) {
+    const transportSurvivalRatio = 1 - clamp(context.transportLossRate, 0, 1);
+    const reasonByAction: Record<AdaptivePortAction, string> = {
+      hold: `hold port spending at ${Math.round(rust.budgetCoverageRatio * 100)}% of one build cost above reserve`,
+      connect: `close the ${Math.round((1 - rust.connectedPortRatio) * 100)}% factory-connection gap before adding more shoreline`,
+      defend: `cover ${Math.round(rust.navalThreatRatio * 100)}% local naval pressure with ${Math.round(rust.fleetCoverageRatio * 100)}% of the desired fleet`,
+      repair: `raise dock throughput under a ${Math.round(rust.repairLoadRatio * 100)}% damaged-fleet load`,
+      trade: `expand beyond ${Math.round(rust.tradeCoverageRatio * 100)}% of adaptive partner coverage at ${Math.round(transportSurvivalRatio * 100)}% transport survival`,
+    };
+    return { ...rust, reason: reasonByAction[rust.action] };
+  }
+
   const reserveHealth = clamp((context.reserveRatio - 0.3) / 0.7, 0, 1);
   const frontPressure = clamp(
     Math.max(context.incomingPressureRatio, context.activeFrontRatio),
@@ -329,6 +350,34 @@ export function rankAdaptiveTradePortOptions(
   });
   const minimumGoldRate = Math.min(...goldRates);
   const maximumGoldRate = Math.max(...goldRates);
+  const normalization = {
+    minimumRoute,
+    maximumRoute,
+    minimumSpacing,
+    maximumSpacing,
+    minimumGoldRate,
+    maximumGoldRate,
+  };
+  const rustScores = options.map((option) =>
+    scoreAdaptiveTradePortOptionRust(
+      plan,
+      {
+        ...option,
+        survivalRatio: option.survivalRatio ?? 1,
+        spawnIntervalTicks: option.spawnIntervalTicks ?? 100,
+        reachablePartners: option.reachablePartners ?? 1,
+        partnerConcentration: option.partnerConcentration ?? 1,
+      },
+      normalization,
+    ),
+  );
+  if (rustScores.every((score) => score !== null)) {
+    return options
+      .map((option, index) => ({ ...option, ...rustScores[index]! }))
+      .filter((option) => option.eligible)
+      .map(({ eligible: _eligible, ...option }) => option)
+      .sort((a, b) => b.score - a.score);
+  }
 
   return options
     .filter(
@@ -375,11 +424,12 @@ export function rankAdaptiveTradePortOptions(
       );
       const score =
         returnQuality * 0.22 +
-        Number(option.factoryConnected) * 0.15 +
+        Number(option.factoryConnected) * 0.14 +
         throughputQuality * 0.25 +
         paybackQuality * 0.2 +
-        diversityQuality * 0.12 +
-        spacingQuality * 0.06;
+        diversityQuality * 0.1 +
+        spacingQuality * 0.04 +
+        distanceEfficiency * 0.05;
       return {
         ...option,
         score,

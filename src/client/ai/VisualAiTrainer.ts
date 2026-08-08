@@ -3677,9 +3677,12 @@ export class VisualAiTrainer {
         );
       const targetPartnerCoverage =
         this.moduleSignals.portTargetPartnerCoverageRatio ?? 0.1;
+      const uniqueTradePartnerCount = new Set(
+        partnerPorts.map((port) => port.owner().id()),
+      ).size;
       const desiredTradePorts = Math.max(
         1,
-        Math.ceil(partnerPorts.length * targetPartnerCoverage),
+        Math.ceil(uniqueTradePartnerCount * targetPartnerCoverage),
       );
       if (
         this.economicPlan.action === "extend-trade" &&
@@ -3799,7 +3802,7 @@ export class VisualAiTrainer {
           const partnerConcentration =
             Math.max(0, ...ownerWeights.values()) / Math.max(1, totalWeight);
           const representative = weightedRoutes.sort(
-            (a, b) => b.expectedGold - a.expectedGold,
+            (a, b) => b.expectedGold * b.weight - a.expectedGold * a.weight,
           )[0].partner;
           const id = String(tile);
           routeByID.set(id, { tile, partner: representative });

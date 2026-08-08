@@ -122,6 +122,107 @@ export interface RustEconomicSystemPlan {
   capitalDeploymentPressure: number;
 }
 
+export type RustAdaptivePortAction =
+  | "hold"
+  | "connect"
+  | "defend"
+  | "repair"
+  | "trade";
+
+const ADAPTIVE_PORT_ACTIONS: readonly RustAdaptivePortAction[] = [
+  "hold",
+  "connect",
+  "defend",
+  "repair",
+  "trade",
+];
+
+export interface RustAdaptivePortContext {
+  reserveRatio: number;
+  incomingPressureRatio: number;
+  activeFrontRatio: number;
+  gold: number;
+  spendableGold: number;
+  portCost: number;
+  ports: number;
+  connectedPorts: number;
+  tradePartners: number;
+  embargoedPartners: number;
+  ownWarships: number;
+  desiredWarships: number;
+  hostileWarships: number;
+  hostileTransports: number;
+  tradeTargets: number;
+  damagedWarships: number;
+  dockCapacity: number;
+  transportLossRate: number;
+  railProductivityRatio: number;
+  navalBias: number;
+  economicTradeCoverageTargetRatio?: number;
+}
+
+export interface RustAdaptivePortPlan {
+  action: RustAdaptivePortAction;
+  urgency: number;
+  scores: Record<RustAdaptivePortAction, number>;
+  connectedPortRatio: number;
+  fleetCoverageRatio: number;
+  repairLoadRatio: number;
+  navalThreatRatio: number;
+  tradeCoverageRatio: number;
+  budgetCoverageRatio: number;
+  targetPartnerCoverageRatio: number;
+  candidateSampleRatio: number;
+  targetCoverageRatio: number;
+  minimumSiteQuality: number;
+  minimumBudgetCoverage: number;
+  requiredReturnRatio: number;
+  maximumPaybackTicks: number;
+  repairHealthThreshold: number;
+  stackingLoadThreshold: number;
+  requireFactoryConnection: boolean;
+  constructionPressure: number;
+}
+
+export interface RustAdaptiveTradePortThresholds {
+  minimumSiteQuality: number;
+  requiredReturnRatio: number;
+  maximumPaybackTicks: number;
+  requireFactoryConnection: boolean;
+}
+
+export interface RustAdaptiveTradePortOption {
+  expectedGold: number;
+  buildCost: number;
+  routeDistance: number;
+  closestFriendlyPortDistance: number;
+  factoryConnected: boolean;
+  survivalRatio: number;
+  spawnIntervalTicks: number;
+  reachablePartners: number;
+  partnerConcentration: number;
+}
+
+export interface RustAdaptiveTradePortNormalization {
+  minimumRoute: number;
+  maximumRoute: number;
+  minimumSpacing: number;
+  maximumSpacing: number;
+  minimumGoldRate: number;
+  maximumGoldRate: number;
+}
+
+export interface RustAdaptiveTradePortScore {
+  eligible: boolean;
+  score: number;
+  returnRatio: number;
+  distanceEfficiency: number;
+  spacingQuality: number;
+  expectedGoldPerTick: number;
+  paybackTicks: number;
+  diversityQuality: number;
+}
+
 type EconomyWasmExports = OpenFrontWasmExports & {
   openfront_ai_rail_city_growth_score(
     railConnections: number,
@@ -208,6 +309,51 @@ type EconomyWasmExports = OpenFrontWasmExports & {
     portCost: number,
     defensePostCost: number,
   ): number;
+  openfront_ai_plan_adaptive_port_actions(
+    reserveRatio: number,
+    incomingPressureRatio: number,
+    activeFrontRatio: number,
+    gold: number,
+    spendableGold: number,
+    portCost: number,
+    ports: number,
+    connectedPorts: number,
+    tradePartners: number,
+    embargoedPartners: number,
+    ownWarships: number,
+    desiredWarships: number,
+    hostileWarships: number,
+    hostileTransports: number,
+    tradeTargets: number,
+    damagedWarships: number,
+    dockCapacity: number,
+    transportLossRate: number,
+    railProductivityRatio: number,
+    navalBias: number,
+    hasEconomicTradeCoverageTargetRatio: number,
+    economicTradeCoverageTargetRatio: number,
+  ): number;
+  openfront_ai_score_adaptive_trade_port_option(
+    minimumSiteQuality: number,
+    requiredReturnRatio: number,
+    maximumPaybackTicks: number,
+    requireFactoryConnection: number,
+    expectedGold: number,
+    buildCost: number,
+    routeDistance: number,
+    closestFriendlyPortDistance: number,
+    factoryConnected: number,
+    survivalRatio: number,
+    spawnIntervalTicks: number,
+    reachablePartners: number,
+    partnerConcentration: number,
+    minimumRoute: number,
+    maximumRoute: number,
+    minimumSpacing: number,
+    maximumSpacing: number,
+    minimumGoldRate: number,
+    maximumGoldRate: number,
+  ): number;
 };
 
 class OpenFrontWasmEconomyAi {
@@ -226,6 +372,8 @@ class OpenFrontWasmEconomyAi {
       "openfront_ai_capacity_escape_city_budget",
       "openfront_ai_should_fund_first_pressure_factory",
       "openfront_ai_plan_economic_systems",
+      "openfront_ai_plan_adaptive_port_actions",
+      "openfront_ai_score_adaptive_trade_port_option",
     ] as const) {
       if (typeof this.wasm[name] !== "function") {
         throw new Error(`OpenFront Wasm is missing economy AI export ${name}`);
@@ -431,6 +579,111 @@ class OpenFrontWasmEconomyAi {
     };
   }
 
+  planAdaptivePortActions(
+    context: RustAdaptivePortContext,
+  ): RustAdaptivePortPlan {
+    if (
+      this.wasm.openfront_ai_plan_adaptive_port_actions(
+        context.reserveRatio,
+        context.incomingPressureRatio,
+        context.activeFrontRatio,
+        context.gold,
+        context.spendableGold,
+        context.portCost,
+        context.ports,
+        context.connectedPorts,
+        context.tradePartners,
+        context.embargoedPartners,
+        context.ownWarships,
+        context.desiredWarships,
+        context.hostileWarships,
+        context.hostileTransports,
+        context.tradeTargets,
+        context.damagedWarships,
+        context.dockCapacity,
+        context.transportLossRate,
+        context.railProductivityRatio,
+        context.navalBias,
+        context.economicTradeCoverageTargetRatio === undefined ? 0 : 1,
+        context.economicTradeCoverageTargetRatio ?? 0,
+      ) === 0
+    ) {
+      this.throwLastError("plan adaptive port actions");
+    }
+    const control = this.readU32Result(2, "read adaptive port action");
+    const values = this.readF64Result(22, "read adaptive port plan");
+    const action = ADAPTIVE_PORT_ACTIONS[control[0]!] ?? "hold";
+    const scores = Object.fromEntries(
+      ADAPTIVE_PORT_ACTIONS.map((name, index) => [name, values[index + 1]!]),
+    ) as Record<RustAdaptivePortAction, number>;
+    return {
+      action,
+      urgency: values[0]!,
+      scores,
+      connectedPortRatio: values[6]!,
+      fleetCoverageRatio: values[7]!,
+      repairLoadRatio: values[8]!,
+      navalThreatRatio: values[9]!,
+      tradeCoverageRatio: values[10]!,
+      budgetCoverageRatio: values[11]!,
+      targetPartnerCoverageRatio: values[12]!,
+      candidateSampleRatio: values[13]!,
+      targetCoverageRatio: values[14]!,
+      minimumSiteQuality: values[15]!,
+      minimumBudgetCoverage: values[16]!,
+      requiredReturnRatio: values[17]!,
+      maximumPaybackTicks: values[18]!,
+      repairHealthThreshold: values[19]!,
+      stackingLoadThreshold: values[20]!,
+      requireFactoryConnection: control[1] !== 0,
+      constructionPressure: values[21]!,
+    };
+  }
+
+  scoreAdaptiveTradePortOption(
+    thresholds: RustAdaptiveTradePortThresholds,
+    option: RustAdaptiveTradePortOption,
+    normalization: RustAdaptiveTradePortNormalization,
+  ): RustAdaptiveTradePortScore {
+    if (
+      this.wasm.openfront_ai_score_adaptive_trade_port_option(
+        thresholds.minimumSiteQuality,
+        thresholds.requiredReturnRatio,
+        thresholds.maximumPaybackTicks,
+        thresholds.requireFactoryConnection ? 1 : 0,
+        option.expectedGold,
+        option.buildCost,
+        option.routeDistance,
+        option.closestFriendlyPortDistance,
+        option.factoryConnected ? 1 : 0,
+        option.survivalRatio,
+        option.spawnIntervalTicks,
+        option.reachablePartners,
+        option.partnerConcentration,
+        normalization.minimumRoute,
+        normalization.maximumRoute,
+        normalization.minimumSpacing,
+        normalization.maximumSpacing,
+        normalization.minimumGoldRate,
+        normalization.maximumGoldRate,
+      ) === 0
+    ) {
+      this.throwLastError("score adaptive trade port option");
+    }
+    const control = this.readU32Result(1, "read adaptive trade route eligibility");
+    const values = this.readF64Result(7, "read adaptive trade route score");
+    return {
+      eligible: control[0] !== 0,
+      score: values[0]!,
+      returnRatio: values[1]!,
+      distanceEfficiency: values[2]!,
+      spacingQuality: values[3]!,
+      expectedGoldPerTick: values[4]!,
+      paybackTicks: values[5]!,
+      diversityQuality: values[6]!,
+    };
+  }
+
   private readU32Result(expected: number, operation: string): Uint32Array {
     const length = this.wasm.openfront_result_len() >>> 0;
     if (length !== expected) {
@@ -542,6 +795,22 @@ export function planEconomicSystemsRust(
   context: RustEconomicSystemContext,
 ): RustEconomicSystemPlan | null {
   return useRustEconomyAi((ai) => ai.planEconomicSystems(context));
+}
+
+export function planAdaptivePortActionsRust(
+  context: RustAdaptivePortContext,
+): RustAdaptivePortPlan | null {
+  return useRustEconomyAi((ai) => ai.planAdaptivePortActions(context));
+}
+
+export function scoreAdaptiveTradePortOptionRust(
+  thresholds: RustAdaptiveTradePortThresholds,
+  option: RustAdaptiveTradePortOption,
+  normalization: RustAdaptiveTradePortNormalization,
+): RustAdaptiveTradePortScore | null {
+  return useRustEconomyAi((ai) =>
+    ai.scoreAdaptiveTradePortOption(thresholds, option, normalization),
+  );
 }
 
 function logRustEconomyAiFailure(error: unknown): void {
