@@ -38,7 +38,7 @@ export async function launch({ viewport, rafIntervalMs, args } = {}) {
     : await chromium.launch({
         args: ["--no-sandbox", "--disable-gpu", ...(args ?? [])],
         env,
-        executablePath: process.env.OPENFRONT_CHROMIUM_PATH || undefined,
+        executablePath: process.env.OPENFRONT_CHROMIUM_PATH ?? undefined,
       });
   const context = process.env.OPENFRONT_CDP_URL
     ? (browser.contexts()[0] ??

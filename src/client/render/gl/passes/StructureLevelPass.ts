@@ -12,6 +12,7 @@
  * Only visible when zoom > dotsThreshold (matching structure icon visibility).
  */
 
+import { getUnitRenderSubsets } from "../../frame/UnitSubsetRegistry";
 import type { RendererConfig, UnitState } from "../../types";
 import {
   STRUCTURE_TYPES,
@@ -310,19 +311,28 @@ export class StructureLevelPass {
 
   updateStructures(units: Map<number, UnitState>): void {
     this.lastUnits = units;
+    const renderStructures = getUnitRenderSubsets(units)?.structures ?? units;
     const classic = this.settings.structureLevel.classicFont;
     if (
       this.layoutClassic === classic &&
-      sameStructureLevels(units, STRUCTURE_TYPES, this.levelSnapshot)
+      sameStructureLevels(
+        renderStructures,
+        STRUCTURE_TYPES,
+        this.levelSnapshot,
+      )
     ) {
       return;
     }
-    captureStructureLevels(units, STRUCTURE_TYPES, this.levelSnapshot);
+    captureStructureLevels(
+      renderStructures,
+      STRUCTURE_TYPES,
+      this.levelSnapshot,
+    );
     this.layoutClassic = classic;
     const glyph = classic ? this.classic.glyph : this.msdf.glyph;
 
     let count = 0;
-    for (const unit of units.values()) {
+    for (const unit of renderStructures.values()) {
       if (!unit.isActive) continue;
       if (!STRUCTURE_TYPES.has(unit.unitType)) continue;
       if (unit.level <= 1) continue;

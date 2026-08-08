@@ -13,6 +13,7 @@
  *   enemy → red    (1, 0, 0)
  */
 
+import { getUnitRenderSubsets } from "../../frame/UnitSubsetRegistry";
 import type { UnitState } from "../../types";
 import { UT_SAM_LAUNCHER } from "../../types";
 import { DynamicInstanceBuffer } from "../DynamicBuffer";
@@ -192,10 +193,12 @@ export class SAMRadiusPass {
     this.structuresDirty = false;
     const w = this.mapW;
     const ownerMode = this.colorMode === "owner";
+    const renderStructures =
+      getUnitRenderSubsets(structures)?.structures ?? structures;
 
     // 1. Collect SAM circles
     const circles: SAMCircle[] = [];
-    for (const u of structures.values()) {
+    for (const u of renderStructures.values()) {
       if (u.unitType !== UT_SAM_LAUNCHER) continue;
       if (!u.isActive) continue;
 
