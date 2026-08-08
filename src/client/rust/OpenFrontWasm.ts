@@ -1,4 +1,19 @@
 export { OpenFrontRustMap } from "./OpenFrontRustMap";
+export {
+  OpenFrontWasmAi,
+  evaluateCoalitionTargetRust,
+  modelOpponentRust,
+  planStrategicActionRust,
+  preloadRustAi,
+  type RustAiCoalitionEvaluation,
+  type RustAiCoalitionHelper,
+  type RustAiOpponentInput,
+  type RustAiOpponentMetrics,
+  type RustAiStrategicOpponent,
+  type RustAiStrategicPlanInput,
+  type RustAiStrategicPlanResult,
+  type RustStrategicAction,
+} from "./OpenFrontWasmAi";
 export { OpenFrontWasmGraphics } from "./OpenFrontWasmGraphics";
 export { OpenFrontWasmModule } from "./OpenFrontWasmModule";
 export {
