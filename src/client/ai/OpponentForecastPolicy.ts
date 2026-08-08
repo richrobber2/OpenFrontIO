@@ -1,3 +1,9 @@
+import {
+  forecastOpponentRust,
+  inferOpponentChoiceRust,
+  preloadRustForecastAi,
+} from "../rust/OpenFrontWasmForecastAi";
+
 export type OpponentChoice =
   | "attack"
   | "defend"
@@ -70,10 +76,18 @@ function delta(
     : 0;
 }
 
+// Forecasting is hot enough to deserve the Rust path, but remains synchronous.
+// Until the module is ready, the exact TypeScript implementation below remains
+// the compatibility path.
+void preloadRustForecastAi();
+
 export function inferOpponentChoice(
   current: OpponentObservation,
   previous?: OpponentObservation,
 ): OpponentChoice {
+  const rust = inferOpponentChoiceRust(current, previous);
+  if (rust !== null) return rust;
+
   const tileDelta = delta(current, previous, "tiles");
   const outgoingDelta = delta(current, previous, "outgoingTroops");
   const structureDelta =
@@ -119,6 +133,26 @@ export function forecastOpponent({
   ownMaxTroops: number;
   ownTiles: number;
 }): OpponentForecast {
+  const rust = forecastOpponentRust({
+    current,
+    previous,
+    previousForecast,
+    ownTroops,
+    ownMaxTroops,
+    ownTiles,
+  });
+  if (rust !== null) {
+    return {
+      id,
+      observedChoice: rust.observedChoice,
+      predictedChoice: rust.predictedChoice,
+      probabilities: rust.probabilities,
+      confidence: rust.confidence,
+      threat: rust.threat,
+      projected: rust.projected,
+    };
+  }
+
   const elapsedTicks = Math.max(
     1,
     current.tick - (previous?.tick ?? current.tick),
