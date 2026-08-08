@@ -1,4 +1,9 @@
 import type { OpponentChoice } from "./OpponentForecastPolicy";
+import {
+  modelOpponentRust,
+  planStrategicActionRust,
+  preloadRustAi,
+} from "../rust/OpenFrontWasmAi";
 
 export type StrategicAction =
   | "defend"
@@ -29,6 +34,8 @@ export type StrategicPlan = {
   opponent?: OpponentModel;
   reason: string;
 };
+
+void preloadRustAi();
 
 export function modelOpponent({
   id,
@@ -61,6 +68,30 @@ export function modelOpponent({
   predictedChoice?: OpponentChoice;
   forecastThreat?: number;
 }): OpponentModel {
+  const rust = modelOpponentRust({
+    troops,
+    maxTroops,
+    tiles,
+    ownTiles,
+    incomingAttacks,
+    outgoingAttacks,
+    silos,
+    warships,
+    previousTiles,
+    previousTroops,
+    elapsedTicks,
+    predictedChoice,
+    forecastThreat,
+  });
+  if (rust !== null) {
+    return {
+      id,
+      ...rust,
+      predictedChoice,
+      forecastThreat,
+    };
+  }
+
   const troopRatio = troops / Math.max(1, maxTroops);
   const territoryRatio = tiles / Math.max(1, ownTiles);
   const ticks = Math.max(1, elapsedTicks);
@@ -132,6 +163,39 @@ export function planStrategicAction({
   actionableStrikeTargets?: number;
   opponents: readonly OpponentModel[];
 }): StrategicPlan {
+  const rust = planStrategicActionRust({
+    reserveRatio,
+    incomingFronts,
+    incomingTroops,
+    maxTroops,
+    hasNeutralLand,
+    hostileBorders,
+    activeNationWars,
+    navalThreats,
+    tradeTargets,
+    navalPressureRatio,
+    tradeOpportunityRatio,
+    readyStrategicSlots,
+    affordableStrategicWeapons,
+    actionableStrikeTargets,
+    opponents,
+  });
+  if (rust !== null) {
+    const strongestOpponent =
+      rust.strongestOpponentIndex === undefined
+        ? undefined
+        : opponents[rust.strongestOpponentIndex];
+    return {
+      action: rust.action,
+      score: rust.score,
+      scores: rust.scores,
+      opponent: strongestOpponent,
+      reason: rust.criticalDefense
+        ? `defend is mandatory under ${Math.round(rust.incomingTroopRatio * 100)}% incoming pressure with a ${Math.round(reserveRatio * 100)}% reserve`
+        : `${rust.action} leads at ${Math.round(rust.score)}; reserve ${Math.round(reserveRatio * 100)}%, ${incomingFronts} incoming fronts, ${hostileBorders} hostile borders`,
+    };
+  }
+
   const incomingTroopRatio = incomingTroops / Math.max(1, maxTroops);
   const strongestOpponent = opponents
     .slice()
