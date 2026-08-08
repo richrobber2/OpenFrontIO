@@ -6,6 +6,7 @@
 pub mod abstract_graph;
 pub mod abstract_graph_builder;
 pub mod ai_alliance;
+pub mod ai_forecast;
 pub mod ai_strategy;
 pub mod ai_tactics;
 pub mod air_path;
@@ -39,6 +40,10 @@ pub use ai_alliance::{
     AllianceForecastChoice, AllianceLifecycleAction, AllianceLifecycleInput, AllianceLifecyclePlan,
     AllianceLifecycleReason, CoalitionGrowthSupportDecision, CoalitionGrowthSupportInput,
     CoalitionSupportPurpose, CoalitionSupportReason, CommunicationActionKind, CommunicationPlan,
+};
+pub use ai_forecast::{
+    forecast_opponent, infer_opponent_choice, OpponentChoice, OpponentForecast,
+    OpponentObservation, OpponentProjection,
 };
 pub use ai_strategy::{
     evaluate_coalition_target, model_opponent, plan_strategic_action, CoalitionHelper,
