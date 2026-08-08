@@ -16,6 +16,8 @@ pub struct TerrainPalette {
 pub enum TerrainGraphicsError {
     SizeOverflow,
     TerrainLengthMismatch { expected: usize, actual: usize },
+    DeltaRecordLengthMismatch { expected: usize, actual: usize },
+    InvalidTileRef { tile_ref: u32, tile_count: usize },
 }
 
 const LAND_MASK: u8 = 0x80;
@@ -24,6 +26,8 @@ const MAGNITUDE_MASK: u8 = 0x1f;
 const IMPASSABLE_MAGNITUDE: u8 = 31;
 const SHORE_WATER_WHITE_BLEND_TENTHS: u16 = 765;
 const BACKGROUND: [u8; 3] = [60, 60, 60];
+const TERRAIN_DELTA_INPUT_BYTES: usize = 8;
+const TERRAIN_DELTA_OUTPUT_BYTES: usize = 12;
 
 #[inline]
 fn add_clamped(base: u8, amount: u8) -> u8 {
@@ -123,6 +127,83 @@ pub fn build_terrain_rgba_in_place(
     Ok(())
 }
 
+/// Convert `[tileRef:u32, terrainByte:u32]` records into GPU-ready
+/// `[tileRef:u32, terrainByte:u32, packedRGBA:u32]` records in place.
+///
+/// The expansion runs backwards, so the output can reuse the upload buffer
+/// without cloning the input. `packedRGBA` stores R in the low byte and A in
+/// the high byte, matching the integer attribute unpacked by the WebGL shader.
+pub fn build_terrain_delta_records_in_place(
+    records: &mut Vec<u8>,
+    count: u32,
+    width: u32,
+    height: u32,
+    palette: TerrainPalette,
+) -> Result<(), TerrainGraphicsError> {
+    let record_count = count as usize;
+    let input_len = record_count
+        .checked_mul(TERRAIN_DELTA_INPUT_BYTES)
+        .ok_or(TerrainGraphicsError::SizeOverflow)?;
+    if records.len() != input_len {
+        return Err(TerrainGraphicsError::DeltaRecordLengthMismatch {
+            expected: input_len,
+            actual: records.len(),
+        });
+    }
+
+    let tile_count = (width as usize)
+        .checked_mul(height as usize)
+        .ok_or(TerrainGraphicsError::SizeOverflow)?;
+
+    // Validate before resizing/mutating so a bad tile leaves the upload intact.
+    for index in 0..record_count {
+        let offset = index * TERRAIN_DELTA_INPUT_BYTES;
+        let tile_ref = u32::from_le_bytes([
+            records[offset],
+            records[offset + 1],
+            records[offset + 2],
+            records[offset + 3],
+        ]);
+        if tile_ref as usize >= tile_count {
+            return Err(TerrainGraphicsError::InvalidTileRef {
+                tile_ref,
+                tile_count,
+            });
+        }
+    }
+
+    let output_len = record_count
+        .checked_mul(TERRAIN_DELTA_OUTPUT_BYTES)
+        .ok_or(TerrainGraphicsError::SizeOverflow)?;
+    records.resize(output_len, 0);
+
+    for index in (0..record_count).rev() {
+        let input = index * TERRAIN_DELTA_INPUT_BYTES;
+        let output = index * TERRAIN_DELTA_OUTPUT_BYTES;
+        let tile_ref = u32::from_le_bytes([
+            records[input],
+            records[input + 1],
+            records[input + 2],
+            records[input + 3],
+        ]);
+        let terrain_word = u32::from_le_bytes([
+            records[input + 4],
+            records[input + 5],
+            records[input + 6],
+            records[input + 7],
+        ]);
+        let terrain = terrain_word as u8;
+        let rgba = encode_terrain_rgba(terrain, palette);
+        let packed_rgba = u32::from_le_bytes(rgba);
+
+        records[output..output + 4].copy_from_slice(&tile_ref.to_le_bytes());
+        records[output + 4..output + 8].copy_from_slice(&u32::from(terrain).to_le_bytes());
+        records[output + 8..output + 12].copy_from_slice(&packed_rgba.to_le_bytes());
+    }
+
+    Ok(())
+}
+
 /// Convert a map-sized terrain-byte slice into the RGBA8 texture uploaded by
 /// TerrainPass. The owned Wasm upload path uses `build_terrain_rgba_in_place`
 /// directly to avoid the copy performed here.
@@ -148,6 +229,15 @@ mod tests {
         highland: [220, 203, 158],
         mountain: [230, 230, 230],
     };
+
+    fn delta_input(records: &[(u32, u8)]) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(records.len() * TERRAIN_DELTA_INPUT_BYTES);
+        for (tile_ref, terrain) in records {
+            bytes.extend_from_slice(&tile_ref.to_le_bytes());
+            bytes.extend_from_slice(&u32::from(*terrain).to_le_bytes());
+        }
+        bytes
+    }
 
     #[test]
     fn matches_renderer_terrain_branches() {
@@ -198,6 +288,42 @@ mod tests {
         let mut in_place = source;
         build_terrain_rgba_in_place(&mut in_place, 2, 2, PALETTE).unwrap();
         assert_eq!(in_place, expected);
+    }
+
+    #[test]
+    fn packs_sparse_terrain_delta_records_in_place() {
+        let mut records = delta_input(&[(0, 0), (3, LAND_MASK | 5)]);
+        build_terrain_delta_records_in_place(&mut records, 2, 2, 2, PALETTE).unwrap();
+
+        let words: Vec<u32> = records
+            .chunks_exact(4)
+            .map(|chunk| u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+            .collect();
+        assert_eq!(
+            words,
+            vec![
+                0,
+                0,
+                u32::from_le_bytes([71, 133, 181, 255]),
+                3,
+                u32::from(LAND_MASK | 5),
+                u32::from_le_bytes([190, 210, 138, 255]),
+            ]
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_delta_ref_before_mutating_input() {
+        let mut records = delta_input(&[(4, 0)]);
+        let original = records.clone();
+        assert_eq!(
+            build_terrain_delta_records_in_place(&mut records, 1, 2, 2, PALETTE),
+            Err(TerrainGraphicsError::InvalidTileRef {
+                tile_ref: 4,
+                tile_count: 4,
+            })
+        );
+        assert_eq!(records, original);
     }
 
     #[test]
