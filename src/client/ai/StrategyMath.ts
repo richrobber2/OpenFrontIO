@@ -19,6 +19,13 @@ import {
   tribeAttackCommitmentMultiplierRust,
 } from "../rust/OpenFrontWasmAi";
 import {
+  estimateTradeRouteGoldRust,
+  preloadRustEconomyAi,
+  railCityGrowthScoreRust,
+  scoreCityStackPlacementRust,
+  scoreFactoryPlacementRust,
+} from "../rust/OpenFrontWasmEconomyAi";
+import {
   classifyLossCauseRust,
   evaluateSeedCohortRust,
   preloadRustLearningAi,
@@ -28,6 +35,7 @@ import {
 import { projectLandCapacity } from "./LandCapacityPolicy";
 
 void preloadRustLearningAi();
+void preloadRustEconomyAi();
 
 export type LandAttackEstimate = {
   attackerTroops: number;
@@ -424,6 +432,27 @@ export function isStrategicallyTrapped({
   return !hasNeutralLand && !hasSeaAccess && hostileBorders > 0;
 }
 
+export function railCityGrowthScore(
+  railConnections: number,
+  overlappingRailroads: number,
+): number {
+  const rust = railCityGrowthScoreRust(
+    railConnections,
+    overlappingRailroads,
+  );
+  if (rust !== null) return rust;
+
+  const overlap = Math.min(2, Math.max(0, overlappingRailroads));
+  const directStopBonus = overlap * 45;
+  const networkLeverage =
+    overlap > 0 ? Math.min(4, Math.max(0, railConnections)) * 10 : 0;
+  return (
+    Math.max(0, railConnections) * 20 +
+    directStopBonus +
+    networkLeverage
+  );
+}
+
 export function railCityConnectionScore({
   hasFactoryInRange,
   stationDistancesSquared,
@@ -478,6 +507,12 @@ export function scoreCityStackPlacement({
   cityDistancesSquared: readonly number[];
   structureMinDistance: number;
 }): CityStackPlacementScore {
+  const rust = scoreCityStackPlacementRust(
+    cityDistancesSquared,
+    structureMinDistance,
+  );
+  if (rust !== null) return rust;
+
   const minimum = Math.max(1, structureMinDistance);
   const distances = cityDistancesSquared
     .filter((distance) => Number.isFinite(distance) && distance >= 0)
@@ -528,6 +563,7 @@ export type FactoryPlacementScore = {
   score: number;
   productiveStops: number;
   railEfficiency: number;
+  railReuseScore: number;
 };
 
 /**
@@ -564,6 +600,23 @@ export function scoreFactoryPlacement({
   minimumRange: number;
   maximumRange: number;
 }): FactoryPlacementScore {
+  const rust = scoreFactoryPlacementRust({
+    ownCities,
+    ownPorts,
+    externalCities,
+    externalPorts,
+    factoryCorridorConnections,
+    overlappingRailroads,
+    ghostPathLengths,
+    railBends,
+    depth,
+    safestDepth,
+    nearestFactoryDistance,
+    minimumRange,
+    maximumRange,
+  });
+  if (rust !== null) return rust;
+
   const ownStopValue = Math.max(0, ownCities) + Math.max(0, ownPorts) * 1.3;
   const externalStopValue =
     Math.max(0, externalCities) * 1.25 + Math.max(0, externalPorts) * 1.6;
@@ -608,18 +661,27 @@ export function scoreFactoryPlacement({
             Math.max(1, maximum * 0.35 - minimum))
       : 0;
 
+  const overlap = Math.min(3, Math.max(0, overlappingRailroads));
+  const directReuse = overlap * 32;
+  const reuseStopLeverage =
+    Math.min(1, overlap) * Math.min(4, productiveStops) * 6;
+  const throughputLeverage = Math.min(48, productiveStops * railEfficiency * 8);
+  const railReuseScore =
+    directReuse + reuseStopLeverage + throughputLeverage;
+
   return {
     score:
       ownStopValue * 22 +
       externalStopValue * 30 +
       Math.max(0, factoryCorridorConnections) * 8 +
       Math.min(3, routeCount) * 12 +
-      Math.max(0, overlappingRailroads) * 18 +
       railEfficiency * 24 +
-      safety * 24 -
+      safety * 24 +
+      railReuseScore -
       redundancyPenalty,
     productiveStops,
     railEfficiency,
+    railReuseScore,
   };
 }
 
@@ -627,6 +689,8 @@ export function estimateTradeRouteGold(
   distance: number,
   shortRangeDebuff = 300,
 ): number {
+  const rust = estimateTradeRouteGoldRust(distance, shortRangeDebuff);
+  if (rust !== null) return rust;
   return Math.floor(
     75_000 / (1 + Math.exp(-0.03 * (distance - shortRangeDebuff))) +
       50 * distance,

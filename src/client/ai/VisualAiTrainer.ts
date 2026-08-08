@@ -167,6 +167,7 @@ import {
   predictFutureOutcomes,
   PredictionAction,
   railCityConnectionScore,
+  railCityGrowthScore,
   scoreCityStackPlacement,
   scoreFactoryPlacement,
   scoreMutationOutcome,
@@ -4017,13 +4018,17 @@ export class VisualAiTrainer {
         .sort(
           (a, b) =>
             b.defenseScore +
-              b.railConnections * 20 +
               b.stackPlacement.score +
-              (b.plan?.overlappingRailroads.length ?? 0) * 15 -
+              railCityGrowthScore(
+                b.railConnections,
+                b.plan?.overlappingRailroads.length ?? 0,
+              ) -
               (a.defenseScore +
-                a.railConnections * 20 +
                 a.stackPlacement.score +
-                (a.plan?.overlappingRailroads.length ?? 0) * 15) ||
+                railCityGrowthScore(
+                  a.railConnections,
+                  a.plan?.overlappingRailroads.length ?? 0,
+                )) ||
             b.depth - a.depth,
         )
         .find(
