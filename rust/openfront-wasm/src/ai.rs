@@ -241,7 +241,7 @@ pub extern "C" fn openfront_ai_plan_strategic_action(
         plan.strongest_opponent_index
             .map(|index| index as u32)
             .unwrap_or(INVALID_RESULT),
-        u32::from(plan.critical_defense),
+        if plan.critical_defense { 1 } else { 0 },
     ]);
     set_f64_result(plan.scores.into_iter().chain([plan.incoming_troop_ratio]));
     1
