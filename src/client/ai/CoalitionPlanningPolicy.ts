@@ -66,6 +66,13 @@ const clamp = (value: number, minimum = 0, maximum = 1): number =>
  * Select one coalition target instead of asking every ally to attack a
  * different enemy. Helpers only count when they can reach the target and are
  * not prevented from attacking it by their own alliance or team.
+ *
+ * A coalition is useful because it concentrates force, not because an ally
+ * merely exists. The strongest two ready allies therefore carry most of the
+ * value, extra allies have diminishing returns, and enemy distraction becomes
+ * more attractive when the coalition can actually exploit it. The combat-cost
+ * discount is deliberately smaller than the target-selection bonus so a weak
+ * or unproven helper cannot make a bad war look artificially cheap.
  */
 export function selectCoalitionTarget(
   options: readonly CoalitionTargetOption[],
@@ -83,21 +90,51 @@ export function selectCoalitionTarget(
       const treatyBlockedHelpers = option.helpers.filter(
         (helper) => helper.canReach && helper.treatyBlocked,
       );
-      const helperValue = availableHelpers.reduce(
-        (sum, helper) =>
-          sum +
-          helper.reliability * 1.5 +
-          clamp((helper.reserveRatio - 0.5) / 0.5) * 0.75,
-        0,
+
+      let primaryHelperQuality = 0;
+      let secondaryHelperQuality = 0;
+      let additionalHelperQuality = 0;
+      for (const helper of availableHelpers) {
+        const reserveReadiness = clamp((helper.reserveRatio - 0.5) / 0.5);
+        const trustReadiness = clamp((helper.reliability - 0.45) / 0.55);
+        const quality = clamp(
+          helper.reliability * 0.62 +
+            reserveReadiness * 0.23 +
+            trustReadiness * reserveReadiness * 0.15,
+        );
+        if (quality > primaryHelperQuality) {
+          additionalHelperQuality += secondaryHelperQuality;
+          secondaryHelperQuality = primaryHelperQuality;
+          primaryHelperQuality = quality;
+        } else if (quality > secondaryHelperQuality) {
+          additionalHelperQuality += secondaryHelperQuality;
+          secondaryHelperQuality = quality;
+        } else {
+          additionalHelperQuality += quality;
+        }
+      }
+
+      const coalitionSupport =
+        primaryHelperQuality +
+        secondaryHelperQuality * 0.58 +
+        additionalHelperQuality * 0.18;
+      const activeWarCount = Math.min(
+        4,
+        Math.max(0, option.enemyActiveWars),
       );
+      const pressureOpportunity =
+        activeWarCount * 0.2 * (0.55 + Math.min(1, coalitionSupport));
       const score =
         option.basePriority +
-        helperValue +
-        Math.min(3, Math.max(0, option.enemyActiveWars)) * 0.3 -
-        treatyBlockedHelpers.length * 0.15;
+        coalitionSupport * 1.75 +
+        pressureOpportunity -
+        treatyBlockedHelpers.length * 0.08;
       const offensiveCostMultiplier = clamp(
-        1 - Math.min(0.32, helperValue * 0.18),
-        0.68,
+        1 -
+          (primaryHelperQuality * 0.16 +
+            secondaryHelperQuality * 0.07 +
+            Math.min(0.04, additionalHelperQuality * 0.015)),
+        0.72,
         1,
       );
       return {
@@ -105,21 +142,25 @@ export function selectCoalitionTarget(
         score,
         offensiveCostMultiplier,
         basePriority: option.basePriority,
+        coalitionSupport,
         availableHelperIds: availableHelpers.map((helper) => helper.allyId),
         treatyBlockedHelperIds: treatyBlockedHelpers.map(
           (helper) => helper.allyId,
         ),
         reason:
-          availableHelpers.length > 0
-            ? `${availableHelpers.length} ally or allies can legally reach this target`
-            : treatyBlockedHelpers.length > 0
-              ? "reachable allies are treaty-blocked from helping on this target"
-              : "this is currently a solo reachable target",
+          availableHelpers.length > 0 && activeWarCount > 0
+            ? `${availableHelpers.length} ready ally or allies can concentrate on a target already committed across ${activeWarCount} active war or wars`
+            : availableHelpers.length > 0
+              ? `${availableHelpers.length} ready ally or allies can legally reach and materially support this target`
+              : treatyBlockedHelpers.length > 0
+                ? "reachable allies are treaty-blocked from helping on this target"
+                : "this is currently a solo reachable target",
       };
     })
     .sort(
       (a, b) =>
         b.score - a.score ||
+        b.coalitionSupport - a.coalitionSupport ||
         b.availableHelperIds.length - a.availableHelperIds.length ||
         b.basePriority - a.basePriority,
     )[0];
