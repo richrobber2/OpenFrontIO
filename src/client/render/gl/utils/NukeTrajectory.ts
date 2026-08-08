@@ -2,10 +2,15 @@
  * Nuke trajectory computation — Bezier control points and color thresholds.
  *
  * Matches upstream PathFinder.Parabola.ts + Line.ts math exactly.
- * Pure functions, no game dependencies.
+ * Pure TypeScript functions remain as the fallback and parity oracle while the
+ * live build path uses the preloaded Rust/Wasm implementation when available.
  */
 
 import type { NukeTrajectoryData } from "../../types";
+import {
+  buildNukeTrajectoryRust,
+  preloadRustNukeTrajectory,
+} from "../../../rust/OpenFrontWasmTrajectory";
 
 // Upstream constants
 const PARABOLA_MIN_HEIGHT = 50;
@@ -237,7 +242,10 @@ export function computeTrajectoryThresholds(
 
 /**
  * Build complete NukeTrajectoryData from source/target positions.
- * Convenience function combining control point + threshold computation.
+ *
+ * Once the renderer Wasm has loaded this runs in Rust. Until then, or if Wasm
+ * is unavailable, the original TypeScript path stays authoritative so the
+ * preview never disappears merely because module loading failed.
  */
 export function buildNukeTrajectory(
   srcX: number,
@@ -248,6 +256,19 @@ export function buildNukeTrajectory(
   directionUp: boolean,
   sams: readonly SAMInfo[],
 ): NukeTrajectoryData {
+  const rust = buildNukeTrajectoryRust(
+    srcX,
+    srcY,
+    dstX,
+    dstY,
+    mapH,
+    directionUp,
+    sams,
+  );
+  if (rust !== null) return rust;
+
+  if (typeof window !== "undefined") void preloadRustNukeTrajectory();
+
   const cp = computeNukeControlPoints(
     srcX,
     srcY,
