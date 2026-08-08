@@ -123,9 +123,7 @@ pub fn evaluate_coalition_target(
         }
     }
 
-    let score = base_priority
-        + helper_value
-        + enemy_active_wars.min(3) as f64 * 0.3
+    let score = base_priority + helper_value + enemy_active_wars.min(3) as f64 * 0.3
         - treaty_blocked_helpers as f64 * 0.15;
     let offensive_cost_multiplier = clamp(1.0 - (helper_value * 0.18).min(0.32), 0.68, 1.0);
 
@@ -190,7 +188,7 @@ pub fn model_opponent(
             + outgoing_attacks as f64 * 0.2
             + attack_forecast_bonus
             + (forecast_threat * 0.2).min(0.7))
-            .min(2.0),
+        .min(2.0),
         silo_count: silos as f64,
         naval_pressure: (warships as f64 * 0.15).min(2.0),
     }
@@ -230,8 +228,7 @@ pub fn plan_strategic_action(
     let naval = match input.naval_pressure_ratio {
         None => input.naval_threats as f64 * 28.0 + input.trade_targets as f64 * 8.0,
         Some(pressure) => {
-            clamp(pressure, 0.0, 1.0) * 52.0
-                + clamp(input.trade_opportunity_ratio, 0.0, 1.0) * 20.0
+            clamp(pressure, 0.0, 1.0) * 52.0 + clamp(input.trade_opportunity_ratio, 0.0, 1.0) * 20.0
         }
     };
     let expand = if input.has_neutral_land {
@@ -240,14 +237,18 @@ pub fn plan_strategic_action(
         0.0
     };
     let attack = input.hostile_borders as f64 * 12.0
-        + if input.reserve_ratio > 0.55 { 20.0 } else { 0.0 }
+        + if input.reserve_ratio > 0.55 {
+            20.0
+        } else {
+            0.0
+        }
         - input.active_nation_wars as f64 * 18.0;
     let infrastructure = if input.reserve_ratio > 0.6 { 18.0 } else { 4.0 }
         + if input.hostile_borders > 0 { 12.0 } else { 0.0 };
 
     let scores = [defend, strike, naval, expand, attack, infrastructure];
-    let critical_defense = input.incoming_fronts > 0
-        && (input.reserve_ratio < 0.4 || incoming_troop_ratio >= 0.35);
+    let critical_defense =
+        input.incoming_fronts > 0 && (input.reserve_ratio < 0.4 || incoming_troop_ratio >= 0.35);
 
     let action = if critical_defense {
         StrategicAction::Defend
