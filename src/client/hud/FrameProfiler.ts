@@ -1,3 +1,5 @@
+import { matchPerformanceTracker } from "./MatchPerformanceTracker";
+
 export class FrameProfiler {
   private static timings: Record<string, number> = {};
   private static enabled: boolean = false;
@@ -7,6 +9,7 @@ export class FrameProfiler {
    */
   static setEnabled(enabled: boolean): void {
     this.enabled = enabled;
+    matchPerformanceTracker.setEnabled(enabled);
   }
 
   /**
@@ -30,6 +33,7 @@ export class FrameProfiler {
   static record(name: string, duration: number): void {
     if (!this.enabled || !Number.isFinite(duration)) return;
     this.timings[name] = (this.timings[name] ?? 0) + duration;
+    matchPerformanceTracker.record(name, duration);
   }
 
   /**
