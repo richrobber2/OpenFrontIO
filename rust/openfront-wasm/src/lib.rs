@@ -7,7 +7,8 @@
 use openfront_core::{
     build_terrain_rgba_in_place, BoundedWaterPathFinder, GameMapError, GameMapStore,
     HierarchicalWaterPathFinder, PackedTile, RailPathFinder, TerrainGraphicsError, TerrainPalette,
-    TileRef, TileStateError, WaterPathFinder, DEFAULT_CLUSTER_SIZE,
+    TerritoryRenderError, TerritoryRenderQueue, TileRef, TileStateError, WaterPathFinder,
+    DEFAULT_CLUSTER_SIZE,
 };
 use std::cell::{Cell, RefCell};
 
@@ -37,6 +38,8 @@ pub enum ErrorCode {
     AiCoalitionRecordLengthMismatch = 17,
     AiOpponentRecordLengthMismatch = 18,
     AiPurchaseRecordLengthMismatch = 19,
+    TerritoryStateLengthMismatch = 20,
+    TerritoryUpdateRecordLengthMismatch = 21,
     InternalInvariant = 255,
 }
 
@@ -48,6 +51,7 @@ thread_local! {
     static RAIL_FINDERS: RefCell<Vec<Option<RailPathFinder>>> = const { RefCell::new(Vec::new()) };
     static DEFENSE_INDICES: RefCell<Vec<Option<openfront_core::DefenseIndex>>> = const { RefCell::new(Vec::new()) };
     static STRUCTURE_RENDERERS: RefCell<Vec<Option<WasmStructureRenderer>>> = const { RefCell::new(Vec::new()) };
+    static TERRITORY_RENDERERS: RefCell<Vec<Option<TerritoryRenderQueue>>> = const { RefCell::new(Vec::new()) };
     static UPLOADS: RefCell<Vec<Option<Vec<u8>>>> = const { RefCell::new(Vec::new()) };
     static RESULT: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
     static RESULT_F32: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
@@ -159,6 +163,7 @@ fn query_tiles(
 include!("abi.rs");
 include!("upload.rs");
 include!("graphics.rs");
+include!("territory_render.rs");
 include!("units.rs");
 include!("structure_render.rs");
 include!("ai.rs");
