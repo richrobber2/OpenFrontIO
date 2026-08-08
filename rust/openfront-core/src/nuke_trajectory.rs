@@ -138,10 +138,7 @@ pub fn compute_trajectory_thresholds(
     if !sams.is_empty() {
         'samples: for sample in 1..=THRESHOLD_SAMPLES {
             let t = f64::from(sample) * dt;
-            if t_untargetable_start >= 0.0
-                && t >= t_untargetable_start
-                && t <= t_untargetable_end
-            {
+            if t_untargetable_start >= 0.0 && t >= t_untargetable_start && t <= t_untargetable_end {
                 continue;
             }
 
@@ -229,7 +226,8 @@ fn refine_crossing(
         let t_mid = (t_lo + t_hi) * 0.5;
         let (x, y) = bezier_point(control_points, t_mid);
         let inside = distance_squared(x, y, center_x, center_y) <= range_sq;
-        if if exiting_range { inside } else { !inside } {
+        let advance_lower_bound = if exiting_range { inside } else { !inside };
+        if advance_lower_bound {
             t_lo = t_mid;
         } else {
             t_hi = t_mid;
@@ -309,8 +307,7 @@ mod tests {
     fn sam_intercept_is_detected_in_targetable_segment() {
         let points = compute_nuke_control_points(0.0, 250.0, 600.0, 250.0, 800.0, false);
         let sam = SamInfo::new(60.0, 330.0, 80.0 * 80.0);
-        let thresholds =
-            compute_trajectory_thresholds(points, 0.0, 250.0, 600.0, 250.0, &[sam]);
+        let thresholds = compute_trajectory_thresholds(points, 0.0, 250.0, 600.0, 250.0, &[sam]);
         assert!(thresholds.t_sam_intercept > 0.0);
         assert!(thresholds.t_sam_intercept < thresholds.t_untargetable_start);
     }
