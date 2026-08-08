@@ -33,6 +33,7 @@ pub enum ErrorCode {
     InvalidCellSize = 13,
     TrajectoryRecordLengthMismatch = 14,
     InvalidTrajectorySegmentCount = 15,
+    InvalidSpiralSegment = 16,
     InternalInvariant = 255,
 }
 
@@ -168,4 +169,5 @@ include!("hierarchical_water_query.rs");
 include!("bounded_water_query.rs");
 include!("defense_query.rs");
 include!("trajectory.rs");
+include!("spiral_trail.rs");
 include!("tests.rs");
