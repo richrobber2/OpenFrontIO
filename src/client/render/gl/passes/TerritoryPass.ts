@@ -8,10 +8,17 @@
  * No borders, embers, trails, or defense checkerboard — those are
  * handled by BorderStampPass and TrailPass at full brightness.
  *
- * Owns the CPU-side tile state and the drip queue that staggers tile
- * uploads across render frames.
+ * Owns the display-side tile state and the drip queue that staggers tile
+ * uploads across render frames. When graphics Wasm is available, the queue,
+ * coalescing, state comparison, and patch packing live in Rust; WebGL still
+ * owns the actual rasterization.
  */
 
+import type {
+  OpenFrontWasmTerritoryQueue,
+  RustTerritoryDrain,
+} from "../../../rust/OpenFrontWasmGraphics";
+import { OpenFrontWasmGraphics } from "../../../rust/OpenFrontWasmGraphics";
 import type { RenderSettings } from "../RenderSettings";
 import { getPaletteSize } from "../utils/ColorUtils";
 import { createMapQuad, createProgram, shaderSrc } from "../utils/GlUtils";
@@ -60,7 +67,7 @@ export class TerritoryPass {
   private altView = false;
   private showPatterns = true;
 
-  /** CPU-side tile state — what is currently on the GPU (display state). */
+  /** TypeScript fallback display state. Rust owns the live mirror when enabled. */
   private cpuTileState: Uint16Array;
   private tilesDirty = false;
 
@@ -73,7 +80,7 @@ export class TerritoryPass {
 
   /**
    * True after a full state replacement (initial load / seek). flushTileTexture
-   * uploads the full cpuTileState via texSubImage2D and discards any queued
+   * uploads the full display state via texSubImage2D and discards any queued
    * scatter patches — those are already covered by the full upload.
    */
   private fullUploadPending = false;
@@ -93,14 +100,11 @@ export class TerritoryPass {
     | ((x: number, y: number, prevOwner: number, newOwner: number) => void)
     | null = null;
 
-  /**
-   * Round-robin queue of unique pending tile refs. Repeated updates to the same
-   * tile are coalesced until its bucket drains, then the latest value is read
-   * from liveTileState. This prevents MAX-speed simulation from building an
-   * ever-growing duplicate [ref, state] backlog when rendering falls behind.
-   */
+  /** TypeScript compatibility queue used when the graphics Wasm is unavailable. */
   private readonly dripQueue: TileDripQueue;
   private liveTileState: Uint16Array | null = null;
+  /** Rust fast path. Null keeps stale dev Wasm assets backwards compatible. */
+  private rustQueue: OpenFrontWasmTerritoryQueue | null = null;
 
   constructor(
     gl: WebGL2RenderingContext,
@@ -132,6 +136,23 @@ export class TerritoryPass {
       mapW * mapH,
       settings.tileDrip.bucketCount,
     );
+    try {
+      this.rustQueue =
+        OpenFrontWasmGraphics.current()?.createTerritoryQueue(
+          mapW,
+          mapH,
+          settings.tileDrip.bucketCount,
+          this.cpuTileState,
+        ) ?? null;
+    } catch (error) {
+      // Keep old/stale dev Wasm assets non-fatal. The TypeScript path remains
+      // behaviourally identical and lets the renderer boot while assets rebuild.
+      console.warn(
+        "Rust territory staging unavailable; using TypeScript fallback",
+        error,
+      );
+      this.rustQueue = null;
+    }
 
     this.program = createProgram(
       gl,
@@ -204,7 +225,11 @@ export class TerritoryPass {
   setLiveRef(tileState: Uint16Array): void {
     this.liveTileState = tileState;
     this.cpuTileState.set(tileState);
-    this.clearDripBuckets();
+    if (this.rustQueue) {
+      this.rustQueue.replaceState(tileState);
+    } else {
+      this.clearDripBuckets();
+    }
     this.scatter.clear();
     this.fullUploadPending = true;
     this.tilesDirty = true;
@@ -225,13 +250,18 @@ export class TerritoryPass {
 
   /**
    * Queue changed refs for staggered upload. A ref appears at most once while
-   * pending; the latest state stays in the long-lived simulation buffer.
+   * pending; Rust stores the latest state with the pending ref so later updates
+   * coalesce without retaining duplicate JavaScript work.
    */
   applyLiveDelta(
     tileState: Uint16Array,
     changedTiles: readonly number[],
   ): void {
     this.liveTileState = tileState;
+    if (this.rustQueue) {
+      this.rustQueue.enqueue(tileState, changedTiles);
+      return;
+    }
     for (let i = 0; i < changedTiles.length; i++) {
       this.dripQueue.enqueue(changedTiles[i]);
     }
@@ -260,8 +290,33 @@ export class TerritoryPass {
     }
   }
 
-  /** Drain one drip bucket into cpuTileState. Called once per render frame. */
+  private applyRustDrain(batch: RustTerritoryDrain): void {
+    if (batch.falloutTouched) this.falloutTouched = true;
+    if (batch.tilePatches.length === 0) return;
+
+    this.tilesDirty = true;
+    // A full texture upload will consume Rust's display-state mirror directly,
+    // and BorderComputePass will be globally invalidated by the caller.
+    if (this.fullUploadPending) return;
+
+    this.scatter.pushBatch(batch.tilePatches);
+    const changes = batch.borderChanges;
+    for (let i = 0; i < changes.length; i += 4) {
+      this.borderPatchConsumer?.(
+        changes[i],
+        changes[i + 1],
+        changes[i + 2],
+        changes[i + 3],
+      );
+    }
+  }
+
+  /** Drain one drip bucket into display state. Called once per render frame. */
   drainDripBucket(): void {
+    if (this.rustQueue) {
+      this.applyRustDrain(this.rustQueue.drainNext());
+      return;
+    }
     const count = this.dripQueue.drainNext((ref) => this.applyQueuedTile(ref));
     if (count > 0) this.tilesDirty = true;
   }
@@ -271,11 +326,19 @@ export class TerritoryPass {
    * seek so tile state pops to current sim state without the stagger.
    */
   flushAllDripBuckets(): void {
+    if (this.rustQueue) {
+      this.applyRustDrain(this.rustQueue.drainAll());
+      return;
+    }
     const count = this.dripQueue.drainAll((ref) => this.applyQueuedTile(ref));
     if (count > 0) this.tilesDirty = true;
   }
 
   private clearDripBuckets(): void {
+    if (this.rustQueue) {
+      this.rustQueue.clear();
+      return;
+    }
     this.dripQueue.clear();
   }
 
@@ -309,7 +372,9 @@ export class TerritoryPass {
 
     if (this.fullUploadPending) {
       // Full upload (first tick, seek, replay full frame, etc.) — supersedes
-      // any queued scatter patches.
+      // any queued scatter patches. The Rust fast path uploads directly from
+      // Wasm linear memory, avoiding a map-sized synchronization copy to JS.
+      const displayState = this.rustQueue?.displayState() ?? this.cpuTileState;
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, this.tileTex);
       gl.texSubImage2D(
@@ -321,7 +386,7 @@ export class TerritoryPass {
         this.mapH,
         gl.RED_INTEGER,
         gl.UNSIGNED_SHORT,
-        this.cpuTileState,
+        displayState,
       );
       this.scatter.clear();
       this.fullUploadPending = false;
@@ -439,6 +504,8 @@ export class TerritoryPass {
     gl.deleteProgram(this.program);
     gl.deleteVertexArray(this.vao);
     this.scatter.dispose();
+    this.rustQueue?.dispose();
+    this.rustQueue = null;
     // tileTex, paletteTex, patternMetaTex, patternDataTex owned by GPUResources / renderer
   }
 }
