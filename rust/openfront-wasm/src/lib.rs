@@ -5,10 +5,10 @@
 //! into reusable result buffers and exposed by pointer/length accessors.
 
 use openfront_core::{
-    build_terrain_rgba_in_place, BoundedWaterPathFinder, GameMapError, GameMapStore,
-    HierarchicalWaterPathFinder, PackedTile, RailPathFinder, TerrainGraphicsError, TerrainPalette,
-    TerritoryRenderError, TerritoryRenderQueue, TileRef, TileStateError, WaterPathFinder,
-    DEFAULT_CLUSTER_SIZE,
+    build_terrain_delta_records_in_place, build_terrain_rgba_in_place, BoundedWaterPathFinder,
+    GameMapError, GameMapStore, HierarchicalWaterPathFinder, PackedTile, RailPathFinder,
+    TerrainGraphicsError, TerrainPalette, TerritoryRenderError, TerritoryRenderQueue, TileRef,
+    TileStateError, WaterPathFinder, DEFAULT_CLUSTER_SIZE,
 };
 use std::cell::{Cell, RefCell};
 
