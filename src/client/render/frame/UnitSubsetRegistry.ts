@@ -6,6 +6,7 @@ export interface UnitRenderSubsets {
   readonly structures: ReadonlyMap<number, UnitState>;
   readonly warships: ReadonlyMap<number, UnitState>;
   readonly progressStructures: ReadonlyMap<number, UnitState>;
+  readonly lights: ReadonlyMap<number, UnitState>;
   readonly structureRevision: number;
   /** Latest JS-owned patch from Rust's persistent structure instance table. */
   readonly structureRenderDelta: RustStructureRenderDelta | null;
