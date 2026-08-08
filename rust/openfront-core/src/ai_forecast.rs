@@ -95,10 +95,7 @@ pub fn infer_opponent_choice(
         previous.map(|value| value.outgoing_troops),
     );
     let structure_delta = previous_delta(current.cities, previous.map(|value| value.cities))
-        + previous_delta(
-            current.factories,
-            previous.map(|value| value.factories),
-        )
+        + previous_delta(current.factories, previous.map(|value| value.factories))
         + previous_delta(current.ports, previous.map(|value| value.ports))
         + previous_delta(current.silos, previous.map(|value| value.silos));
     let naval_delta = previous_delta(current.warships, previous.map(|value| value.warships))
@@ -109,9 +106,7 @@ pub fn infer_opponent_choice(
     {
         return OpponentChoice::Defend;
     }
-    if outgoing_delta > 0.0
-        || (current.outgoing_attacks > 0.0 && current.outgoing_troops > 0.0)
-    {
+    if outgoing_delta > 0.0 || (current.outgoing_attacks > 0.0 && current.outgoing_troops > 0.0) {
         return OpponentChoice::Attack;
     }
     if naval_delta > 0.0 {
@@ -152,12 +147,13 @@ fn projected_state(
         (tile_delta * 0.35).max(0.0)
     };
     let projected_troops = clamp(
-        current.troops
-            + (troop_delta + current.max_troops * action_troop_factor) * horizon,
+        current.troops + (troop_delta + current.max_troops * action_troop_factor) * horizon,
         0.0,
         current.max_troops,
     );
-    let projected_tiles = (current.tiles + action_tile_rate * horizon).round().max(0.0);
+    let projected_tiles = (current.tiles + action_tile_rate * horizon)
+        .round()
+        .max(0.0);
     OpponentProjection {
         tick: current.tick + horizon,
         troops: projected_troops,
@@ -179,17 +175,13 @@ pub fn forecast_opponent(
         previous_delta(current.troops, previous.map(|value| value.troops)) / elapsed_ticks;
     let tile_delta =
         previous_delta(current.tiles, previous.map(|value| value.tiles)) / elapsed_ticks;
-    let gold_delta =
-        previous_delta(current.gold, previous.map(|value| value.gold)) / elapsed_ticks;
+    let gold_delta = previous_delta(current.gold, previous.map(|value| value.gold)) / elapsed_ticks;
     let outgoing_delta = previous_delta(
         current.outgoing_troops,
         previous.map(|value| value.outgoing_troops),
     ) / current.max_troops.max(1.0);
     let structure_delta = previous_delta(current.cities, previous.map(|value| value.cities))
-        + previous_delta(
-            current.factories,
-            previous.map(|value| value.factories),
-        )
+        + previous_delta(current.factories, previous.map(|value| value.factories))
         + previous_delta(current.ports, previous.map(|value| value.ports))
         + previous_delta(current.silos, previous.map(|value| value.silos));
     let naval_delta = previous_delta(current.warships, previous.map(|value| value.warships))
@@ -265,8 +257,7 @@ pub fn forecast_opponent(
     let predicted_choice = OpponentChoice::ALL[best];
     let confidence = clamp(probabilities[best] - probabilities[second], 0.0, 1.0);
 
-    let force_pressure =
-        (current.troops + current.outgoing_troops) / own_troops.max(1.0);
+    let force_pressure = (current.troops + current.outgoing_troops) / own_troops.max(1.0);
     let capacity_pressure = current.max_troops / own_max_troops.max(1.0);
     let territory_pressure = current.tiles / own_tiles.max(1.0);
     let strategic_pressure =
@@ -367,22 +358,10 @@ mod tests {
         let hostile = observation();
         let mut allied = hostile;
         allied.allied = true;
-        let hostile_forecast = forecast_opponent(
-            &hostile,
-            None,
-            None,
-            700_000.0,
-            1_000_000.0,
-            5_000.0,
-        );
-        let allied_forecast = forecast_opponent(
-            &allied,
-            None,
-            None,
-            700_000.0,
-            1_000_000.0,
-            5_000.0,
-        );
+        let hostile_forecast =
+            forecast_opponent(&hostile, None, None, 700_000.0, 1_000_000.0, 5_000.0);
+        let allied_forecast =
+            forecast_opponent(&allied, None, None, 700_000.0, 1_000_000.0, 5_000.0);
         assert!(allied_forecast.threat < hostile_forecast.threat);
     }
 }
