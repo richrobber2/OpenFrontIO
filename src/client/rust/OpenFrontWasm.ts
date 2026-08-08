@@ -2,6 +2,13 @@ export { OpenFrontRustMap } from "./OpenFrontRustMap";
 export { OpenFrontWasmGraphics } from "./OpenFrontWasmGraphics";
 export { OpenFrontWasmModule } from "./OpenFrontWasmModule";
 export {
+  OpenFrontWasmSpiral,
+  buildSpiralSegmentRust,
+  preloadRustSpiral,
+  SPIRAL_SAMPLE_FLOATS,
+  type RustSpiralSegmentInput,
+} from "./OpenFrontWasmSpiral";
+export {
   OpenFrontWasmTrajectory,
   buildNukeTrajectoryRust,
   preloadRustNukeTrajectory,
