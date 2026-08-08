@@ -10,6 +10,7 @@ import {
 
 const SAM_RECORD_BYTES = 3 * Float64Array.BYTES_PER_ELEMENT;
 const TRAJECTORY_RESULT_VALUES = 11;
+const STRIP_FLOATS_PER_PAIR = 6;
 const MIN_SAM_CAPACITY = 8;
 
 export interface RustNukeTrajectorySAM {
@@ -18,7 +19,7 @@ export interface RustNukeTrajectorySAM {
   readonly rangeSq: number;
 }
 
-export interface RustNukeTrajectoryData {
+export interface RustNukeTrajectoryControlPoints {
   readonly p0x: number;
   readonly p0y: number;
   readonly p1x: number;
@@ -27,6 +28,9 @@ export interface RustNukeTrajectoryData {
   readonly p2y: number;
   readonly p3x: number;
   readonly p3y: number;
+}
+
+export interface RustNukeTrajectoryData extends RustNukeTrajectoryControlPoints {
   readonly tUntargetableStart: number;
   readonly tUntargetableEnd: number;
   readonly tSamIntercept: number;
@@ -56,7 +60,11 @@ export class OpenFrontWasmTrajectory {
       );
     }
     if (
+      typeof this.wasm.openfront_nuke_sam_range !== "function" ||
       typeof this.wasm.openfront_nuke_trajectory_build !== "function" ||
+      typeof this.wasm.openfront_nuke_trajectory_strip_build !== "function" ||
+      typeof this.wasm.openfront_result_f32_ptr !== "function" ||
+      typeof this.wasm.openfront_result_f32_len !== "function" ||
       typeof this.wasm.openfront_result_f64_ptr !== "function" ||
       typeof this.wasm.openfront_result_f64_len !== "function"
     ) {
@@ -166,6 +174,53 @@ export class OpenFrontWasmTrajectory {
     };
   }
 
+  writeStrip(
+    controlPoints: RustNukeTrajectoryControlPoints,
+    destination: Float32Array,
+    segments: number,
+  ): void {
+    const expectedLength = (segments + 1) * STRIP_FLOATS_PER_PAIR;
+    if (!Number.isInteger(segments) || segments <= 0) {
+      throw new Error(`Invalid nuke trajectory strip segment count: ${segments}`);
+    }
+    if (destination.length !== expectedLength) {
+      throw new Error(
+        `Rust nuke trajectory strip destination length mismatch: expected ${expectedLength}, got ${destination.length}`,
+      );
+    }
+
+    if (
+      this.wasm.openfront_nuke_trajectory_strip_build(
+        controlPoints.p0x,
+        controlPoints.p0y,
+        controlPoints.p1x,
+        controlPoints.p1y,
+        controlPoints.p2x,
+        controlPoints.p2y,
+        controlPoints.p3x,
+        controlPoints.p3y,
+        segments,
+      ) === 0
+    ) {
+      this.throwLastError("build nuke trajectory strip");
+    }
+
+    const length = this.wasm.openfront_result_f32_len() >>> 0;
+    if (length !== expectedLength) {
+      throw new Error(
+        `Rust nuke trajectory strip length mismatch: expected ${expectedLength}, got ${length}`,
+      );
+    }
+    const pointer = this.wasm.openfront_result_f32_ptr() >>> 0;
+    if (pointer === 0) {
+      throw new Error("Rust nuke trajectory strip result pointer is null");
+    }
+
+    destination.set(
+      new Float32Array(this.wasm.memory.buffer, pointer, expectedLength),
+    );
+  }
+
   dispose(): void {
     if (this.samUploadHandle === 0) return;
     this.wasm.openfront_upload_destroy(this.samUploadHandle);
@@ -256,6 +311,21 @@ export function buildNukeTrajectoryRust(
   } catch (error) {
     disableRustTrajectory(error);
     return null;
+  }
+}
+
+export function writeNukeTrajectoryStripRust(
+  controlPoints: RustNukeTrajectoryControlPoints,
+  destination: Float32Array,
+  segments: number,
+): boolean {
+  if (rustTrajectory === null || rustTrajectoryDisabled) return false;
+  try {
+    rustTrajectory.writeStrip(controlPoints, destination, segments);
+    return true;
+  } catch (error) {
+    disableRustTrajectory(error);
+    return false;
   }
 }
 

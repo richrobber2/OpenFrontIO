@@ -7,6 +7,9 @@ import { describe, expect, it } from "vitest";
 import {
   computeNukeControlPoints,
   computeTrajectoryThresholds,
+  fillNukeTrajectoryStripVertices,
+  NUKE_TRAJECTORY_FLOATS_PER_PAIR,
+  NUKE_TRAJECTORY_SEGMENTS,
   samRange,
   type SAMInfo,
 } from "../../src/client/render/gl/utils/NukeTrajectory";
@@ -52,6 +55,22 @@ function expectTrajectoryParity(
   for (const key of Object.keys(typescript) as (keyof typeof typescript)[]) {
     expect(rust[key], key).toBe(typescript[key]);
   }
+}
+
+function expectStripParity(
+  rust: OpenFrontWasmTrajectory,
+  trajectory: ReturnType<typeof typescriptTrajectory>,
+  segments = NUKE_TRAJECTORY_SEGMENTS,
+): Float32Array {
+  const length = (segments + 1) * NUKE_TRAJECTORY_FLOATS_PER_PAIR;
+  const expected = new Float32Array(length);
+  const actual = new Float32Array(length);
+  fillNukeTrajectoryStripVertices(trajectory, expected, segments);
+  rust.writeStrip(trajectory, actual, segments);
+  for (let index = 0; index < length; index++) {
+    expect(actual[index], `strip float ${index}`).toBe(expected[index]);
+  }
+  return actual;
 }
 
 describe("nuke trajectory TypeScript/WebAssembly parity", () => {
@@ -150,6 +169,63 @@ describe("nuke trajectory TypeScript/WebAssembly parity", () => {
       );
       expectTrajectoryParity(actual, expected);
       expect(actual.tSamIntercept).toBeLessThan(1);
+    } finally {
+      rust.dispose();
+    }
+  });
+
+  it("matches all 774 renderer strip floats for a downward arc", async () => {
+    const rust = await loadTrajectory();
+    try {
+      const trajectory = typescriptTrajectory(
+        0,
+        250,
+        600,
+        250,
+        800,
+        false,
+        [],
+      );
+      const strip = expectStripParity(rust, trajectory);
+      expect(strip.length).toBe(774);
+      expect(strip[strip.length - 1]).toBeGreaterThan(600);
+    } finally {
+      rust.dispose();
+    }
+  });
+
+  it("matches strip geometry for a clamped upward arc", async () => {
+    const rust = await loadTrajectory();
+    try {
+      const trajectory = typescriptTrajectory(15, 30, 405, 40, 180, true, []);
+      expectStripParity(rust, trajectory);
+    } finally {
+      rust.dispose();
+    }
+  });
+
+  it("overwrites the retained strip result on repeated builds", async () => {
+    const rust = await loadTrajectory();
+    try {
+      const first = typescriptTrajectory(0, 250, 600, 250, 800, false, []);
+      const second = typescriptTrajectory(20, 40, 360, 160, 500, true, []);
+      const destination = new Float32Array(
+        (NUKE_TRAJECTORY_SEGMENTS + 1) * NUKE_TRAJECTORY_FLOATS_PER_PAIR,
+      );
+
+      rust.writeStrip(first, destination, NUKE_TRAJECTORY_SEGMENTS);
+      const firstDistance = destination[destination.length - 1];
+      rust.writeStrip(second, destination, NUKE_TRAJECTORY_SEGMENTS);
+      const secondDistance = destination[destination.length - 1];
+
+      const expected = new Float32Array(destination.length);
+      fillNukeTrajectoryStripVertices(
+        second,
+        expected,
+        NUKE_TRAJECTORY_SEGMENTS,
+      );
+      expect(Array.from(destination)).toEqual(Array.from(expected));
+      expect(secondDistance).not.toBe(firstDistance);
     } finally {
       rust.dispose();
     }

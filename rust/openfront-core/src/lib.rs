@@ -13,6 +13,7 @@ pub mod geometry;
 pub mod graphics;
 pub mod hierarchical_water;
 pub mod map;
+pub mod nuke_strip;
 pub mod nuke_trajectory;
 pub mod rail_path;
 pub mod random;
@@ -39,6 +40,10 @@ pub use graphics::{
 };
 pub use hierarchical_water::HierarchicalWaterPathFinder;
 pub use map::{GameMapError, GameMapStore};
+pub use nuke_strip::{
+    build_nuke_strip_vertices, write_nuke_strip_vertices, NukeStripError,
+    NUKE_STRIP_FLOATS_PER_PAIR,
+};
 pub use nuke_trajectory::{
     build_nuke_trajectory, compute_nuke_control_points, compute_trajectory_thresholds, sam_range,
     NukeControlPoints, NukeTrajectory, SamInfo, TrajectoryThresholds,

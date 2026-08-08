@@ -32,6 +32,7 @@ pub enum ErrorCode {
     PathRecordLengthMismatch = 12,
     InvalidCellSize = 13,
     TrajectoryRecordLengthMismatch = 14,
+    InvalidTrajectorySegmentCount = 15,
     InternalInvariant = 255,
 }
 
@@ -45,6 +46,7 @@ thread_local! {
     static STRUCTURE_RENDERERS: RefCell<Vec<Option<WasmStructureRenderer>>> = const { RefCell::new(Vec::new()) };
     static UPLOADS: RefCell<Vec<Option<Vec<u8>>>> = const { RefCell::new(Vec::new()) };
     static RESULT: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
+    static RESULT_F32: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
     static RESULT_F64: RefCell<Vec<f64>> = const { RefCell::new(Vec::new()) };
     static LAST_ERROR: Cell<u32> = const { Cell::new(ErrorCode::None as u32) };
 }

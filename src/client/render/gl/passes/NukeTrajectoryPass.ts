@@ -11,15 +11,20 @@
  */
 
 import type { NukeTrajectoryData } from "../../types";
+import { writeNukeTrajectoryStripRust } from "../../../rust/OpenFrontWasmTrajectory";
 import type { RenderSettings } from "../RenderSettings";
 import { createProgram } from "../utils/GlUtils";
+import {
+  fillNukeTrajectoryStripVertices,
+  NUKE_TRAJECTORY_SEGMENTS,
+} from "../utils/NukeTrajectory";
 
 import markerFragSrc from "../shaders/nuke-trajectory/nuke-trajectory-marker.frag.glsl?raw";
 import markerVertSrc from "../shaders/nuke-trajectory/nuke-trajectory-marker.vert.glsl?raw";
 import fragSrc from "../shaders/nuke-trajectory/nuke-trajectory.frag.glsl?raw";
 import vertSrc from "../shaders/nuke-trajectory/nuke-trajectory.vert.glsl?raw";
 
-const NUM_SEGMENTS = 128;
+const NUM_SEGMENTS = NUKE_TRAJECTORY_SEGMENTS;
 const VERTS_PER_PAIR = 2;
 const FLOATS_PER_VERT = 3; // (t, side, cumDist)
 
@@ -184,49 +189,14 @@ export class NukeTrajectoryPass {
   }
 
   /** Recompute triangle strip vertices with cumulative arc distances. */
-  private rebuildVertices(d: NukeTrajectoryData): void {
-    const N = NUM_SEGMENTS;
-    const buf = this.lineVertices;
-    let cumDist = 0;
-    let prevX = d.p0x;
-    let prevY = d.p0y;
-
-    for (let i = 0; i <= N; i++) {
-      const t = i / N;
-      const T = 1 - t;
-      const TT = T * T;
-      const tt = t * t;
-      const x =
-        TT * T * d.p0x +
-        3 * TT * t * d.p1x +
-        3 * T * tt * d.p2x +
-        tt * t * d.p3x;
-      const y =
-        TT * T * d.p0y +
-        3 * TT * t * d.p1y +
-        3 * T * tt * d.p2y +
-        tt * t * d.p3y;
-
-      if (i > 0) {
-        const dx = x - prevX;
-        const dy = y - prevY;
-        cumDist += Math.sqrt(dx * dx + dy * dy);
-      }
-      prevX = x;
-      prevY = y;
-
-      const idx = i * VERTS_PER_PAIR * FLOATS_PER_VERT;
-      buf[idx + 0] = t;
-      buf[idx + 1] = -1;
-      buf[idx + 2] = cumDist;
-      buf[idx + 3] = t;
-      buf[idx + 4] = 1;
-      buf[idx + 5] = cumDist;
+  private rebuildVertices(data: NukeTrajectoryData): void {
+    if (!writeNukeTrajectoryStripRust(data, this.lineVertices, NUM_SEGMENTS)) {
+      fillNukeTrajectoryStripVertices(data, this.lineVertices, NUM_SEGMENTS);
     }
 
     const gl = this.gl;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.lineBuf);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, buf);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.lineVertices);
   }
 
   draw(cameraMatrix: Float32Array): void {

@@ -17,6 +17,7 @@ export const ERROR_MESSAGES: Record<number, string> = {
   12: "uploaded defense path buffer is too short",
   13: "defense index cell size must be greater than zero",
   14: "uploaded nuke trajectory SAM record buffer is too short",
+  15: "invalid nuke trajectory strip segment count",
   255: "Rust map invariant failed",
 };
 
@@ -81,6 +82,19 @@ export interface OpenFrontWasmExports extends WebAssembly.Exports {
     samUpload: number,
     samCount: number,
   ): number;
+  openfront_nuke_trajectory_strip_build(
+    p0x: number,
+    p0y: number,
+    p1x: number,
+    p1y: number,
+    p2x: number,
+    p2y: number,
+    p3x: number,
+    p3y: number,
+    segments: number,
+  ): number;
+  openfront_result_f32_ptr(): number;
+  openfront_result_f32_len(): number;
   openfront_result_f64_ptr(): number;
   openfront_result_f64_len(): number;
   openfront_map_create(width: number, height: number, upload: number): number;

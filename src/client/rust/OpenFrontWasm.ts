@@ -6,6 +6,8 @@ export {
   buildNukeTrajectoryRust,
   preloadRustNukeTrajectory,
   samRangeRust,
+  writeNukeTrajectoryStripRust,
+  type RustNukeTrajectoryControlPoints,
   type RustNukeTrajectoryData,
   type RustNukeTrajectorySAM,
 } from "./OpenFrontWasmTrajectory";
