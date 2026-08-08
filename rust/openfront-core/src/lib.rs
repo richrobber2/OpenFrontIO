@@ -7,6 +7,7 @@ pub mod abstract_graph;
 pub mod abstract_graph_builder;
 pub mod ai_alliance;
 pub mod ai_forecast;
+pub mod ai_learning;
 pub mod ai_strategy;
 pub mod ai_tactics;
 pub mod air_path;
@@ -44,6 +45,13 @@ pub use ai_alliance::{
 pub use ai_forecast::{
     forecast_opponent, infer_opponent_choice, OpponentChoice, OpponentForecast,
     OpponentObservation, OpponentProjection,
+};
+pub use ai_learning::{
+    apply_action_outcome_learning, classify_loss_cause, evaluate_seed_cohort,
+    human_troop_regeneration, land_troop_capacity, normalize_action_reward,
+    predict_future_outcome, score_counterfactual_action_outcome, score_delayed_action_outcome,
+    score_mutation_outcome, ActionOutcome, ActionOutcomeGenes, ActionRewardBaseline,
+    FuturePrediction, LossCause, NormalizedActionReward, PredictionAction, SeedCohortResult,
 };
 pub use ai_strategy::{
     evaluate_coalition_target, model_opponent, plan_strategic_action, CoalitionHelper,
