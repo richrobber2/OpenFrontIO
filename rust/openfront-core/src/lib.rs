@@ -6,6 +6,7 @@
 pub mod abstract_graph;
 pub mod abstract_graph_builder;
 pub mod ai_alliance;
+pub mod ai_economy;
 pub mod ai_forecast;
 pub mod ai_learning;
 pub mod ai_strategy;
@@ -41,6 +42,12 @@ pub use ai_alliance::{
     AllianceForecastChoice, AllianceLifecycleAction, AllianceLifecycleInput, AllianceLifecyclePlan,
     AllianceLifecycleReason, CoalitionGrowthSupportDecision, CoalitionGrowthSupportInput,
     CoalitionSupportPurpose, CoalitionSupportReason, CommunicationActionKind, CommunicationPlan,
+};
+pub use ai_economy::{
+    capacity_escape_city_budget, estimate_trade_route_gold, plan_economic_systems,
+    rail_city_growth_score, score_city_stack_placement, score_factory_placement,
+    should_fund_first_pressure_factory, CapacityEscapeCityBudget, CityStackPlacementScore,
+    EconomicSystemAction, EconomicSystemContext, EconomicSystemPlan, FactoryPlacementScore,
 };
 pub use ai_forecast::{
     forecast_opponent, infer_opponent_choice, OpponentChoice, OpponentForecast,
