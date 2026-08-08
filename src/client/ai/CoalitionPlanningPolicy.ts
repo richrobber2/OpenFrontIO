@@ -1,3 +1,8 @@
+import {
+  evaluateCoalitionTargetRust,
+  preloadRustAi,
+} from "../rust/OpenFrontWasmAi";
+
 export interface CoalitionHelperOption {
   allyId: string;
   reliability: number;
@@ -62,6 +67,11 @@ export interface CoalitionGrowthSupportDecision {
 const clamp = (value: number, minimum = 0, maximum = 1): number =>
   Math.max(minimum, Math.min(maximum, value));
 
+// Start the shared strategic brain as soon as AI policy code is loaded. Calls
+// remain synchronous: until Wasm is ready, the exact TypeScript policy below is
+// used as a compatibility fallback.
+void preloadRustAi();
+
 /**
  * Select one coalition target instead of asking every ally to attack a
  * different enemy. Helpers only count when they can reach the target and are
@@ -73,33 +83,56 @@ export function selectCoalitionTarget(
   return options
     .filter((option) => option.ownCanReach)
     .map((option) => {
-      const availableHelpers = option.helpers.filter(
-        (helper) =>
-          helper.canReach &&
-          !helper.treatyBlocked &&
-          helper.reliability >= 0.45 &&
-          helper.reserveRatio >= 0.5,
+      const rust = evaluateCoalitionTargetRust(
+        option.basePriority,
+        option.enemyActiveWars,
+        option.helpers,
       );
-      const treatyBlockedHelpers = option.helpers.filter(
-        (helper) => helper.canReach && helper.treatyBlocked,
-      );
-      const helperValue = availableHelpers.reduce(
-        (sum, helper) =>
-          sum +
-          helper.reliability * 1.5 +
-          clamp((helper.reserveRatio - 0.5) / 0.5) * 0.75,
-        0,
-      );
-      const score =
-        option.basePriority +
-        helperValue +
-        Math.min(3, Math.max(0, option.enemyActiveWars)) * 0.3 -
-        treatyBlockedHelpers.length * 0.15;
-      const offensiveCostMultiplier = clamp(
-        1 - Math.min(0.32, helperValue * 0.18),
-        0.68,
-        1,
-      );
+
+      let availableHelpers: CoalitionHelperOption[];
+      let treatyBlockedHelpers: CoalitionHelperOption[];
+      let score: number;
+      let offensiveCostMultiplier: number;
+
+      if (rust !== null && rust.helperStates.length === option.helpers.length) {
+        availableHelpers = option.helpers.filter(
+          (_, index) => rust.helperStates[index] === 1,
+        );
+        treatyBlockedHelpers = option.helpers.filter(
+          (_, index) => rust.helperStates[index] === 2,
+        );
+        score = rust.score;
+        offensiveCostMultiplier = rust.offensiveCostMultiplier;
+      } else {
+        availableHelpers = option.helpers.filter(
+          (helper) =>
+            helper.canReach &&
+            !helper.treatyBlocked &&
+            helper.reliability >= 0.45 &&
+            helper.reserveRatio >= 0.5,
+        );
+        treatyBlockedHelpers = option.helpers.filter(
+          (helper) => helper.canReach && helper.treatyBlocked,
+        );
+        const helperValue = availableHelpers.reduce(
+          (sum, helper) =>
+            sum +
+            helper.reliability * 1.5 +
+            clamp((helper.reserveRatio - 0.5) / 0.5) * 0.75,
+          0,
+        );
+        score =
+          option.basePriority +
+          helperValue +
+          Math.min(3, Math.max(0, option.enemyActiveWars)) * 0.3 -
+          treatyBlockedHelpers.length * 0.15;
+        offensiveCostMultiplier = clamp(
+          1 - Math.min(0.32, helperValue * 0.18),
+          0.68,
+          1,
+        );
+      }
+
       return {
         targetId: option.targetId,
         score,
