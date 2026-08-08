@@ -124,7 +124,8 @@ pub fn score_city_stack_placement(
     structure_min_distance: f64,
 ) -> CityStackPlacementScore {
     let minimum = structure_min_distance.max(1.0);
-    let Some(nearest) = nearest_city_distance.filter(|distance| distance.is_finite() && *distance >= 0.0)
+    let Some(nearest) =
+        nearest_city_distance.filter(|distance| distance.is_finite() && *distance >= 0.0)
     else {
         return CityStackPlacementScore {
             score: 0.0,
@@ -190,8 +191,7 @@ pub fn score_factory_placement(
         0.0
     } else {
         clamp(
-            1.0
-                - rail_bends.max(0.0) / (path_tiles - routes).max(1.0)
+            1.0 - rail_bends.max(0.0) / (path_tiles - routes).max(1.0)
                 - (path_tiles / (routes * maximum.max(1.0)).max(1.0)) * 0.2,
             0.0,
             1.0,
@@ -201,12 +201,11 @@ pub fn score_factory_placement(
     let minimum = minimum_range.max(1.0);
     let redundancy_threshold = minimum.max(maximum * 0.35);
     let redundancy_penalty = nearest_factory_distance
-        .filter(|distance| distance.is_finite() && *distance >= 0.0 && *distance < redundancy_threshold)
+        .filter(|distance| {
+            distance.is_finite() && *distance >= 0.0 && *distance < redundancy_threshold
+        })
         .map(|distance| {
-            40.0
-                * (1.0
-                    - (distance - minimum).max(0.0)
-                        / (maximum * 0.35 - minimum).max(1.0))
+            40.0 * (1.0 - (distance - minimum).max(0.0) / (maximum * 0.35 - minimum).max(1.0))
         })
         .unwrap_or(0.0);
 
@@ -234,8 +233,7 @@ pub fn score_factory_placement(
 }
 
 pub fn estimate_trade_route_gold(distance: f64, short_range_debuff: f64) -> f64 {
-    (75_000.0 / (1.0 + (-0.03 * (distance - short_range_debuff)).exp()) + 50.0 * distance)
-        .floor()
+    (75_000.0 / (1.0 + (-0.03 * (distance - short_range_debuff)).exp()) + 50.0 * distance).floor()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -255,7 +253,8 @@ pub fn capacity_escape_city_budget(
     let capacity_blocked = required_troops > max_troops * 1.02;
     let affordable_from_treasury = city_cost > 0.0 && gold >= city_cost;
     let needs_city = cities < desired_cities;
-    let multi_front_capacity_risk = hostile_fronts + active_nation_wars >= 4.0 && reserve_ratio >= 0.68;
+    let multi_front_capacity_risk =
+        hostile_fronts + active_nation_wars >= 4.0 && reserve_ratio >= 0.68;
     let bypass_bank = (capacity_blocked || multi_front_capacity_risk)
         && affordable_from_treasury
         && needs_city
@@ -282,8 +281,8 @@ pub fn should_fund_first_pressure_factory(
     no_growth_ticks: f64,
     unconnected_ports: f64,
 ) -> bool {
-    let early_growth_unlock = owned_tiles >= 5_000.0
-        && (no_growth_ticks >= 300.0 || unconnected_ports > 0.0);
+    let early_growth_unlock =
+        owned_tiles >= 5_000.0 && (no_growth_ticks >= 300.0 || unconnected_ports > 0.0);
     let territory_ready = owned_tiles >= 8_000.0 || early_growth_unlock;
     factories <= 0.0
         && cities >= 1.0
@@ -334,18 +333,29 @@ pub fn plan_economic_systems(context: EconomicSystemContext) -> EconomicSystemPl
     } else {
         minimum_build_cost
     };
-    let replacement_reserve = context.exposed_economic_structures.max(0.0) * average_economic_cost * 0.35;
+    let replacement_reserve =
+        context.exposed_economic_structures.max(0.0) * average_economic_cost * 0.35;
     let income_reserve = context.income_per_minute.max(0.0) * (0.75 + risk * 1.75);
-    let gold_reserve_floor = minimum_build_cost.max(income_reserve).max(replacement_reserve);
+    let gold_reserve_floor = minimum_build_cost
+        .max(income_reserve)
+        .max(replacement_reserve);
     let spendable_gold = (context.gold - gold_reserve_floor).max(0.0);
 
     let structure_count = context.strategic_structures.max(1.0);
-    let exposure_ratio = clamp(context.exposed_economic_structures / structure_count, 0.0, 1.0);
+    let exposure_ratio = clamp(
+        context.exposed_economic_structures / structure_count,
+        0.0,
+        1.0,
+    );
     let city_gap = (context.desired_cities - context.cities).max(0.0);
     let unstacked_ratio = if context.cities <= 1.0 {
         0.0
     } else {
-        clamp((context.cities - context.stacked_cities) / context.cities, 0.0, 1.0)
+        clamp(
+            (context.cities - context.stacked_cities) / context.cities,
+            0.0,
+            1.0,
+        )
     };
     let rail_coverage = if context.rail_stops <= 0.0 {
         0.0
@@ -357,15 +367,19 @@ pub fn plan_economic_systems(context: EconomicSystemContext) -> EconomicSystemPl
     } else {
         context.productive_factory_stops / context.factories
     };
-    let known_trade_relationships = context.trade_partners.max(0.0) + context.embargoed_partners.max(0.0);
+    let known_trade_relationships =
+        context.trade_partners.max(0.0) + context.embargoed_partners.max(0.0);
     let embargo_ratio = if known_trade_relationships <= 0.0 {
         0.0
     } else {
-        clamp(context.embargoed_partners / known_trade_relationships, 0.0, 1.0)
+        clamp(
+            context.embargoed_partners / known_trade_relationships,
+            0.0,
+            1.0,
+        )
     };
     let trade_coverage_target_ratio = clamp(
-        0.05
-            + (1.0 - embargo_ratio) * 0.06
+        0.05 + (1.0 - embargo_ratio) * 0.06
             + clamp(context.reserve_ratio, 0.0, 1.0) * 0.05
             + (1.0 - risk) * 0.04,
         0.05,
@@ -374,7 +388,9 @@ pub fn plan_economic_systems(context: EconomicSystemContext) -> EconomicSystemPl
     let desired_ports = if context.trade_partners <= 0.0 {
         0.0
     } else {
-        (context.trade_partners * trade_coverage_target_ratio).ceil().max(1.0)
+        (context.trade_partners * trade_coverage_target_ratio)
+            .ceil()
+            .max(1.0)
     };
     let port_gap = (desired_ports - context.ports).max(0.0);
     let unconnected_ports = context.unconnected_ports.max(0.0);
@@ -409,7 +425,11 @@ pub fn plan_economic_systems(context: EconomicSystemContext) -> EconomicSystemPl
     let growth_readiness = healthy_growth_reserve * (1.0 - risk * 0.65);
 
     let bank = (if spendable_gold <= 0.0 { 80.0 } else { 0.0 })
-        + (if context.reserve_ratio < 0.4 { 50.0 } else { 0.0 })
+        + (if context.reserve_ratio < 0.4 {
+            50.0
+        } else {
+            0.0
+        })
         + risk * 30.0
         - capital_deployment_pressure * growth_readiness * 18.0;
     let protect_assets = exposure_ratio * 55.0
@@ -424,8 +444,16 @@ pub fn plan_economic_systems(context: EconomicSystemContext) -> EconomicSystemPl
     let stack_capacity = city_gap * 16.0
         + unstacked_ratio * 28.0
         + if context.trapped { 15.0 } else { 0.0 }
-        + if context.reserve_ratio < 0.55 { 10.0 } else { 0.0 }
-        - if context.has_neutral_land && !context.trapped { 6.0 } else { 0.0 }
+        + if context.reserve_ratio < 0.55 {
+            10.0
+        } else {
+            0.0
+        }
+        - if context.has_neutral_land && !context.trapped {
+            6.0
+        } else {
+            0.0
+        }
         + capital_deployment_pressure * growth_readiness * 10.0
         + city_gap.min(4.0) * healthy_growth_reserve * 4.0
         + affordability_penalty(context.city_cost);
@@ -451,7 +479,13 @@ pub fn plan_economic_systems(context: EconomicSystemContext) -> EconomicSystemPl
         + capital_deployment_pressure * growth_readiness * 14.0
         + affordability_penalty(context.port_cost);
 
-    let scores = [bank, protect_assets, stack_capacity, activate_rail, extend_trade];
+    let scores = [
+        bank,
+        protect_assets,
+        stack_capacity,
+        activate_rail,
+        extend_trade,
+    ];
     let mut action = EconomicSystemAction::Bank;
     let mut score = scores[0];
     if spendable_gold > 0.0 {
