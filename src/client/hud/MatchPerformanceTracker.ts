@@ -1,4 +1,4 @@
-type SpanWindow = {
+type SpanAccumulator = {
   totalMs: number;
   calls: number;
   maxMs: number;
@@ -66,9 +66,12 @@ type UnknownRecord = Record<string, unknown>;
 type MemoryPerformance = Performance & {
   memory?: {
     usedJSHeapSize: number;
-    totalJSHeapSize: number;
-    jsHeapSizeLimit: number;
   };
+};
+
+type DisjointTimerQueryExt = {
+  TIME_ELAPSED_EXT: number;
+  GPU_DISJOINT_EXT: number;
 };
 
 type PerfGlobal = typeof globalThis & {
@@ -85,20 +88,12 @@ const MAX_HISTORY_SAMPLES = 360;
 const MAX_SPANS_PER_SAMPLE = 40;
 const FRAME_WINDOW_LIMIT = 600;
 const EVENT_LOOP_INTERVAL_MS = 1000;
+const GPU_QUERY_EVERY_N_FRAMES = 10;
+const MAX_PENDING_GPU_QUERIES = 8;
 
 function asRecord(value: unknown): UnknownRecord | null {
   if (typeof value !== "object" || value === null) return null;
   return value as UnknownRecord;
-}
-
-function percentile(values: readonly number[], p: number): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const index = Math.min(
-    sorted.length - 1,
-    Math.max(0, Math.ceil(sorted.length * p) - 1),
-  );
-  return sorted[index];
 }
 
 function round(value: number, digits = 2): number {
@@ -113,6 +108,20 @@ function average(values: readonly number[]): number {
   return total / values.length;
 }
 
+function percentile(values: readonly number[], fraction: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.min(
+    sorted.length - 1,
+    Math.max(0, Math.ceil(sorted.length * fraction) - 1),
+  );
+  return sorted[index];
+}
+
+function lastValue<T>(values: readonly T[]): T | undefined {
+  return values.length === 0 ? undefined : values[values.length - 1];
+}
+
 function spanAverage(
   samples: readonly MatchPerformanceSample[],
   name: string,
@@ -125,6 +134,13 @@ function spanAverage(
   return values.length === 0 ? null : average(values);
 }
 
+function arrayLikeLength(value: unknown): number | null {
+  if (Array.isArray(value)) return value.length;
+  if (!ArrayBuffer.isView(value)) return null;
+  const length = (value as unknown as { length?: unknown }).length;
+  return typeof length === "number" ? length : null;
+}
+
 export class MatchPerformanceTracker {
   private enabled = false;
   private startedAtMs = 0;
@@ -135,18 +151,19 @@ export class MatchPerformanceTracker {
   private nextLagExpectedAt = 0;
   private longTaskObserver: PerformanceObserver | null = null;
   private panel: HTMLDivElement | null = null;
+  private gpuQueryFrame = 0;
 
   private readonly patchedMethods = new WeakMap<object, Set<string>>();
   private readonly frameTimes: number[] = [];
-  private readonly spanWindow = new Map<string, SpanWindow>();
-  private readonly lifetimeSpans = new Map<string, SpanWindow>();
+  private readonly spanWindow = new Map<string, SpanAccumulator>();
+  private readonly lifetimeSpans = new Map<string, SpanAccumulator>();
   private readonly history: MatchPerformanceSample[] = [];
+  private readonly gpuFrameWindow: number[] = [];
   private readonly pendingGpuQueries: Array<{
     gl: WebGL2RenderingContext;
-    ext: EXT_disjoint_timer_query_webgl2;
+    ext: DisjointTimerQueryExt;
     query: WebGLQuery;
   }> = [];
-  private readonly gpuFrameWindow: number[] = [];
 
   private baselineHeapBytes: number | null = null;
   private longTaskCount = 0;
@@ -160,11 +177,8 @@ export class MatchPerformanceTracker {
   setEnabled(enabled: boolean): void {
     if (enabled === this.enabled) return;
     this.enabled = enabled;
-    if (enabled) {
-      this.start();
-    } else {
-      this.stopSampling();
-    }
+    if (enabled) this.start();
+    else this.stopSampling();
   }
 
   isEnabled(): boolean {
@@ -191,7 +205,9 @@ export class MatchPerformanceTracker {
     this.eventLoopLagMaxMs = 0;
     this.latestWorkerTickMs = null;
     this.latestTickDelayMs = null;
-    for (const key of Object.keys(this.latestCounts)) delete this.latestCounts[key];
+    for (const key of Object.keys(this.latestCounts)) {
+      delete this.latestCounts[key];
+    }
     this.updatePanel();
   }
 
@@ -200,7 +216,7 @@ export class MatchPerformanceTracker {
       generatedAt: new Date().toISOString(),
       elapsedSec: round((performance.now() - this.startedAtMs) / 1000, 1),
       sampleIntervalSec: SAMPLE_INTERVAL_MS / 1000,
-      latest: this.history.at(-1) ?? null,
+      latest: lastValue(this.history) ?? null,
       diagnosis: this.buildDiagnosis(),
       lifetimeSpans: this.serializeSpanMap(this.lifetimeSpans, false),
       history: this.history.map((sample) => ({
@@ -237,6 +253,7 @@ export class MatchPerformanceTracker {
   private start(): void {
     if (typeof window === "undefined" || typeof document === "undefined") return;
     if (this.startedAtMs === 0) this.reset();
+
     this.installGlobalApi();
     this.installLongTaskObserver();
     this.patchRuntimeTargets();
@@ -247,7 +264,10 @@ export class MatchPerformanceTracker {
       this.rafId = requestAnimationFrame(this.onAnimationFrame);
     }
     if (this.sampleTimer === null) {
-      this.sampleTimer = setInterval(() => this.captureSample(), SAMPLE_INTERVAL_MS);
+      this.sampleTimer = setInterval(
+        () => this.captureSample(),
+        SAMPLE_INTERVAL_MS,
+      );
     }
     if (this.lagTimer === null) {
       this.nextLagExpectedAt = performance.now() + EVENT_LOOP_INTERVAL_MS;
@@ -287,7 +307,9 @@ export class MatchPerformanceTracker {
       const delta = now - this.lastRafTime;
       if (delta > 0 && delta < 1000) {
         this.frameTimes.push(delta);
-        if (this.frameTimes.length > FRAME_WINDOW_LIMIT) this.frameTimes.shift();
+        if (this.frameTimes.length > FRAME_WINDOW_LIMIT) {
+          this.frameTimes.shift();
+        }
       }
     }
     this.lastRafTime = now;
@@ -304,11 +326,15 @@ export class MatchPerformanceTracker {
   }
 
   private installLongTaskObserver(): void {
-    if (this.longTaskObserver !== null || typeof PerformanceObserver === "undefined") {
+    if (
+      this.longTaskObserver !== null ||
+      typeof PerformanceObserver === "undefined"
+    ) {
       return;
     }
     const supported = PerformanceObserver.supportedEntryTypes ?? [];
     if (!supported.includes("longtask")) return;
+
     try {
       this.longTaskObserver = new PerformanceObserver((list) => {
         for (const entry of list.getEntries()) {
@@ -336,16 +362,19 @@ export class MatchPerformanceTracker {
       this.baselineHeapBytes = heapUsedBytes;
     }
 
-    const gpuAvgMs =
-      this.gpuFrameWindow.length > 0 ? average(this.gpuFrameWindow) : null;
+    const gpuFrameAvgMs =
+      this.gpuFrameWindow.length === 0 ? null : average(this.gpuFrameWindow);
     this.gpuFrameWindow.length = 0;
+
+    let frameMaxMs = 0;
+    for (const frame of frames) frameMaxMs = Math.max(frameMaxMs, frame);
 
     const sample: MatchPerformanceSample = {
       elapsedSec: round((performance.now() - this.startedAtMs) / 1000, 1),
       fps: frameAvgMs > 0 ? round(1000 / frameAvgMs, 1) : 0,
       frameAvgMs: round(frameAvgMs),
       frameP95Ms: round(percentile(frames, 0.95)),
-      frameMaxMs: round(frames.length > 0 ? Math.max(...frames) : 0),
+      frameMaxMs: round(frameMaxMs),
       heapUsedMB:
         heapUsedBytes === null ? null : round(heapUsedBytes / (1024 * 1024), 1),
       heapDeltaMB:
@@ -361,7 +390,7 @@ export class MatchPerformanceTracker {
         this.latestWorkerTickMs === null ? null : round(this.latestWorkerTickMs),
       tickDelayMs:
         this.latestTickDelayMs === null ? null : round(this.latestTickDelayMs),
-      gpuFrameAvgMs: gpuAvgMs === null ? null : round(gpuAvgMs),
+      gpuFrameAvgMs: gpuFrameAvgMs === null ? null : round(gpuFrameAvgMs),
       counts: { ...this.latestCounts },
       spans: this.serializeSpanMap(this.spanWindow, true),
     };
@@ -377,10 +406,18 @@ export class MatchPerformanceTracker {
     this.updatePanel();
   }
 
-  private addSpan(target: Map<string, SpanWindow>, name: string, durationMs: number): void {
+  private addSpan(
+    target: Map<string, SpanAccumulator>,
+    name: string,
+    durationMs: number,
+  ): void {
     const current = target.get(name);
     if (current === undefined) {
-      target.set(name, { totalMs: durationMs, calls: 1, maxMs: durationMs });
+      target.set(name, {
+        totalMs: durationMs,
+        calls: 1,
+        maxMs: durationMs,
+      });
       return;
     }
     current.totalMs += durationMs;
@@ -389,29 +426,31 @@ export class MatchPerformanceTracker {
   }
 
   private serializeSpanMap(
-    source: Map<string, SpanWindow>,
+    source: Map<string, SpanAccumulator>,
     limit: boolean,
   ): Record<string, PerformanceSpanSample> {
-    const entries = Array.from(source.entries())
-      .map(([name, span]) => [
+    const entries: Array<[string, PerformanceSpanSample]> = [];
+    for (const [name, span] of source) {
+      entries.push([
         name,
         {
           avgMs: round(span.totalMs / Math.max(1, span.calls)),
           totalMs: round(span.totalMs),
           calls: span.calls,
           maxMs: round(span.maxMs),
-        } satisfies PerformanceSpanSample,
-      ] as const)
-      .sort((a, b) => b[1].totalMs - a[1].totalMs);
-
-    const selected = limit ? entries.slice(0, MAX_SPANS_PER_SAMPLE) : entries;
-    return Object.fromEntries(selected);
+        },
+      ]);
+    }
+    entries.sort((a, b) => b[1].totalMs - a[1].totalMs);
+    return Object.fromEntries(
+      limit ? entries.slice(0, MAX_SPANS_PER_SAMPLE) : entries,
+    );
   }
 
   private buildDiagnosis(): MatchPerformanceDiagnosis {
-    const latest = this.history.at(-1);
     const first = this.history[0];
-    if (latest === undefined || first === undefined) {
+    const latest = lastValue(this.history);
+    if (first === undefined || latest === undefined) {
       return {
         currentHotspots: [],
         fastestGrowing: [],
@@ -421,12 +460,18 @@ export class MatchPerformanceTracker {
       };
     }
 
-    const recent = this.history.slice(-6);
     const baseline = this.history.slice(0, Math.min(6, this.history.length));
-    const currentHotspots = Object.entries(latest.spans)
-      .sort((a, b) => b[1].totalMs - a[1].totalMs)
+    const recent = this.history.slice(Math.max(0, this.history.length - 6));
+
+    const currentHotspots = Object.keys(latest.spans)
+      .map((name) => ({ name, span: latest.spans[name] }))
+      .filter(
+        (entry): entry is { name: string; span: PerformanceSpanSample } =>
+          entry.span !== undefined,
+      )
+      .sort((a, b) => b.span.totalMs - a.span.totalMs)
       .slice(0, 8)
-      .map(([name, span]) => ({
+      .map(({ name, span }) => ({
         name,
         avgMs: span.avgMs,
         totalMs: span.totalMs,
@@ -434,8 +479,12 @@ export class MatchPerformanceTracker {
       }));
 
     const names = new Set<string>();
-    for (const sample of baseline) for (const name of Object.keys(sample.spans)) names.add(name);
-    for (const sample of recent) for (const name of Object.keys(sample.spans)) names.add(name);
+    for (const sample of baseline) {
+      for (const name of Object.keys(sample.spans)) names.add(name);
+    }
+    for (const sample of recent) {
+      for (const name of Object.keys(sample.spans)) names.add(name);
+    }
 
     const fastestGrowing: MatchPerformanceDiagnosis["fastestGrowing"] = [];
     for (const name of names) {
@@ -443,6 +492,7 @@ export class MatchPerformanceTracker {
       const recentAvgMs = spanAverage(recent, name);
       if (baselineAvgMs === null || recentAvgMs === null) continue;
       if (recentAvgMs < 0.1 || baselineAvgMs < 0.02) continue;
+
       const ratio = recentAvgMs / baselineAvgMs;
       if (ratio < 1.15) continue;
       fastestGrowing.push({
@@ -459,7 +509,9 @@ export class MatchPerformanceTracker {
       currentHotspots,
       fastestGrowing: fastestGrowing.slice(0, 8),
       fpsChange:
-        first.fps > 0 ? round(((latest.fps - first.fps) / first.fps) * 100, 1) : null,
+        first.fps > 0
+          ? round(((latest.fps - first.fps) / first.fps) * 100, 1)
+          : null,
       heapGrowthMB:
         first.heapUsedMB === null || latest.heapUsedMB === null
           ? null
@@ -475,8 +527,7 @@ export class MatchPerformanceTracker {
   }
 
   private installGlobalApi(): void {
-    const global = globalThis as PerfGlobal;
-    global.__OPENFRONT_PERF__ = {
+    (globalThis as PerfGlobal).__OPENFRONT_PERF__ = {
       snapshot: () => this.snapshot(),
       copy: () => this.copySnapshot(),
       reset: () => this.reset(),
@@ -491,11 +542,10 @@ export class MatchPerformanceTracker {
   }
 
   private patchWebGLView(): void {
-    const global = globalThis as PerfGlobal;
-    const view = global.__webglView;
+    const view = (globalThis as PerfGlobal).__webglView;
     if (view === undefined) return;
 
-    const publicMethods = [
+    for (const method of [
       "uploadLiveDelta",
       "uploadLiveTrailDelta",
       "uploadTileAndTrailState",
@@ -510,26 +560,24 @@ export class MatchPerformanceTracker {
       "applyTerrainDelta",
       "applyDeadUnits",
       "applyConquestEvents",
-    ] as const;
-    for (const method of publicMethods) {
+    ]) {
       this.patchMethod(view, method, `view.${method}`);
     }
 
-    const viewRecord = asRecord(view);
-    const renderer = viewRecord?.renderer;
-    if (renderer === undefined) return;
-    this.patchRenderer(renderer);
+    const renderer = asRecord(view)?.renderer;
+    if (renderer !== undefined) this.patchRenderer(renderer);
   }
 
   private patchRenderer(renderer: unknown): void {
     this.patchGpuTimedDraw(renderer);
-    for (const method of ["uploadTextures", "computeTextures", "renderFrame"] as const) {
+    for (const method of ["uploadTextures", "computeTextures", "renderFrame"]) {
       this.patchMethod(renderer, method, `render.${method}`);
     }
 
-    const rendererRecord = asRecord(renderer);
-    if (rendererRecord === null) return;
-    const passMethods: ReadonlyArray<readonly [string, readonly string[]]> = [
+    const record = asRecord(renderer);
+    if (record === null) return;
+
+    const passes: ReadonlyArray<readonly [string, readonly string[]]> = [
       ["terrainPass", ["draw", "applyTerrainDelta"]],
       ["territoryPass", ["draw", "flushTileTexture", "drainDripBucket"]],
       ["borderPass", ["draw"]],
@@ -547,8 +595,9 @@ export class MatchPerformanceTracker {
       ["samRadiusPass", ["updateStructures", "draw"]],
       ["heatManager", ["updateHeat", "decayHeat"]],
     ];
-    for (const [property, methods] of passMethods) {
-      const target = rendererRecord[property];
+
+    for (const [property, methods] of passes) {
+      const target = record[property];
       if (target === undefined) continue;
       for (const method of methods) {
         this.patchMethod(target, method, `${property}.${method}`);
@@ -563,10 +612,11 @@ export class MatchPerformanceTracker {
       "game-right-sidebar",
       "player-panel",
     ]) {
-      const elementRecord = asRecord(document.querySelector(selector));
-      if (elementRecord === null) continue;
-      const gameView = elementRecord.game ?? elementRecord.g;
+      const element = asRecord(document.querySelector(selector));
+      if (element === null) continue;
+      const gameView = element.game ?? element.g;
       if (gameView === undefined) continue;
+
       this.patchMethod(gameView, "update", "main.gameView.update");
       this.patchFrameData(gameView);
       return;
@@ -576,26 +626,27 @@ export class MatchPerformanceTracker {
   private patchFrameData(gameView: unknown): void {
     const target = asRecord(gameView);
     if (target === null) return;
-    const key = "capture:frameData";
-    if (!this.markPatched(target, key)) return;
     const original = target.frameData;
     if (typeof original !== "function") return;
+    if (!this.markPatched(target, "capture:frameData")) return;
+
     const originalFn = original as UnknownFn;
     const tracker = this;
     target.frameData = function (this: unknown, ...args: unknown[]): unknown {
       const start = tracker.enabled ? performance.now() : 0;
       const result = originalFn.apply(this, args);
-      if (tracker.enabled) {
-        tracker.record("main.gameView.frameData", performance.now() - start);
-        const frame = asRecord(result);
-        if (frame !== null) {
-          const units = frame.units;
-          if (units instanceof Map) tracker.latestCounts.units = units.size;
-          const changedTiles = frame.changedTiles;
-          if (Array.isArray(changedTiles) || ArrayBuffer.isView(changedTiles)) {
-            tracker.latestCounts.changedTiles = changedTiles.length;
-          }
-        }
+      if (!tracker.enabled) return result;
+
+      tracker.record("main.gameView.frameData", performance.now() - start);
+      const frame = asRecord(result);
+      if (frame === null) return result;
+
+      if (frame.units instanceof Map) {
+        tracker.latestCounts.units = frame.units.size;
+      }
+      const changedTileCount = arrayLikeLength(frame.changedTiles);
+      if (changedTileCount !== null) {
+        tracker.latestCounts.changedTiles = changedTileCount;
       }
       return result;
     };
@@ -611,10 +662,10 @@ export class MatchPerformanceTracker {
   private patchTickLayerCapture(overlay: unknown): void {
     const target = asRecord(overlay);
     if (target === null) return;
-    const key = "capture:updateTickLayerMetrics";
-    if (!this.markPatched(target, key)) return;
     const original = target.updateTickLayerMetrics;
     if (typeof original !== "function") return;
+    if (!this.markPatched(target, "capture:updateTickLayerMetrics")) return;
+
     const originalFn = original as UnknownFn;
     const tracker = this;
     target.updateTickLayerMetrics = function (
@@ -626,7 +677,9 @@ export class MatchPerformanceTracker {
         const values = asRecord(durations);
         if (values !== null) {
           for (const [name, value] of Object.entries(values)) {
-            if (typeof value === "number") tracker.record(`ui.${name}`, value);
+            if (typeof value === "number") {
+              tracker.record(`ui.${name}`, value);
+            }
           }
         }
       }
@@ -637,10 +690,10 @@ export class MatchPerformanceTracker {
   private patchTickMetricsCapture(overlay: unknown): void {
     const target = asRecord(overlay);
     if (target === null) return;
-    const key = "capture:updateTickMetrics";
-    if (!this.markPatched(target, key)) return;
     const original = target.updateTickMetrics;
     if (typeof original !== "function") return;
+    if (!this.markPatched(target, "capture:updateTickMetrics")) return;
+
     const originalFn = original as UnknownFn;
     const tracker = this;
     target.updateTickMetrics = function (
@@ -663,27 +716,45 @@ export class MatchPerformanceTracker {
   private patchGpuTimedDraw(renderer: unknown): void {
     const target = asRecord(renderer);
     if (target === null) return;
-    const key = "gpu:draw";
-    if (!this.markPatched(target, key)) return;
     const original = target.draw;
-    const gl = target.gl;
-    if (typeof original !== "function" || !(gl instanceof WebGL2RenderingContext)) {
+    const glValue = target.gl;
+    const glRecord = asRecord(glValue);
+    if (
+      typeof original !== "function" ||
+      glRecord === null ||
+      typeof glRecord.createQuery !== "function"
+    ) {
       return;
     }
+    if (!this.markPatched(target, "gpu:draw")) return;
+
+    const gl = glValue as WebGL2RenderingContext;
+    const ext = gl.getExtension(
+      "EXT_disjoint_timer_query_webgl2",
+    ) as DisjointTimerQueryExt | null;
     const originalFn = original as UnknownFn;
-    const ext = gl.getExtension("EXT_disjoint_timer_query_webgl2");
     const tracker = this;
+
     target.draw = function (this: unknown, ...args: unknown[]): unknown {
       const start = tracker.enabled ? performance.now() : 0;
       let query: WebGLQuery | null = null;
-      if (tracker.enabled && ext !== null) {
+      const shouldQueryGpu =
+        tracker.enabled &&
+        ext !== null &&
+        tracker.pendingGpuQueries.length < MAX_PENDING_GPU_QUERIES &&
+        tracker.gpuQueryFrame++ % GPU_QUERY_EVERY_N_FRAMES === 0;
+
+      if (shouldQueryGpu) {
         query = gl.createQuery();
         if (query !== null) gl.beginQuery(ext.TIME_ELAPSED_EXT, query);
       }
+
       try {
         return originalFn.apply(this, args);
       } finally {
-        if (tracker.enabled) tracker.record("render.frame.cpu", performance.now() - start);
+        if (tracker.enabled) {
+          tracker.record("render.frame.cpu", performance.now() - start);
+        }
         if (query !== null && ext !== null) {
           gl.endQuery(ext.TIME_ELAPSED_EXT);
           tracker.pendingGpuQueries.push({ gl, ext, query });
@@ -703,7 +774,10 @@ export class MatchPerformanceTracker {
         index++;
         continue;
       }
-      const disjoint = pending.gl.getParameter(pending.ext.GPU_DISJOINT_EXT) as boolean;
+
+      const disjoint = pending.gl.getParameter(
+        pending.ext.GPU_DISJOINT_EXT,
+      ) as boolean;
       if (!disjoint) {
         const nanoseconds = pending.gl.getQueryParameter(
           pending.query,
@@ -715,18 +789,23 @@ export class MatchPerformanceTracker {
           this.record("render.frame.gpu", milliseconds);
         }
       }
+
       pending.gl.deleteQuery(pending.query);
       this.pendingGpuQueries.splice(index, 1);
     }
   }
 
-  private patchMethod(targetValue: unknown, methodName: string, label: string): void {
+  private patchMethod(
+    targetValue: unknown,
+    methodName: string,
+    label: string,
+  ): void {
     const target = asRecord(targetValue);
     if (target === null) return;
-    const key = `duration:${methodName}`;
-    if (!this.markPatched(target, key)) return;
     const original = target[methodName];
     if (typeof original !== "function") return;
+    if (!this.markPatched(target, `duration:${methodName}`)) return;
+
     const originalFn = original as UnknownFn;
     const tracker = this;
     target[methodName] = function (this: unknown, ...args: unknown[]): unknown {
@@ -741,18 +820,18 @@ export class MatchPerformanceTracker {
   }
 
   private markPatched(target: object, key: string): boolean {
-    let methods = this.patchedMethods.get(target);
-    if (methods === undefined) {
-      methods = new Set<string>();
-      this.patchedMethods.set(target, methods);
-    }
-    if (methods.has(key)) return false;
+    const existing = this.patchedMethods.get(target);
+    if (existing?.has(key)) return false;
+
+    const methods = existing ?? new Set<string>();
     methods.add(key);
+    if (existing === undefined) this.patchedMethods.set(target, methods);
     return true;
   }
 
   private ensurePanel(): void {
     if (this.panel !== null || typeof document === "undefined") return;
+
     const panel = document.createElement("div");
     panel.id = "openfront-match-performance-tracker";
     Object.assign(panel.style, {
@@ -775,13 +854,14 @@ export class MatchPerformanceTracker {
   }
 
   private updatePanel(): void {
-    const panel = this.panel;
-    if (panel === null) return;
-    const latest = this.history.at(-1);
+    if (this.panel === null) return;
+
+    const latest = lastValue(this.history);
     const diagnosis = this.buildDiagnosis();
     const hot = diagnosis.currentHotspots[0];
     const growth = diagnosis.fastestGrowing[0];
     const lines = ["MATCH PROFILER"];
+
     if (latest === undefined) {
       lines.push("Collecting 5s baseline...");
     } else {
@@ -792,8 +872,10 @@ export class MatchPerformanceTracker {
         lines.push(`GPU frame ${latest.gpuFrameAvgMs.toFixed(2)}ms`);
       }
       if (latest.heapUsedMB !== null) {
+        const heapSign =
+          latest.heapDeltaMB !== null && latest.heapDeltaMB >= 0 ? "+" : "";
         lines.push(
-          `Heap ${latest.heapUsedMB.toFixed(1)}MB (${latest.heapDeltaMB !== null && latest.heapDeltaMB >= 0 ? "+" : ""}${latest.heapDeltaMB?.toFixed(1) ?? "?"}MB) | DOM ${latest.domNodes}`,
+          `Heap ${latest.heapUsedMB.toFixed(1)}MB (${heapSign}${latest.heapDeltaMB?.toFixed(1) ?? "?"}MB) | DOM ${latest.domNodes}`,
         );
       } else {
         lines.push(`DOM ${latest.domNodes} | heap API unavailable`);
@@ -802,7 +884,9 @@ export class MatchPerformanceTracker {
         `Long tasks ${latest.longTaskCount} / ${latest.longTaskTotalMs.toFixed(0)}ms | lag max ${latest.eventLoopLagMaxMs.toFixed(0)}ms`,
       );
       if (hot !== undefined) {
-        lines.push(`Hot: ${hot.name} ${hot.avgMs.toFixed(2)}ms avg (${hot.calls} calls/5s)`);
+        lines.push(
+          `Hot: ${hot.name} ${hot.avgMs.toFixed(2)}ms avg (${hot.calls} calls/5s)`,
+        );
       }
       if (growth !== undefined) {
         lines.push(
@@ -811,10 +895,10 @@ export class MatchPerformanceTracker {
       }
     }
 
-    panel.replaceChildren();
+    this.panel.replaceChildren();
     const text = document.createElement("div");
     text.textContent = lines.join("\n");
-    panel.appendChild(text);
+    this.panel.appendChild(text);
 
     const copy = document.createElement("button");
     copy.textContent = "Copy full timeline";
@@ -828,12 +912,12 @@ export class MatchPerformanceTracker {
         }, 1500);
       });
     });
-    panel.appendChild(copy);
+    this.panel.appendChild(copy);
 
     const reset = document.createElement("button");
     reset.textContent = "Reset baseline";
     reset.addEventListener("click", () => this.reset());
-    panel.appendChild(reset);
+    this.panel.appendChild(reset);
   }
 }
 
