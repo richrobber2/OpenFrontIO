@@ -469,6 +469,7 @@ pub fn plan_economic_systems(context: EconomicSystemContext) -> EconomicSystemPl
         + unconnected_port_ratio * 40.0
         + isolated_factory_ratio * 32.0
         + capital_deployment_pressure * growth_readiness * 18.0
+        - risk * 20.0
         + affordability_penalty(context.factory_cost);
     let extend_trade = port_gap * 20.0
         + (context.trade_partners.max(0.0) * 3.0).min(18.0)

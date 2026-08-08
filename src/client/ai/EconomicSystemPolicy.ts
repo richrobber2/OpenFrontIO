@@ -349,7 +349,8 @@ export function planEconomicSystems(
       Math.min(8, productiveStopsPerFactory * 2) * railGap +
       unconnectedPortRatio * 40 +
       isolatedFactoryRatio * 32 +
-      capitalDeploymentPressure * growthReadiness * 18 +
+      capitalDeploymentPressure * growthReadiness * 18 -
+      risk * 20 +
       afford(context.factoryCost),
     "extend-trade":
       portGap * 20 +
