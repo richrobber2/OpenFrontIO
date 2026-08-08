@@ -1,4 +1,8 @@
 import {
+  planCommunicationRust,
+  preloadRustAllianceAi,
+} from "../rust/OpenFrontWasmAllianceAi";
+import {
   AidRequestKind,
   chooseAidRequest,
   CoordinationContext,
@@ -39,6 +43,8 @@ export interface CommunicationPlanContext {
 const THANKS_COOLDOWN_TICKS = 180;
 const MINIMUM_ALLY_RESERVE_FOR_TROOP_REQUEST = 0.6;
 
+void preloadRustAllianceAi();
+
 function requestAction(
   request: AidRequestKind,
   allyPlayerID?: string,
@@ -76,6 +82,9 @@ function requestAction(
 export function planCommunication(
   context: CommunicationPlanContext,
 ): CommunicationAction {
+  const rust = planCommunicationRust(context);
+  if (rust !== null) return rust;
+
   const requestedAid = chooseAidRequest(context.aidRequest);
   const request =
     requestedAid === "troops" &&
