@@ -273,24 +273,36 @@ pub extern "C" fn openfront_territory_renderer_fallout_touched(handle: u32) -> u
         fail(ErrorCode::InvalidHandle);
         return 0;
     };
-    u32::from(touched)
+    if touched { 1 } else { 0 }
 }
 
 #[cfg(test)]
 mod territory_render_tests {
     use super::*;
 
-    fn upload_u16(values: &[u16]) -> u32 {
-        let handle = openfront_upload_create(values.len() * 2);
-        let ptr = openfront_upload_ptr(handle) as *mut u8;
+    fn upload_bytes(values: &[u8]) -> u32 {
+        let handle = openfront_upload_create(values.len() as u32);
         for (index, value) in values.iter().enumerate() {
-            let bytes = value.to_le_bytes();
-            unsafe {
-                *ptr.add(index * 2) = bytes[0];
-                *ptr.add(index * 2 + 1) = bytes[1];
-            }
+            assert_eq!(openfront_upload_set(handle, index as u32, *value as u32), 1);
         }
         handle
+    }
+
+    fn upload_u16(values: &[u16]) -> u32 {
+        let mut bytes = Vec::with_capacity(values.len() * 2);
+        for value in values {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        upload_bytes(&bytes)
+    }
+
+    fn upload_updates(values: &[(u32, u32)]) -> u32 {
+        let mut bytes = Vec::with_capacity(values.len() * 8);
+        for &(tile_ref, state) in values {
+            bytes.extend_from_slice(&tile_ref.to_le_bytes());
+            bytes.extend_from_slice(&state.to_le_bytes());
+        }
+        upload_bytes(&bytes)
     }
 
     #[test]
@@ -302,21 +314,17 @@ mod territory_render_tests {
         let queue = openfront_territory_renderer_create(2, 2, 2, state_upload);
         assert_ne!(queue, 0);
 
-        let updates = openfront_upload_create(16);
-        let ptr = openfront_upload_ptr(updates) as *mut u32;
-        unsafe {
-            *ptr = 3;
-            *ptr.add(1) = 4;
-            *ptr.add(2) = 3;
-            *ptr.add(3) = 9;
-        }
+        let updates = upload_updates(&[(3, 4), (3, 9)]);
         assert_eq!(openfront_territory_renderer_enqueue(queue, updates, 2), 1);
         assert_eq!(openfront_territory_renderer_drain_all(queue), 1);
         assert_eq!(openfront_territory_renderer_tile_patch_len(queue), 3);
         assert_eq!(openfront_territory_renderer_border_change_len(queue), 4);
 
-        let patch_ptr = openfront_territory_renderer_tile_patch_ptr(queue) as *const f32;
-        let patch = unsafe { std::slice::from_raw_parts(patch_ptr, 3) };
-        assert_eq!(patch, &[1.0, 1.0, 9.0]);
+        TERRITORY_RENDERERS.with(|renderers| {
+            let renderers = renderers.borrow();
+            let staged = renderers[slot_index(queue).unwrap()].as_ref().unwrap();
+            assert_eq!(staged.tile_patches(), &[1.0, 1.0, 9.0]);
+            assert_eq!(staged.border_changes(), &[1, 1, 0, 9]);
+        });
     }
 }
