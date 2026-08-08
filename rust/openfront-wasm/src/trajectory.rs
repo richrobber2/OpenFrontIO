@@ -1,7 +1,11 @@
-use openfront_core::{build_nuke_trajectory, sam_range, SamInfo};
+use openfront_core::{
+    build_nuke_trajectory, sam_range, write_nuke_strip_vertices, NukeControlPoints,
+    NukeStripError, SamInfo,
+};
 
 const SAM_RECORD_BYTES: usize = 24;
 const TRAJECTORY_RESULT_VALUES: usize = 11;
+const MAX_TRAJECTORY_STRIP_SEGMENTS: u32 = 4096;
 
 fn read_trajectory_f64(record: &[u8], offset: usize) -> f64 {
     f64::from_le_bytes([
@@ -108,6 +112,69 @@ pub extern "C" fn openfront_nuke_trajectory_build(
         TRAJECTORY_RESULT_VALUES
     );
     1
+}
+
+/// Build the renderer's `[t, side, cumulative_distance]` triangle-strip data.
+///
+/// The result is retained in a reusable f32 buffer so pointer-move previews do
+/// not allocate a fresh Rust vector after the first capacity growth.
+#[unsafe(no_mangle)]
+pub extern "C" fn openfront_nuke_trajectory_strip_build(
+    p0x: f64,
+    p0y: f64,
+    p1x: f64,
+    p1y: f64,
+    p2x: f64,
+    p2y: f64,
+    p3x: f64,
+    p3y: f64,
+    segments: u32,
+) -> u32 {
+    begin_call();
+    if segments == 0 || segments > MAX_TRAJECTORY_STRIP_SEGMENTS {
+        fail(ErrorCode::InvalidTrajectorySegmentCount);
+        return 0;
+    }
+
+    let control_points = NukeControlPoints {
+        p0x,
+        p0y,
+        p1x,
+        p1y,
+        p2x,
+        p2y,
+        p3x,
+        p3y,
+    };
+    let result = RESULT_F32.with(|result| {
+        let mut result = result.borrow_mut();
+        write_nuke_strip_vertices(control_points, segments as usize, &mut result)
+    });
+
+    match result {
+        Ok(()) => 1,
+        Err(NukeStripError::ZeroSegments | NukeStripError::SizeOverflow) => {
+            fail(ErrorCode::InvalidTrajectorySegmentCount);
+            0
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn openfront_result_f32_ptr() -> u32 {
+    RESULT_F32.with(|result| {
+        let result = result.borrow();
+        if result.is_empty() {
+            0
+        } else {
+            result.as_ptr() as usize as u32
+        }
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn openfront_result_f32_len() -> u32 {
+    RESULT_F32.with(|result| result.borrow().len() as u32)
 }
 
 #[unsafe(no_mangle)]
