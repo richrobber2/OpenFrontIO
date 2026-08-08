@@ -224,6 +224,10 @@ export class RailroadPass {
     this.vao = createMapQuad(gl, mapW, mapH);
   }
 
+  getTerrainTexture(): WebGLTexture {
+    return this.terrainTex;
+  }
+
   uploadRailroadState(railroadState: Uint8Array): void {
     this.liveRailroadRef = railroadState;
     this.railroadDirty = true;
