@@ -1,3 +1,12 @@
+import {
+  capacityEscapeCityBudgetRust,
+  planEconomicSystemsRust,
+  preloadRustEconomyAi,
+  shouldFundFirstPressureFactoryRust,
+} from "../rust/OpenFrontWasmEconomyAi";
+
+void preloadRustEconomyAi();
+
 export type EconomicSystemAction =
   | "bank"
   | "protect-assets"
@@ -50,6 +59,7 @@ export interface EconomicSystemPlan {
   economyReturnScore: number;
   infrastructureNeedScore: number;
   tradeCoverageTargetRatio: number;
+  capitalDeploymentPressure: number;
   reason: string;
 }
 
@@ -78,6 +88,21 @@ export function capacityEscapeCityBudget({
   activeNationWars?: number;
   reserveRatio?: number;
 }): { spendableGold: number; bypassBank: boolean } {
+  const rust = capacityEscapeCityBudgetRust({
+    gold,
+    protectedSpendableGold,
+    cityCost,
+    cities,
+    desiredCities,
+    requiredTroops,
+    maxTroops,
+    incomingFronts,
+    hostileFronts,
+    activeNationWars,
+    reserveRatio,
+  });
+  if (rust !== null) return rust;
+
   const capacityBlocked = requiredTroops > maxTroops * 1.02;
   const affordableFromTreasury = cityCost > 0 && gold >= cityCost;
   const needsCity = cities < desiredCities;
@@ -115,10 +140,26 @@ export function shouldFundFirstPressureFactory({
   noGrowthTicks: number;
   unconnectedPorts: number;
 }): boolean {
+  const rust = shouldFundFirstPressureFactoryRust({
+    factories,
+    cities,
+    ownedTiles,
+    reserveRatio,
+    incomingFronts,
+    hostileFronts,
+    activeNationWars,
+    noGrowthTicks,
+    unconnectedPorts,
+  });
+  if (rust !== null) return rust;
+
+  const earlyGrowthUnlock =
+    ownedTiles >= 5_000 && (noGrowthTicks >= 300 || unconnectedPorts > 0);
+  const territoryReady = ownedTiles >= 8_000 || earlyGrowthUnlock;
   return (
     factories === 0 &&
     cities >= 1 &&
-    ownedTiles >= 8_000 &&
+    territoryReady &&
     reserveRatio >= 0.58 &&
     incomingFronts === 0 &&
     (noGrowthTicks >= 180 ||
@@ -138,14 +179,53 @@ const positiveCosts = (context: EconomicSystemContext): number[] =>
     context.defensePostCost,
   ].filter((cost) => Number.isFinite(cost) && cost > 0);
 
+function reasonForAction(
+  action: EconomicSystemAction,
+  context: EconomicSystemContext,
+  plan: Pick<
+    EconomicSystemPlan,
+    "goldReserveFloor" | "risk" | "tradeCoverageTargetRatio"
+  >,
+): string {
+  const factoryConnectedPorts = Math.max(0, context.factoryConnectedPorts ?? 0);
+  const unconnectedPorts = Math.max(
+    0,
+    context.unconnectedPorts ??
+      Math.max(0, context.ports - factoryConnectedPorts),
+  );
+  const cityGap = Math.max(0, context.desiredCities - context.cities);
+  const unstackedRatio =
+    context.cities <= 1
+      ? 0
+      : clamp((context.cities - context.stackedCities) / context.cities, 0, 1);
+  const reasonByAction: Record<EconomicSystemAction, string> = {
+    bank: `preserve ${Math.round(plan.goldReserveFloor).toLocaleString()} gold against ${Math.round(plan.risk * 100)}% strategic risk`,
+    "protect-assets": `cover ${context.exposedEconomicStructures}/${context.strategicStructures} exposed economic structures before compounding`,
+    "stack-capacity": `close a ${cityGap}-city capacity gap and reduce ${Math.round(unstackedRatio * 100)}% scattered-city exposure`,
+    "activate-rail": `activate ${context.connectedRailStops}/${context.railStops} rail stops, connect ${unconnectedPorts} isolated shipyards, and repair ${context.isolatedFactories} isolated factories`,
+    "extend-trade": `cover ${Math.round(plan.tradeCoverageTargetRatio * 100)}% of ${context.tradePartners} usable trade partners through ${factoryConnectedPorts}/${context.ports} factory-connected shipyards while discounting ${context.embargoedPartners} embargoed relationships`,
+  };
+  return reasonByAction[action];
+}
+
 /**
  * Connect economic spending to the systems that make it useful or fragile:
  * troop capacity, regeneration, rail activation, trade access, embargoes,
  * defensive coverage, live income, and the actual replacement cost of assets.
+ * Deep safe surplus now applies bounded pressure to deploy capital into
+ * compounding systems instead of accumulating indefinitely.
  */
 export function planEconomicSystems(
   context: EconomicSystemContext,
 ): EconomicSystemPlan {
+  const rust = planEconomicSystemsRust(context);
+  if (rust !== null) {
+    return {
+      ...rust,
+      reason: reasonForAction(rust.action, context, rust),
+    };
+  }
+
   const risk = clamp(
     Math.max(
       context.incomingTroopRatio,
@@ -233,11 +313,19 @@ export function planEconomicSystems(
       ? 0
       : -Math.min(60, 20 + (cost - spendableGold) / 25_000);
 
+  const capitalDeploymentPressure =
+    minimumBuildCost > 0
+      ? clamp(spendableGold / (minimumBuildCost * 4), 0, 1)
+      : 0;
+  const healthyGrowthReserve = clamp((context.reserveRatio - 0.5) / 0.4, 0, 1);
+  const growthReadiness = healthyGrowthReserve * (1 - risk * 0.65);
+
   const scores: EconomicSystemScores = {
     bank:
       (spendableGold <= 0 ? 80 : 0) +
       (context.reserveRatio < 0.4 ? 50 : 0) +
-      risk * 30,
+      risk * 30 -
+      capitalDeploymentPressure * growthReadiness * 18,
     "protect-assets":
       exposureRatio * 55 +
       risk * 35 +
@@ -252,6 +340,8 @@ export function planEconomicSystems(
       (context.trapped ? 15 : 0) +
       (context.reserveRatio < 0.55 ? 10 : 0) -
       (context.hasNeutralLand && !context.trapped ? 6 : 0) +
+      capitalDeploymentPressure * growthReadiness * 10 +
+      Math.min(4, cityGap) * healthyGrowthReserve * 4 +
       afford(context.cityCost),
     "activate-rail":
       (context.railStops >= 2 && context.factories === 0 ? 48 : 0) +
@@ -259,6 +349,7 @@ export function planEconomicSystems(
       Math.min(8, productiveStopsPerFactory * 2) * railGap +
       unconnectedPortRatio * 40 +
       isolatedFactoryRatio * 32 +
+      capitalDeploymentPressure * growthReadiness * 18 +
       afford(context.factoryCost),
     "extend-trade":
       portGap * 20 +
@@ -267,6 +358,7 @@ export function planEconomicSystems(
       unconnectedPorts * 22 -
       embargoRatio * 35 -
       risk * 15 +
+      capitalDeploymentPressure * growthReadiness * 14 +
       afford(context.portCost),
   };
 
@@ -275,12 +367,10 @@ export function planEconomicSystems(
   );
   const action: EconomicSystemAction = spendableGold <= 0 ? "bank" : ranked[0];
   const score = scores[action];
-  const reasonByAction: Record<EconomicSystemAction, string> = {
-    bank: `preserve ${Math.round(goldReserveFloor).toLocaleString()} gold against ${Math.round(risk * 100)}% strategic risk`,
-    "protect-assets": `cover ${context.exposedEconomicStructures}/${context.strategicStructures} exposed economic structures before compounding`,
-    "stack-capacity": `close a ${cityGap}-city capacity gap and reduce ${Math.round(unstackedRatio * 100)}% scattered-city exposure`,
-    "activate-rail": `activate ${context.connectedRailStops}/${context.railStops} rail stops, connect ${unconnectedPorts} isolated shipyards, and repair ${context.isolatedFactories} isolated factories`,
-    "extend-trade": `cover ${Math.round(tradeCoverageTargetRatio * 100)}% of ${context.tradePartners} usable trade partners through ${factoryConnectedPorts}/${context.ports} factory-connected shipyards while discounting ${context.embargoedPartners} embargoed relationships`,
+  const partialPlan = {
+    risk,
+    goldReserveFloor,
+    tradeCoverageTargetRatio,
   };
 
   return {
@@ -295,7 +385,8 @@ export function planEconomicSystems(
     infrastructureNeedScore:
       Math.max(scores["protect-assets"], scores["stack-capacity"]) / 10,
     tradeCoverageTargetRatio,
-    reason: reasonByAction[action],
+    capitalDeploymentPressure,
+    reason: reasonForAction(action, context, partialPlan),
   };
 }
 
