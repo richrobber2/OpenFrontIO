@@ -57,6 +57,7 @@ import { SpawnOverlayPass } from "./passes/SpawnOverlayPass";
 import { SpiralRibbonPass } from "./passes/SpiralRibbonPass";
 import { StructureLevelPass } from "./passes/StructureLevelPass";
 import { StructurePass } from "./passes/StructurePass";
+import { TerrainDeltaScatterPass } from "./passes/TerrainDeltaScatterPass";
 import { TerrainPass } from "./passes/TerrainPass";
 import { TerritoryPass } from "./passes/TerritoryPass";
 import { TrailPass } from "./passes/TrailPass";
@@ -117,6 +118,7 @@ export class GPURenderer {
 
   // Passes
   private terrainPass: TerrainPass;
+  private terrainDeltaScatterPass: TerrainDeltaScatterPass;
   private territoryPass: TerritoryPass;
   private trailPass: TrailPass;
   private spiralRibbonPass: SpiralRibbonPass;
@@ -158,8 +160,6 @@ export class GPURenderer {
   private storedLayers: MapLayer[] = [];
   /** Stored layer images for context-restore re-creation. */
   private storedLayerImages: Map<string, ImageBitmap> = new Map();
-  /** Scratch buffer for per-tile terrain byte uploads (avoids allocations). */
-  private terrainDeltaScratch = new Uint8Array(1);
 
   private paletteTex: WebGLTexture;
   private paletteData: Float32Array;
@@ -550,6 +550,16 @@ export class GPURenderer {
       this.settings,
     );
 
+    // Sparse terrain changes share one VBO upload across the visible RGBA
+    // texture and both R8UI terrain mirrors used by railroads/map layers.
+    this.terrainDeltaScatterPass = new TerrainDeltaScatterPass(
+      gl,
+      mapW,
+      mapH,
+      this.terrainPass.getTexture(),
+      [this.railroadPass.getTerrainTexture(), this.terrainBytesTex!],
+    );
+
     // --- Range circle (ghost preview radius) ---
     this.rangeCirclePass = new RangeCirclePass(gl);
 
@@ -938,21 +948,20 @@ export class GPURenderer {
 
   /**
    * Update terrain texels for tiles whose terrain byte changed (e.g. water
-   * nukes converting land → water). `terrainBytes[i]` is the new byte for
-   * `refs[i]`. Forwards to both TerrainPass (RGBA color) and RailroadPass
-   * (R8UI water-detection for bridges).
+   * nukes converting land → water). Full-map changes keep the direct bulk
+   * texture uploads; sparse changes are Rust-packed once and scattered into
+   * the RGBA terrain plus both R8UI terrain mirrors with one VBO upload.
    */
   applyTerrainDelta(refs: readonly number[], terrainBytes: Uint8Array): void {
     if (refs.length === 0) return;
-    this.terrainPass.applyTerrainDelta(refs, terrainBytes);
-    this.railroadPass.applyTerrainDelta(refs, terrainBytes);
-    // Update the shared R8UI terrain-bytes texture used by map-layer passes.
-    if (!this.terrainBytesTex) return;
-    const gl = this.gl;
-    gl.bindTexture(gl.TEXTURE_2D, this.terrainBytesTex);
-    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    // Full-map fast path: single texSubImage2D instead of per-tile uploads.
+
     if (refs.length === this.mapW * this.mapH) {
+      this.terrainPass.applyTerrainDelta(refs, terrainBytes);
+      this.railroadPass.applyTerrainDelta(refs, terrainBytes);
+      if (!this.terrainBytesTex) return;
+      const gl = this.gl;
+      gl.bindTexture(gl.TEXTURE_2D, this.terrainBytesTex);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
       gl.texSubImage2D(
         gl.TEXTURE_2D,
         0,
@@ -966,23 +975,9 @@ export class GPURenderer {
       );
       return;
     }
-    for (let i = 0; i < refs.length; i++) {
-      const ref = refs[i];
-      const x = ref % this.mapW;
-      const y = Math.floor(ref / this.mapW);
-      this.terrainDeltaScratch[0] = terrainBytes[i];
-      gl.texSubImage2D(
-        gl.TEXTURE_2D,
-        0,
-        x,
-        y,
-        1,
-        1,
-        gl.RED_INTEGER,
-        gl.UNSIGNED_BYTE,
-        this.terrainDeltaScratch,
-      );
-    }
+
+    const patches = this.terrainPass.buildDeltaRecords(refs, terrainBytes);
+    this.terrainDeltaScatterPass.apply(patches);
   }
 
   /**
@@ -1428,6 +1423,7 @@ export class GPURenderer {
     this.stopLoop();
     for (const p of this.mapLayerPasses.values()) p.dispose();
     this.mapLayerPasses.clear();
+    this.terrainDeltaScatterPass.dispose();
     if (this.terrainBytesTex) {
       this.gl.deleteTexture(this.terrainBytesTex);
       this.terrainBytesTex = null;
