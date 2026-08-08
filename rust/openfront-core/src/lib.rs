@@ -35,11 +35,10 @@ pub use ai_alliance::{
     alliance_response_window_ticks, assess_alliance_cooperation, choose_aid_request,
     plan_alliance_lifecycle, plan_coalition_growth_support, plan_communication,
     projected_troop_growth_rate, should_coordinate_attack, should_donate_gold,
-    should_donate_troops, AidRequestKind, AllianceCooperationAssessment,
-    AllianceCooperationReason, AllianceForecastChoice, AllianceLifecycleAction,
-    AllianceLifecycleInput, AllianceLifecyclePlan, AllianceLifecycleReason,
-    CoalitionGrowthSupportDecision, CoalitionGrowthSupportInput, CoalitionSupportPurpose,
-    CoalitionSupportReason, CommunicationActionKind, CommunicationPlan,
+    should_donate_troops, AidRequestKind, AllianceCooperationAssessment, AllianceCooperationReason,
+    AllianceForecastChoice, AllianceLifecycleAction, AllianceLifecycleInput, AllianceLifecyclePlan,
+    AllianceLifecycleReason, CoalitionGrowthSupportDecision, CoalitionGrowthSupportInput,
+    CoalitionSupportPurpose, CoalitionSupportReason, CommunicationActionKind, CommunicationPlan,
 };
 pub use ai_strategy::{
     evaluate_coalition_target, model_opponent, plan_strategic_action, CoalitionHelper,

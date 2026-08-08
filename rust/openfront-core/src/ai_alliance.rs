@@ -230,10 +230,8 @@ pub fn assess_alliance_cooperation(
         1.0,
     );
     let trusted = reliability >= 0.58 && (confidence >= 0.25 || unprompted_aid_events > 0);
-    let should_replace = resolved_requests >= 2
-        && ignored_requests >= 2
-        && confidence >= 0.5
-        && reliability < 0.34;
+    let should_replace =
+        resolved_requests >= 2 && ignored_requests >= 2 && confidence >= 0.5 && reliability < 0.34;
     let reason = if should_replace {
         AllianceCooperationReason::Replace
     } else if trusted {
@@ -647,12 +645,9 @@ pub fn plan_coalition_growth_support(
     let ally_max_troops = input.ally_max_troops.max(1.0);
     let own_troops = input.own_troops.max(0.0);
     let ally_troops = input.ally_troops.max(0.0);
-    let growth_rate_before = projected_troop_growth_rate(
-        own_max_troops,
-        own_troops,
-        input.own_growth_multiplier,
-    )
-    .max(0.0);
+    let growth_rate_before =
+        projected_troop_growth_rate(own_max_troops, own_troops, input.own_growth_multiplier)
+            .max(0.0);
 
     if !input.ally_is_nation || !input.can_donate {
         return reject_coalition_support(
@@ -706,12 +701,9 @@ pub fn plan_coalition_growth_support(
         let combat_conversion = 0.38;
         let baseline_enemy_after = (enemy_troops - allied_pressure * combat_conversion).max(0.0);
         let enemy_multiplier = input.enemy_growth_multiplier.unwrap_or(1.0);
-        let enemy_growth_rate_before = projected_troop_growth_rate(
-            enemy_max_troops,
-            baseline_enemy_after,
-            enemy_multiplier,
-        )
-        .max(0.0);
+        let enemy_growth_rate_before =
+            projected_troop_growth_rate(enemy_max_troops, baseline_enemy_after, enemy_multiplier)
+                .max(0.0);
 
         let mut selected: Option<(f64, f64, f64, f64, f64, f64, f64)> = None;
         for fraction in [0.25, 0.5, 0.75, 1.0] {
@@ -740,7 +732,11 @@ pub fn plan_coalition_growth_support(
                 (enemy_growth_rate_before - enemy_growth_rate_after) / enemy_growth_rate_before
             };
             let growth_rate_gain_ratio = if growth_rate_before <= 0.0 {
-                if growth_rate_after > 0.0 { 10.0 } else { 1.0 }
+                if growth_rate_after > 0.0 {
+                    10.0
+                } else {
+                    1.0
+                }
             } else {
                 growth_rate_after / growth_rate_before
             };
@@ -748,8 +744,7 @@ pub fn plan_coalition_growth_support(
 
             if own_troops_after < safe_reserve_troops
                 || growth_rate_gain_ratio < 1.01
-                || (enemy_growth_suppression_ratio < 0.05
-                    && projected_enemy_reserve_after > 0.16)
+                || (enemy_growth_suppression_ratio < 0.05 && projected_enemy_reserve_after > 0.16)
             {
                 continue;
             }
@@ -848,7 +843,11 @@ pub fn plan_coalition_growth_support(
     )
     .max(0.0);
     let growth_rate_gain_ratio = if growth_rate_before <= 0.0 {
-        if growth_rate_after > 0.0 { 10.0 } else { 1.0 }
+        if growth_rate_after > 0.0 {
+            10.0
+        } else {
+            1.0
+        }
     } else {
         growth_rate_after / growth_rate_before
     };
@@ -923,9 +922,34 @@ mod tests {
     #[test]
     fn communication_does_not_request_troops_from_a_depleted_ally() {
         let plan = plan_communication(
-            0.3, 0.48, 0.0, 1_000_000.0, None, 0, true, 500.0, 0.9, 0.48,
-            1_000_000.0, 200_000.0, 0, 0.0, 0.4, 0.8, 0.4, false, 0, 0, 500.0,
-            900_000.0, 1_000_000.0, 1_000_000.0, false, false, 500.0, 240.0,
+            0.3,
+            0.48,
+            0.0,
+            1_000_000.0,
+            None,
+            0,
+            true,
+            500.0,
+            0.9,
+            0.48,
+            1_000_000.0,
+            200_000.0,
+            0,
+            0.0,
+            0.4,
+            0.8,
+            0.4,
+            false,
+            0,
+            0,
+            500.0,
+            900_000.0,
+            1_000_000.0,
+            1_000_000.0,
+            false,
+            false,
+            500.0,
+            240.0,
         );
         assert_ne!(plan.action, CommunicationActionKind::RequestTroops);
     }
@@ -981,6 +1005,9 @@ mod tests {
         });
         assert!(decision.donate);
         assert_eq!(decision.purpose, CoalitionSupportPurpose::Pressure);
-        assert!(decision.enemy_growth_suppression_ratio >= 0.05 || decision.projected_enemy_reserve_after <= 0.16);
+        assert!(
+            decision.enemy_growth_suppression_ratio >= 0.05
+                || decision.projected_enemy_reserve_after <= 0.16
+        );
     }
 }
