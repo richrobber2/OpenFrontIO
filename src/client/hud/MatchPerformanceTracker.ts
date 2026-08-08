@@ -627,22 +627,21 @@ export class MatchPerformanceTracker {
     if (!this.markPatched(target, "capture:frameData")) return;
 
     const originalFn = original as UnknownFn;
-    const tracker = this;
-    target.frameData = function (this: unknown, ...args: unknown[]): unknown {
-      const start = tracker.enabled ? performance.now() : 0;
-      const result = originalFn.apply(this, args);
-      if (!tracker.enabled) return result;
+    target.frameData = (...args: unknown[]): unknown => {
+      const start = this.enabled ? performance.now() : 0;
+      const result = originalFn.apply(target, args);
+      if (!this.enabled) return result;
 
-      tracker.record("main.gameView.frameData", performance.now() - start);
+      this.record("main.gameView.frameData", performance.now() - start);
       const frame = asRecord(result);
       if (frame === null) return result;
 
       if (frame.units instanceof Map) {
-        tracker.latestCounts.units = frame.units.size;
+        this.latestCounts.units = frame.units.size;
       }
       const changedTileCount = arrayLikeLength(frame.changedTiles);
       if (changedTileCount !== null) {
-        tracker.latestCounts.changedTiles = changedTileCount;
+        this.latestCounts.changedTiles = changedTileCount;
       }
       return result;
     };
@@ -663,23 +662,21 @@ export class MatchPerformanceTracker {
     if (!this.markPatched(target, "capture:updateTickLayerMetrics")) return;
 
     const originalFn = original as UnknownFn;
-    const tracker = this;
-    target.updateTickLayerMetrics = function (
-      this: unknown,
+    target.updateTickLayerMetrics = (
       durations: unknown,
       ...rest: unknown[]
-    ): unknown {
-      if (tracker.enabled) {
+    ): unknown => {
+      if (this.enabled) {
         const values = asRecord(durations);
         if (values !== null) {
           for (const [name, value] of Object.entries(values)) {
             if (typeof value === "number") {
-              tracker.record(`ui.${name}`, value);
+              this.record(`ui.${name}`, value);
             }
           }
         }
       }
-      return originalFn.apply(this, [durations, ...rest]);
+      return originalFn.apply(target, [durations, ...rest]);
     };
   }
 
@@ -691,21 +688,19 @@ export class MatchPerformanceTracker {
     if (!this.markPatched(target, "capture:updateTickMetrics")) return;
 
     const originalFn = original as UnknownFn;
-    const tracker = this;
-    target.updateTickMetrics = function (
-      this: unknown,
+    target.updateTickMetrics = (
       tickExecutionDuration: unknown,
       tickDelay: unknown,
       ...rest: unknown[]
-    ): unknown {
-      if (tracker.enabled) {
+    ): unknown => {
+      if (this.enabled) {
         if (typeof tickExecutionDuration === "number") {
-          tracker.latestWorkerTickMs = tickExecutionDuration;
-          tracker.record("worker.tickExecution", tickExecutionDuration);
+          this.latestWorkerTickMs = tickExecutionDuration;
+          this.record("worker.tickExecution", tickExecutionDuration);
         }
-        if (typeof tickDelay === "number") tracker.latestTickDelayMs = tickDelay;
+        if (typeof tickDelay === "number") this.latestTickDelayMs = tickDelay;
       }
-      return originalFn.apply(this, [tickExecutionDuration, tickDelay, ...rest]);
+      return originalFn.apply(target, [tickExecutionDuration, tickDelay, ...rest]);
     };
   }
 
@@ -729,16 +724,15 @@ export class MatchPerformanceTracker {
       "EXT_disjoint_timer_query_webgl2",
     ) as DisjointTimerQueryExt | null;
     const originalFn = original as UnknownFn;
-    const tracker = this;
 
-    target.draw = function (this: unknown, ...args: unknown[]): unknown {
-      const start = tracker.enabled ? performance.now() : 0;
+    target.draw = (...args: unknown[]): unknown => {
+      const start = this.enabled ? performance.now() : 0;
       let query: WebGLQuery | null = null;
       const shouldQueryGpu =
-        tracker.enabled &&
+        this.enabled &&
         ext !== null &&
-        tracker.pendingGpuQueries.length < MAX_PENDING_GPU_QUERIES &&
-        tracker.gpuQueryFrame++ % GPU_QUERY_EVERY_N_FRAMES === 0;
+        this.pendingGpuQueries.length < MAX_PENDING_GPU_QUERIES &&
+        this.gpuQueryFrame++ % GPU_QUERY_EVERY_N_FRAMES === 0;
 
       if (shouldQueryGpu) {
         query = gl.createQuery();
@@ -746,14 +740,14 @@ export class MatchPerformanceTracker {
       }
 
       try {
-        return originalFn.apply(this, args);
+        return originalFn.apply(target, args);
       } finally {
-        if (tracker.enabled) {
-          tracker.record("render.frame.cpu", performance.now() - start);
+        if (this.enabled) {
+          this.record("render.frame.cpu", performance.now() - start);
         }
         if (query !== null && ext !== null) {
           gl.endQuery(ext.TIME_ELAPSED_EXT);
-          tracker.pendingGpuQueries.push({ gl, ext, query });
+          this.pendingGpuQueries.push({ gl, ext, query });
         }
       }
     };
@@ -803,14 +797,13 @@ export class MatchPerformanceTracker {
     if (!this.markPatched(target, `duration:${methodName}`)) return;
 
     const originalFn = original as UnknownFn;
-    const tracker = this;
-    target[methodName] = function (this: unknown, ...args: unknown[]): unknown {
-      if (!tracker.enabled) return originalFn.apply(this, args);
+    target[methodName] = (...args: unknown[]): unknown => {
+      if (!this.enabled) return originalFn.apply(target, args);
       const start = performance.now();
       try {
-        return originalFn.apply(this, args);
+        return originalFn.apply(target, args);
       } finally {
-        tracker.record(label, performance.now() - start);
+        this.record(label, performance.now() - start);
       }
     };
   }
