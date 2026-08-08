@@ -2,6 +2,10 @@ import {
   evaluateCoalitionTargetRust,
   preloadRustAi,
 } from "../rust/OpenFrontWasmAi";
+import {
+  planCoalitionGrowthSupportRust,
+  preloadRustAllianceAi,
+} from "../rust/OpenFrontWasmAllianceAi";
 
 export interface CoalitionHelperOption {
   allyId: string;
@@ -67,10 +71,11 @@ export interface CoalitionGrowthSupportDecision {
 const clamp = (value: number, minimum = 0, maximum = 1): number =>
   Math.max(minimum, Math.min(maximum, value));
 
-// Start the shared strategic brain as soon as AI policy code is loaded. Calls
+// Start the shared strategic brains as soon as AI policy code is loaded. Calls
 // remain synchronous: until Wasm is ready, the exact TypeScript policy below is
 // used as a compatibility fallback.
 void preloadRustAi();
+void preloadRustAllianceAi();
 
 /**
  * Select one coalition target instead of asking every ally to attack a
@@ -167,6 +172,9 @@ export function selectCoalitionTarget(
 export function planCoalitionGrowthSupport(
   context: CoalitionGrowthSupportContext,
 ): CoalitionGrowthSupportDecision {
+  const rust = planCoalitionGrowthSupportRust(context);
+  if (rust !== null) return rust;
+
   const ownMaxTroops = Math.max(1, context.ownMaxTroops);
   const allyMaxTroops = Math.max(1, context.allyMaxTroops);
   const ownTroops = Math.max(0, context.ownTroops);
