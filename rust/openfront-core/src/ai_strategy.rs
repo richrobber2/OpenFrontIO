@@ -389,7 +389,7 @@ mod tests {
     }
 
     #[test]
-    fn strategic_plan_keeps_first_action_on_score_ties() {
+    fn strategic_plan_protects_critically_low_reserve_without_active_front() {
         let plan = plan_strategic_action(
             StrategicPlanInput {
                 reserve_ratio: 0.0,
@@ -410,7 +410,8 @@ mod tests {
             &[],
         );
 
-        assert_eq!(plan.action, StrategicAction::Infrastructure);
-        assert_eq!(plan.score, 4.0);
+        assert_eq!(plan.action, StrategicAction::Defend);
+        assert_eq!(plan.score, 35.0);
+        assert!(!plan.critical_defense);
     }
 }
