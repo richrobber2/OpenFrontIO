@@ -18,6 +18,7 @@ export const ERROR_MESSAGES: Record<number, string> = {
   13: "defense index cell size must be greater than zero",
   14: "uploaded nuke trajectory SAM record buffer is too short",
   15: "invalid nuke trajectory strip segment count",
+  16: "invalid spiral trail segment",
   255: "Rust map invariant failed",
 };
 
@@ -92,6 +93,18 @@ export interface OpenFrontWasmExports extends WebAssembly.Exports {
     p3x: number,
     p3y: number,
     segments: number,
+  ): number;
+  openfront_spiral_segment_build(
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    segmentLength: number,
+    previousDirX: number,
+    previousDirY: number,
+    hasPreviousDir: number,
+    includeStart: number,
+    headDistance: number,
   ): number;
   openfront_result_f32_ptr(): number;
   openfront_result_f32_len(): number;
