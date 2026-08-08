@@ -77,12 +77,29 @@ export class TileScatterPass {
 
   /** Queue one tile patch. */
   push(x: number, y: number, state: number): void {
-    if (this.patchCount >= this.patchCapacity) this.grow();
+    this.ensureCapacity(this.patchCount + 1);
     const p = this.patchCount * FLOATS_PER_PATCH;
     this.patchData[p] = x;
     this.patchData[p + 1] = y;
     this.patchData[p + 2] = state;
     this.patchCount++;
+  }
+
+  /**
+   * Queue a pre-packed `[x, y, state, ...]` batch. Rust territory staging uses
+   * this path so one typed-array copy replaces thousands of JavaScript calls.
+   */
+  pushBatch(data: Float32Array): void {
+    if (data.length === 0) return;
+    if (data.length % FLOATS_PER_PATCH !== 0) {
+      throw new Error(
+        `Invalid tile scatter batch: ${data.length} floats is not divisible by ${FLOATS_PER_PATCH}`,
+      );
+    }
+    const count = data.length / FLOATS_PER_PATCH;
+    this.ensureCapacity(this.patchCount + count);
+    this.patchData.set(data, this.patchCount * FLOATS_PER_PATCH);
+    this.patchCount += count;
   }
 
   get count(): number {
@@ -134,10 +151,12 @@ export class TileScatterPass {
     gl.deleteVertexArray(this.vao);
   }
 
-  private grow(): void {
-    const newCapacity = this.patchCapacity * 2;
+  private ensureCapacity(required: number): void {
+    if (required <= this.patchCapacity) return;
+    let newCapacity = this.patchCapacity;
+    while (newCapacity < required) newCapacity *= 2;
     const newBuf = new Float32Array(newCapacity * FLOATS_PER_PATCH);
-    newBuf.set(this.patchData);
+    newBuf.set(this.patchData.subarray(0, this.patchCount * FLOATS_PER_PATCH));
     this.patchData = newBuf;
     this.patchCapacity = newCapacity;
   }
