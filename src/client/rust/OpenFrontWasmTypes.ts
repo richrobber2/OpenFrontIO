@@ -19,6 +19,8 @@ export const ERROR_MESSAGES: Record<number, string> = {
   14: "uploaded nuke trajectory SAM record buffer is too short",
   15: "invalid nuke trajectory strip segment count",
   16: "invalid spiral trail segment",
+  17: "uploaded AI coalition helper buffer is too short",
+  18: "uploaded AI opponent buffer is too short",
   255: "Rust map invariant failed",
 };
 
@@ -55,6 +57,45 @@ export interface OpenFrontWasmExports extends WebAssembly.Exports {
   openfront_structure_renderer_dirty_start(handle: number): number;
   openfront_structure_renderer_dirty_len(handle: number): number;
   openfront_structure_renderer_floats_per_instance(): number;
+  openfront_ai_coalition_target_evaluate(
+    basePriority: number,
+    enemyActiveWars: number,
+    helperUpload: number,
+    helperCount: number,
+  ): number;
+  openfront_ai_model_opponent(
+    troops: number,
+    maxTroops: number,
+    tiles: number,
+    ownTiles: number,
+    incomingAttacks: number,
+    outgoingAttacks: number,
+    silos: number,
+    warships: number,
+    previousTiles: number,
+    previousTroops: number,
+    elapsedTicks: number,
+    predictedChoice: number,
+    forecastThreat: number,
+  ): number;
+  openfront_ai_plan_strategic_action(
+    reserveRatio: number,
+    incomingFronts: number,
+    incomingTroops: number,
+    maxTroops: number,
+    hasNeutralLand: number,
+    hostileBorders: number,
+    activeNationWars: number,
+    navalThreats: number,
+    tradeTargets: number,
+    navalPressureRatio: number,
+    tradeOpportunityRatio: number,
+    readyStrategicSlots: number,
+    affordableStrategicWeapons: number,
+    actionableStrikeTargets: number,
+    opponentUpload: number,
+    opponentCount: number,
+  ): number;
   openfront_defense_index_create(cellSize: number): number;
   openfront_defense_index_destroy(handle: number): number;
   openfront_defense_index_replace(
