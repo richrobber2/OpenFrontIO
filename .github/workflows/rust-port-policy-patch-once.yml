@@ -1,0 +1,92 @@
+name: Rust port policy patch once
+
+on:
+  push:
+    branches:
+      - agent/rust-port
+    paths:
+      - .github/workflows/rust-port-policy-patch-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/rust-port
+      - name: Wire Rust adaptive port policy
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          facade = Path("src/client/rust/OpenFrontWasmEconomyAi.ts")
+          text = facade.read_text()
+
+          anchor = '''export interface RustEconomicSystemPlan {\n  action: RustEconomicSystemAction;\n  score: number;\n  scores: Record<RustEconomicSystemAction, number>;\n  risk: number;\n  goldReserveFloor: number;\n  spendableGold: number;\n  economyReturnScore: number;\n  infrastructureNeedScore: number;\n  tradeCoverageTargetRatio: number;\n  capitalDeploymentPressure: number;\n}\n\ntype EconomyWasmExports'''
+          replacement = '''export interface RustEconomicSystemPlan {\n  action: RustEconomicSystemAction;\n  score: number;\n  scores: Record<RustEconomicSystemAction, number>;\n  risk: number;\n  goldReserveFloor: number;\n  spendableGold: number;\n  economyReturnScore: number;\n  infrastructureNeedScore: number;\n  tradeCoverageTargetRatio: number;\n  capitalDeploymentPressure: number;\n}\n\nexport type RustAdaptivePortAction =\n  | "hold"\n  | "connect"\n  | "defend"\n  | "repair"\n  | "trade";\n\nconst ADAPTIVE_PORT_ACTIONS: readonly RustAdaptivePortAction[] = [\n  "hold",\n  "connect",\n  "defend",\n  "repair",\n  "trade",\n];\n\nexport interface RustAdaptivePortContext {\n  reserveRatio: number;\n  incomingPressureRatio: number;\n  activeFrontRatio: number;\n  gold: number;\n  spendableGold: number;\n  portCost: number;\n  ports: number;\n  connectedPorts: number;\n  tradePartners: number;\n  embargoedPartners: number;\n  ownWarships: number;\n  desiredWarships: number;\n  hostileWarships: number;\n  hostileTransports: number;\n  tradeTargets: number;\n  damagedWarships: number;\n  dockCapacity: number;\n  transportLossRate: number;\n  railProductivityRatio: number;\n  navalBias: number;\n  economicTradeCoverageTargetRatio?: number;\n}\n\nexport interface RustAdaptivePortPlan {\n  action: RustAdaptivePortAction;\n  urgency: number;\n  scores: Record<RustAdaptivePortAction, number>;\n  connectedPortRatio: number;\n  fleetCoverageRatio: number;\n  repairLoadRatio: number;\n  navalThreatRatio: number;\n  tradeCoverageRatio: number;\n  budgetCoverageRatio: number;\n  targetPartnerCoverageRatio: number;\n  candidateSampleRatio: number;\n  targetCoverageRatio: number;\n  minimumSiteQuality: number;\n  minimumBudgetCoverage: number;\n  requiredReturnRatio: number;\n  maximumPaybackTicks: number;\n  repairHealthThreshold: number;\n  stackingLoadThreshold: number;\n  requireFactoryConnection: boolean;\n  constructionPressure: number;\n}\n\nexport interface RustAdaptiveTradePortThresholds {\n  minimumSiteQuality: number;\n  requiredReturnRatio: number;\n  maximumPaybackTicks: number;\n  requireFactoryConnection: boolean;\n}\n\nexport interface RustAdaptiveTradePortOption {\n  expectedGold: number;\n  buildCost: number;\n  routeDistance: number;\n  closestFriendlyPortDistance: number;\n  factoryConnected: boolean;\n  survivalRatio: number;\n  spawnIntervalTicks: number;\n  reachablePartners: number;\n  partnerConcentration: number;\n}\n\nexport interface RustAdaptiveTradePortNormalization {\n  minimumRoute: number;\n  maximumRoute: number;\n  minimumSpacing: number;\n  maximumSpacing: number;\n  minimumGoldRate: number;\n  maximumGoldRate: number;\n}\n\nexport interface RustAdaptiveTradePortScore {\n  eligible: boolean;\n  score: number;\n  returnRatio: number;\n  distanceEfficiency: number;\n  spacingQuality: number;\n  expectedGoldPerTick: number;\n  paybackTicks: number;\n  diversityQuality: number;\n}\n\ntype EconomyWasmExports'''
+          assert anchor in text
+          text = text.replace(anchor, replacement, 1)
+
+          anchor = '''  ): number;\n};\n\nclass OpenFrontWasmEconomyAi'''
+          addition = '''  ): number;\n  openfront_ai_plan_adaptive_port_actions(\n    reserveRatio: number,\n    incomingPressureRatio: number,\n    activeFrontRatio: number,\n    gold: number,\n    spendableGold: number,\n    portCost: number,\n    ports: number,\n    connectedPorts: number,\n    tradePartners: number,\n    embargoedPartners: number,\n    ownWarships: number,\n    desiredWarships: number,\n    hostileWarships: number,\n    hostileTransports: number,\n    tradeTargets: number,\n    damagedWarships: number,\n    dockCapacity: number,\n    transportLossRate: number,\n    railProductivityRatio: number,\n    navalBias: number,\n    hasEconomicTradeCoverageTargetRatio: number,\n    economicTradeCoverageTargetRatio: number,\n  ): number;\n  openfront_ai_score_adaptive_trade_port_option(\n    minimumSiteQuality: number,\n    requiredReturnRatio: number,\n    maximumPaybackTicks: number,\n    requireFactoryConnection: number,\n    expectedGold: number,\n    buildCost: number,\n    routeDistance: number,\n    closestFriendlyPortDistance: number,\n    factoryConnected: number,\n    survivalRatio: number,\n    spawnIntervalTicks: number,\n    reachablePartners: number,\n    partnerConcentration: number,\n    minimumRoute: number,\n    maximumRoute: number,\n    minimumSpacing: number,\n    maximumSpacing: number,\n    minimumGoldRate: number,\n    maximumGoldRate: number,\n  ): number;\n};\n\nclass OpenFrontWasmEconomyAi'''
+          assert anchor in text
+          text = text.replace(anchor, addition, 1)
+
+          anchor = '''      "openfront_ai_plan_economic_systems",\n    ] as const) {'''
+          replacement = '''      "openfront_ai_plan_economic_systems",\n      "openfront_ai_plan_adaptive_port_actions",\n      "openfront_ai_score_adaptive_trade_port_option",\n    ] as const) {'''
+          assert anchor in text
+          text = text.replace(anchor, replacement, 1)
+
+          anchor = '''  private readU32Result(expected: number, operation: string): Uint32Array {'''
+          methods = '''  planAdaptivePortActions(\n    context: RustAdaptivePortContext,\n  ): RustAdaptivePortPlan {\n    if (\n      this.wasm.openfront_ai_plan_adaptive_port_actions(\n        context.reserveRatio,\n        context.incomingPressureRatio,\n        context.activeFrontRatio,\n        context.gold,\n        context.spendableGold,\n        context.portCost,\n        context.ports,\n        context.connectedPorts,\n        context.tradePartners,\n        context.embargoedPartners,\n        context.ownWarships,\n        context.desiredWarships,\n        context.hostileWarships,\n        context.hostileTransports,\n        context.tradeTargets,\n        context.damagedWarships,\n        context.dockCapacity,\n        context.transportLossRate,\n        context.railProductivityRatio,\n        context.navalBias,\n        context.economicTradeCoverageTargetRatio === undefined ? 0 : 1,\n        context.economicTradeCoverageTargetRatio ?? 0,\n      ) === 0\n    ) {\n      this.throwLastError("plan adaptive port actions");\n    }\n    const control = this.readU32Result(2, "read adaptive port action");\n    const values = this.readF64Result(22, "read adaptive port plan");\n    const action = ADAPTIVE_PORT_ACTIONS[control[0]!] ?? "hold";\n    const scores = Object.fromEntries(\n      ADAPTIVE_PORT_ACTIONS.map((name, index) => [name, values[index + 1]!]),\n    ) as Record<RustAdaptivePortAction, number>;\n    return {\n      action,\n      urgency: values[0]!,\n      scores,\n      connectedPortRatio: values[6]!,\n      fleetCoverageRatio: values[7]!,\n      repairLoadRatio: values[8]!,\n      navalThreatRatio: values[9]!,\n      tradeCoverageRatio: values[10]!,\n      budgetCoverageRatio: values[11]!,\n      targetPartnerCoverageRatio: values[12]!,\n      candidateSampleRatio: values[13]!,\n      targetCoverageRatio: values[14]!,\n      minimumSiteQuality: values[15]!,\n      minimumBudgetCoverage: values[16]!,\n      requiredReturnRatio: values[17]!,\n      maximumPaybackTicks: values[18]!,\n      repairHealthThreshold: values[19]!,\n      stackingLoadThreshold: values[20]!,\n      requireFactoryConnection: control[1] !== 0,\n      constructionPressure: values[21]!,\n    };\n  }\n\n  scoreAdaptiveTradePortOption(\n    thresholds: RustAdaptiveTradePortThresholds,\n    option: RustAdaptiveTradePortOption,\n    normalization: RustAdaptiveTradePortNormalization,\n  ): RustAdaptiveTradePortScore {\n    if (\n      this.wasm.openfront_ai_score_adaptive_trade_port_option(\n        thresholds.minimumSiteQuality,\n        thresholds.requiredReturnRatio,\n        thresholds.maximumPaybackTicks,\n        thresholds.requireFactoryConnection ? 1 : 0,\n        option.expectedGold,\n        option.buildCost,\n        option.routeDistance,\n        option.closestFriendlyPortDistance,\n        option.factoryConnected ? 1 : 0,\n        option.survivalRatio,\n        option.spawnIntervalTicks,\n        option.reachablePartners,\n        option.partnerConcentration,\n        normalization.minimumRoute,\n        normalization.maximumRoute,\n        normalization.minimumSpacing,\n        normalization.maximumSpacing,\n        normalization.minimumGoldRate,\n        normalization.maximumGoldRate,\n      ) === 0\n    ) {\n      this.throwLastError("score adaptive trade port option");\n    }\n    const control = this.readU32Result(1, "read adaptive trade route eligibility");\n    const values = this.readF64Result(7, "read adaptive trade route score");\n    return {\n      eligible: control[0] !== 0,\n      score: values[0]!,\n      returnRatio: values[1]!,\n      distanceEfficiency: values[2]!,\n      spacingQuality: values[3]!,\n      expectedGoldPerTick: values[4]!,\n      paybackTicks: values[5]!,\n      diversityQuality: values[6]!,\n    };\n  }\n\n  private readU32Result(expected: number, operation: string): Uint32Array {'''
+          assert anchor in text
+          text = text.replace(anchor, methods, 1)
+
+          anchor = '''export function planEconomicSystemsRust(\n  context: RustEconomicSystemContext,\n): RustEconomicSystemPlan | null {\n  return useRustEconomyAi((ai) => ai.planEconomicSystems(context));\n}\n\nfunction logRustEconomyAiFailure'''
+          replacement = '''export function planEconomicSystemsRust(\n  context: RustEconomicSystemContext,\n): RustEconomicSystemPlan | null {\n  return useRustEconomyAi((ai) => ai.planEconomicSystems(context));\n}\n\nexport function planAdaptivePortActionsRust(\n  context: RustAdaptivePortContext,\n): RustAdaptivePortPlan | null {\n  return useRustEconomyAi((ai) => ai.planAdaptivePortActions(context));\n}\n\nexport function scoreAdaptiveTradePortOptionRust(\n  thresholds: RustAdaptiveTradePortThresholds,\n  option: RustAdaptiveTradePortOption,\n  normalization: RustAdaptiveTradePortNormalization,\n): RustAdaptiveTradePortScore | null {\n  return useRustEconomyAi((ai) =>\n    ai.scoreAdaptiveTradePortOption(thresholds, option, normalization),\n  );\n}\n\nfunction logRustEconomyAiFailure'''
+          assert anchor in text
+          text = text.replace(anchor, replacement, 1)
+          facade.write_text(text)
+
+          policy = Path("src/client/ai/AdaptivePortPolicy.ts")
+          text = policy.read_text()
+          text = '''import {\n  planAdaptivePortActionsRust,\n  preloadRustEconomyAi,\n  scoreAdaptiveTradePortOptionRust,\n} from "../rust/OpenFrontWasmEconomyAi";\n\nvoid preloadRustEconomyAi();\n\n''' + text
+
+          anchor = '''export function planAdaptivePortActions(\n  context: AdaptivePortContext,\n): AdaptivePortPlan {\n  const reserveHealth'''
+          replacement = '''export function planAdaptivePortActions(\n  context: AdaptivePortContext,\n): AdaptivePortPlan {\n  const rust = planAdaptivePortActionsRust(context);\n  if (rust !== null) {\n    const transportSurvivalRatio = 1 - clamp(context.transportLossRate, 0, 1);\n    const reasonByAction: Record<AdaptivePortAction, string> = {\n      hold: `hold port spending at ${Math.round(rust.budgetCoverageRatio * 100)}% of one build cost above reserve`,\n      connect: `close the ${Math.round((1 - rust.connectedPortRatio) * 100)}% factory-connection gap before adding more shoreline`,\n      defend: `cover ${Math.round(rust.navalThreatRatio * 100)}% local naval pressure with ${Math.round(rust.fleetCoverageRatio * 100)}% of the desired fleet`,\n      repair: `raise dock throughput under a ${Math.round(rust.repairLoadRatio * 100)}% damaged-fleet load`,\n      trade: `expand beyond ${Math.round(rust.tradeCoverageRatio * 100)}% of adaptive partner coverage at ${Math.round(transportSurvivalRatio * 100)}% transport survival`,\n    };\n    return { ...rust, reason: reasonByAction[rust.action] };\n  }\n\n  const reserveHealth'''
+          assert anchor in text
+          text = text.replace(anchor, replacement, 1)
+
+          anchor = '''  const minimumGoldRate = Math.min(...goldRates);\n  const maximumGoldRate = Math.max(...goldRates);\n\n  return options\n    .filter(\n      (option) => !plan.requireFactoryConnection || option.factoryConnected,\n    )\n    .map((option) => {'''
+          replacement = '''  const minimumGoldRate = Math.min(...goldRates);\n  const maximumGoldRate = Math.max(...goldRates);\n  const normalization = {\n    minimumRoute,\n    maximumRoute,\n    minimumSpacing,\n    maximumSpacing,\n    minimumGoldRate,\n    maximumGoldRate,\n  };\n  const rustScores = options.map((option) =>\n    scoreAdaptiveTradePortOptionRust(\n      plan,\n      {\n        ...option,\n        survivalRatio: option.survivalRatio ?? 1,\n        spawnIntervalTicks: option.spawnIntervalTicks ?? 100,\n        reachablePartners: option.reachablePartners ?? 1,\n        partnerConcentration: option.partnerConcentration ?? 1,\n      },\n      normalization,\n    ),\n  );\n  if (rustScores.every((score) => score !== null)) {\n    return options\n      .map((option, index) => ({ ...option, ...rustScores[index]! }))\n      .filter((option) => option.eligible)\n      .map(({ eligible: _eligible, ...option }) => option)\n      .sort((a, b) => b.score - a.score);\n  }\n\n  return options\n    .filter(\n      (option) => !plan.requireFactoryConnection || option.factoryConnected,\n    )\n    .map((option) => {'''
+          assert anchor in text
+          text = text.replace(anchor, replacement, 1)
+
+          anchor = '''      const score =\n        returnQuality * 0.22 +\n        Number(option.factoryConnected) * 0.15 +\n        throughputQuality * 0.25 +\n        paybackQuality * 0.2 +\n        diversityQuality * 0.12 +\n        spacingQuality * 0.06;'''
+          replacement = '''      const score =\n        returnQuality * 0.22 +\n        Number(option.factoryConnected) * 0.14 +\n        throughputQuality * 0.25 +\n        paybackQuality * 0.2 +\n        diversityQuality * 0.1 +\n        spacingQuality * 0.04 +\n        distanceEfficiency * 0.05;'''
+          assert anchor in text
+          text = text.replace(anchor, replacement, 1)
+          policy.write_text(text)
+
+          trainer = Path("src/client/ai/VisualAiTrainer.ts")
+          text = trainer.read_text()
+          anchor = '''      const desiredTradePorts = Math.max(\n        1,\n        Math.ceil(partnerPorts.length * targetPartnerCoverage),\n      );'''
+          replacement = '''      const uniqueTradePartnerCount = new Set(\n        partnerPorts.map((port) => port.owner().id()),\n      ).size;\n      const desiredTradePorts = Math.max(\n        1,\n        Math.ceil(uniqueTradePartnerCount * targetPartnerCoverage),\n      );'''
+          assert anchor in text
+          text = text.replace(anchor, replacement, 1)
+          anchor = '''          const representative = weightedRoutes.sort(\n            (a, b) => b.expectedGold - a.expectedGold,\n          )[0].partner;'''
+          replacement = '''          const representative = weightedRoutes.sort(\n            (a, b) => b.expectedGold * b.weight - a.expectedGold * a.weight,\n          )[0].partner;'''
+          assert anchor in text
+          text = text.replace(anchor, replacement, 1)
+          trainer.write_text(text)
+          PY
+      - name: Commit integration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/client/rust/OpenFrontWasmEconomyAi.ts src/client/ai/AdaptivePortPolicy.ts src/client/ai/VisualAiTrainer.ts
+          git commit -m "Wire Rust trade and port growth policy"
+          git push origin HEAD:agent/rust-port
