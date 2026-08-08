@@ -18,7 +18,16 @@ import {
   shouldTradeLandForTimeRust,
   tribeAttackCommitmentMultiplierRust,
 } from "../rust/OpenFrontWasmAi";
+import {
+  classifyLossCauseRust,
+  evaluateSeedCohortRust,
+  preloadRustLearningAi,
+  predictFutureOutcomeRust,
+  scoreMutationOutcomeRust,
+} from "../rust/OpenFrontWasmLearningAi";
 import { projectLandCapacity } from "./LandCapacityPolicy";
+
+void preloadRustLearningAi();
 
 export type LandAttackEstimate = {
   attackerTroops: number;
@@ -258,13 +267,38 @@ export function scoreMutationOutcome({
   peakCities: number;
   peakFactories: number;
 }): number {
+  const rust = scoreMutationOutcomeRust({
+    won,
+    alive,
+    playerCount,
+    finishingRank,
+    raidSuccessRate,
+    retaliationRate,
+    transportLossRate,
+    predictionQuality,
+    startingTiles,
+    peakTiles,
+    totalLandTiles,
+    elapsedTicks,
+    noGrowthTicks,
+    longestNoGrowthTicks,
+    peakCities,
+    peakFactories,
+  });
+  if (rust !== null) return rust;
+
   const growthMultiple = Math.max(1, peakTiles) / Math.max(1, startingTiles);
   const territoryShare = Math.max(0, peakTiles) / Math.max(1, totalLandTiles);
   const stagnationRatio =
     Math.max(noGrowthTicks, longestNoGrowthTicks) / Math.max(1, elapsedTicks);
+  const relativeGrowth =
+    Math.max(0, peakTiles - startingTiles) / Math.max(1, startingTiles);
+  const thousandTickWindows = Math.max(0.25, elapsedTicks / 1_000);
+  const growthPace = relativeGrowth / thousandTickWindows;
   const growthScore =
-    Math.min(420, Math.log2(Math.max(1, growthMultiple)) * 55) +
-    Math.min(700, territoryShare * 7_000);
+    Math.min(450, Math.log2(Math.max(1, growthMultiple)) * 60) +
+    Math.min(720, territoryShare * 7_200) +
+    Math.min(180, growthPace * 90);
   const economyScore = Math.min(
     160,
     Math.max(0, peakCities) * 8 + Math.max(0, peakFactories) * 32,
@@ -275,7 +309,7 @@ export function scoreMutationOutcome({
     (!alive ? 150 : 0) +
     growthScore +
     economyScore -
-    Math.min(360, Math.max(0, stagnationRatio) * 360) +
+    Math.min(420, Math.max(0, stagnationRatio) * 420) +
     Math.max(0, Math.min(1, raidSuccessRate)) * 60 -
     Math.max(0, Math.min(1, retaliationRate)) * 100 -
     Math.max(0, Math.min(1, transportLossRate)) * 100 +
@@ -306,6 +340,20 @@ export function classifyLossCause({
   peakTiles: number;
   peakCities: number;
 }): LossCause {
+  const rust = classifyLossCauseRust({
+    elapsedTicks,
+    thirdPartyPressureTicks,
+    maxIncomingRatio,
+    lowReserveTicks,
+    maxCommittedRatio,
+    longestStallTicks,
+    longestNoGrowthTicks,
+    noGainTicks,
+    peakTiles,
+    peakCities,
+  });
+  if (rust !== null) return rust as LossCause;
+
   if (
     longestNoGrowthTicks >= Math.max(300, elapsedTicks * 0.18) ||
     noGainTicks >= Math.max(400, elapsedTicks * 0.22)
@@ -985,9 +1033,55 @@ export type FuturePrediction = {
   expectedTroops: number;
   expectedTiles: number;
   confidence: number;
+  expectedMaxTroops: number;
+  capacityGain: number;
 };
 
-/** Cheap, deterministic forward model used for portable action traces. */
+function predictionLandTroopCapacity(tiles: number): number {
+  return 2 * (Math.pow(Math.max(0, tiles), 0.6) * 1_000 + 50_000);
+}
+
+function predictionTroopRegeneration(troops: number, maxTroops: number): number {
+  const safeMax = Math.max(1, maxTroops);
+  const safeTroops = Math.max(0, troops);
+  const base = 10 + Math.pow(safeTroops, 0.73) / 4;
+  return Math.max(
+    0,
+    Math.min(safeTroops + base * (1 - safeTroops / safeMax), safeMax) -
+      safeTroops,
+  );
+}
+
+function simulatePredictionRegeneration(
+  startingTroops: number,
+  currentMaxTroops: number,
+  projectedMaxTroops: number,
+  horizon: number,
+  activeFraction: number,
+): number {
+  const activeTicks =
+    Math.max(0, horizon) * Math.max(0, Math.min(1, activeFraction));
+  if (activeTicks <= 0) {
+    return Math.max(0, Math.min(projectedMaxTroops, startingTroops));
+  }
+  const steps = Math.max(1, Math.min(12, Math.ceil(activeTicks / 30)));
+  const stepTicks = activeTicks / steps;
+  let projectedTroops = Math.max(0, startingTroops);
+  for (let step = 0; step < steps; step++) {
+    const progress = (step + 1) / steps;
+    const stepMax =
+      currentMaxTroops +
+      (projectedMaxTroops - currentMaxTroops) * progress;
+    projectedTroops = Math.min(
+      Math.max(1, stepMax),
+      projectedTroops +
+        predictionTroopRegeneration(projectedTroops, stepMax) * stepTicks,
+    );
+  }
+  return projectedTroops;
+}
+
+/** Growth-aware deterministic forward model used for portable action traces. */
 export function predictFutureOutcome({
   action,
   troops,
@@ -1005,42 +1099,95 @@ export function predictFutureOutcome({
   horizon: number;
   sample: number;
 }): FuturePrediction {
+  const rust = predictFutureOutcomeRust({
+    action,
+    troops,
+    maxTroops,
+    tiles,
+    enemyTroops,
+    horizon,
+    sample,
+  });
+  if (rust !== null) return { action, horizon, ...rust };
+
   const safeMax = Math.max(1, maxTroops);
-  const reserve = Math.max(0, Math.min(1, troops / safeMax));
-  const uncertainty = 1 + (sample - 2) * 0.04;
-  const regeneration =
-    Math.max(0, 10 + Math.pow(Math.max(0, troops), 0.73) / 4) *
-    (1 - reserve) *
-    horizon;
-  const attackPower = Math.min(troops * 0.4, enemyTroops * 0.9) * uncertainty;
-  const expectedTroops = Math.max(
-    0,
-    Math.min(
-      safeMax,
-      troops +
-        (action === "hold" || action === "defend" ? regeneration : 0) -
-        (action === "attack"
-          ? attackPower
-          : action === "expand"
-            ? troops * 0.16
-            : action === "fleet"
-              ? troops * 0.12
-              : 0),
-    ),
+  const safeTiles = Math.max(0, tiles);
+  const safeHorizon = Math.max(1, horizon);
+  const uncertainty = Math.max(
+    0.84,
+    Math.min(1.16, 1 + (sample - 2) * 0.04),
+  );
+  const horizonScale = Math.max(
+    0.25,
+    Math.min(2.5, safeHorizon / 120),
+  );
+  const attackPower =
+    Math.min(Math.max(0, troops) * 0.4, Math.max(0, enemyTroops) * 0.9) *
+    uncertainty;
+  const attackTimeScale = Math.max(
+    0.7,
+    Math.min(1.5, Math.sqrt(horizonScale)),
   );
   const expectedTiles =
-    tiles +
-    (action === "attack"
-      ? Math.max(0, attackPower / Math.max(1, enemyTroops)) * tiles * 0.08
+    action === "attack"
+      ? safeTiles +
+        Math.min(
+          safeTiles * 0.14,
+          Math.max(0, attackPower / Math.max(1, enemyTroops)) *
+            safeTiles *
+            0.08 *
+            attackTimeScale,
+        )
       : action === "expand"
-        ? Math.max(1, tiles * 0.04)
-        : 0);
+        ? safeTiles +
+          Math.max(
+            1,
+            safeTiles * Math.min(0.12, 0.04 * horizonScale) * uncertainty,
+          )
+        : safeTiles;
+  const capacityGain = Math.max(
+    0,
+    predictionLandTroopCapacity(Math.max(safeTiles, expectedTiles)) -
+      predictionLandTroopCapacity(safeTiles),
+  );
+  const expectedMaxTroops = safeMax + capacityGain;
+  const actionCost =
+    action === "attack"
+      ? attackPower
+      : action === "expand"
+        ? Math.max(0, troops) * 0.16
+        : action === "fleet"
+          ? Math.max(0, troops) * 0.12
+          : 0;
+  const regenerationFraction =
+    action === "hold" || action === "defend"
+      ? 1
+      : action === "expand"
+        ? 0.75
+        : action === "fleet"
+          ? 0.55
+          : 0.45;
+  const expectedTroops = simulatePredictionRegeneration(
+    Math.max(0, Math.max(0, troops) - actionCost),
+    safeMax,
+    expectedMaxTroops,
+    safeHorizon,
+    regenerationFraction,
+  );
+  const sampleConfidence = Math.max(
+    0.1,
+    1 - Math.abs(sample - 2) * 0.12,
+  );
+  const horizonConfidence =
+    1 / (1 + Math.max(0, safeHorizon - 120) / 1_200);
   return {
     action,
     horizon,
     expectedTroops,
     expectedTiles,
-    confidence: Math.max(0.1, 1 - Math.abs(sample - 2) * 0.12),
+    confidence: Math.max(0.1, sampleConfidence * horizonConfidence),
+    expectedMaxTroops,
+    capacityGain,
   };
 }
 
@@ -1105,6 +1252,16 @@ export function evaluateSeedCohort({
   baselineScore: number;
   firstGeneration: boolean;
 }): SeedCohortResult {
+  const rust = evaluateSeedCohortRust({
+    scoreTotal,
+    completedSeeds,
+    nextScore,
+    requiredSeeds,
+    baselineScore,
+    firstGeneration,
+  });
+  if (rust !== null) return rust;
+
   const total = scoreTotal + nextScore;
   const completed = completedSeeds + 1;
   const complete = completed >= Math.max(1, requiredSeeds);

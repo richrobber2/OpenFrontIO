@@ -1,4 +1,13 @@
+import {
+  applyActionOutcomeLearningRust,
+  normalizeActionRewardRust,
+  preloadRustLearningAi,
+  scoreCounterfactualActionOutcomeRust,
+  scoreDelayedActionOutcomeRust,
+} from "../rust/OpenFrontWasmLearningAi";
 import { PredictionAction } from "./StrategyMath";
+
+void preloadRustLearningAi();
 
 export type ActionOutcomeGenes = {
   aggression: number;
@@ -36,6 +45,9 @@ export function normalizeActionReward(
   reward: number,
   baseline: ActionRewardBaseline,
 ): NormalizedActionReward {
+  const rust = normalizeActionRewardRust(reward, baseline);
+  if (rust !== null) return rust;
+
   const boundedReward = Math.max(-1, Math.min(1, reward));
   const learningSignal =
     baseline.samples === 0 ? boundedReward : boundedReward - baseline.mean;
@@ -51,6 +63,8 @@ export function normalizeActionReward(
 }
 
 export function scoreDelayedActionOutcome(outcome: ActionOutcome): number {
+  const rust = scoreDelayedActionOutcomeRust(outcome);
+  if (rust !== null) return rust;
   if (!outcome.survived) return -1;
   const reserveDelta =
     (outcome.endingTroops - outcome.startingTroops) /
@@ -79,6 +93,8 @@ export function scoreDelayedActionOutcome(outcome: ActionOutcome): number {
 export function scoreCounterfactualActionOutcome(
   outcome: CounterfactualActionOutcome,
 ): number {
+  const rust = scoreCounterfactualActionOutcomeRust(outcome);
+  if (rust !== null) return rust;
   if (!outcome.survived) return -1;
   const troopAdvantage =
     (outcome.endingTroops - outcome.expectedTroops) /
@@ -102,6 +118,15 @@ export function applyActionOutcomeLearning(
   priorSamples: number,
   attributionWeight = 1,
 ): ActionOutcomeGenes {
+  const rust = applyActionOutcomeLearningRust(
+    genes,
+    action,
+    reward,
+    priorSamples,
+    attributionWeight,
+  );
+  if (rust !== null) return rust;
+
   const boundedAttribution = Math.max(0.1, Math.min(1, attributionWeight));
   const regularization = 0.002 * boundedAttribution;
   const step =
