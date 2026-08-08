@@ -221,7 +221,8 @@ pub fn plan_adaptive_port_actions(context: AdaptivePortContext) -> AdaptivePortP
         0.0,
         1.0,
     );
-    let trade_demand = accessible_trade_ratio * (1.0 - trade_coverage_ratio) * transport_survival_ratio;
+    let trade_demand =
+        accessible_trade_ratio * (1.0 - trade_coverage_ratio) * transport_survival_ratio;
     let rail_productivity = clamp(context.rail_productivity_ratio, 0.0, 1.0);
 
     let mut scores = [0.0; 5];
@@ -244,9 +245,7 @@ pub fn plan_adaptive_port_actions(context: AdaptivePortContext) -> AdaptivePortP
     scores[AdaptivePortAction::Defend as usize] = naval_threat_ratio * 0.4
         + fleet_gap * 0.25
         + naval_threat_ratio.max(fleet_gap)
-            * (budget_readiness * 0.15
-                + reserve_health * 0.1
-                + transport_survival_ratio * 0.1);
+            * (budget_readiness * 0.15 + reserve_health * 0.1 + transport_survival_ratio * 0.1);
     scores[AdaptivePortAction::Repair as usize] = repair_pressure
         * (0.5
             + naval_threat_ratio * 0.2
@@ -294,11 +293,7 @@ pub fn plan_adaptive_port_actions(context: AdaptivePortContext) -> AdaptivePortP
     let candidate_sample_ratio = clamp(0.12 + urgency * 0.35, 0.12, 0.47);
     let target_coverage_ratio = clamp(0.15 + urgency * 0.55, 0.15, 0.7);
     let minimum_site_quality = clamp(0.62 - urgency * 0.22, 0.4, 0.62);
-    let minimum_budget_coverage = clamp(
-        1.5 - urgency * 0.5 + front_pressure * 0.15,
-        1.0,
-        1.65,
-    );
+    let minimum_budget_coverage = clamp(1.5 - urgency * 0.5 + front_pressure * 0.15, 1.0, 1.65);
     let treasury_adjusted_budget_coverage =
         clamp(minimum_budget_coverage - treasury_depth * 0.08, 1.0, 1.65);
     let required_return_ratio = clamp(
@@ -316,7 +311,8 @@ pub fn plan_adaptive_port_actions(context: AdaptivePortContext) -> AdaptivePortP
     );
     let repair_health_threshold = clamp(0.7 + naval_threat_ratio * 0.22, 0.7, 0.92);
     let stacking_load_threshold = clamp(1.35 - urgency * 0.25, 1.1, 1.35);
-    let require_factory_connection = action != AdaptivePortAction::Defend || naval_threat_ratio < 0.7;
+    let require_factory_connection =
+        action != AdaptivePortAction::Defend || naval_threat_ratio < 0.7;
 
     AdaptivePortPlan {
         action,
