@@ -34,6 +34,8 @@ pub enum ErrorCode {
     TrajectoryRecordLengthMismatch = 14,
     InvalidTrajectorySegmentCount = 15,
     InvalidSpiralSegment = 16,
+    AiCoalitionRecordLengthMismatch = 17,
+    AiOpponentRecordLengthMismatch = 18,
     InternalInvariant = 255,
 }
 
@@ -158,6 +160,7 @@ include!("upload.rs");
 include!("graphics.rs");
 include!("units.rs");
 include!("structure_render.rs");
+include!("ai.rs");
 include!("map_lifecycle.rs");
 include!("map_mutation.rs");
 include!("query.rs");
