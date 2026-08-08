@@ -1,3 +1,23 @@
+import {
+  assessAttackCapacityRust,
+  desiredBankedTroopsRust,
+  desiredCapacityEscapeCityCountRust,
+  desiredDefensiveCityCountRust,
+  desiredFactoryCountRust,
+  desiredFleetTroopBankRust,
+  desiredWarshipCountRust,
+  estimateLandAttackTicksRust,
+  isStrategicallyTrappedRust,
+  minimumDefensePostDepthRust,
+  nationFrontPolicyRust,
+  nationLandFrontAllowedRust,
+  planCapacityEscapeRaidRust,
+  shouldAcceptAllianceRust,
+  shouldBuildCapacityCityRust,
+  shouldRiskDenialRaidRust,
+  shouldTradeLandForTimeRust,
+  tribeAttackCommitmentMultiplierRust,
+} from "../rust/OpenFrontWasmAi";
 import { projectLandCapacity } from "./LandCapacityPolicy";
 
 export type LandAttackEstimate = {
@@ -63,6 +83,13 @@ export function assessAttackCapacity({
   targetTroops: number;
   requiredAdvantage: number;
 }): AttackCapacity {
+  const rust = assessAttackCapacityRust(
+    maxTroops,
+    targetTroops,
+    requiredAdvantage,
+  );
+  if (rust !== null) return rust;
+
   const requiredTroops = Math.max(0, targetTroops * requiredAdvantage);
   return {
     requiredTroops,
@@ -93,6 +120,17 @@ export function planCapacityEscapeRaid({
   requiredCapacityRatio: number;
   terrainCost: number;
 }): CapacityEscapeRaidPlan | null {
+  const rust = planCapacityEscapeRaidRust(
+    noGrowthTicks,
+    reserveRatio,
+    reserveFloor,
+    incomingFronts,
+    outgoingFronts,
+    requiredCapacityRatio,
+    terrainCost,
+  );
+  if (rust !== undefined) return rust;
+
   const protectedReserve = Math.max(0.72, reserveFloor + 0.08);
   if (
     noGrowthTicks < 240 ||
@@ -146,6 +184,18 @@ export function desiredCapacityEscapeCityCount({
   requiredTroops: number;
   cityTroopIncrease: number;
 }): number {
+  const rust = desiredCapacityEscapeCityCountRust(
+    baselineDesiredCities,
+    ownedCities,
+    noGrowthTicks,
+    reserveRatio,
+    incomingFronts,
+    maxTroops,
+    requiredTroops,
+    cityTroopIncrease,
+  );
+  if (rust !== null) return rust;
+
   if (
     noGrowthTicks < 180 ||
     reserveRatio < 0.72 ||
@@ -288,6 +338,17 @@ export function shouldAcceptAlliance({
   usefulRemotePartner,
   crowdedBorders,
 }: AllianceDecision): boolean {
+  const rust = shouldAcceptAllianceRust(
+    availableAllianceSlots,
+    activeConflict,
+    requestorIsTribe,
+    preservesBestExpansionRoute,
+    closesDangerousFront,
+    usefulRemotePartner,
+    crowdedBorders,
+  );
+  if (rust !== null) return rust;
+
   return (
     availableAllianceSlots > 0 &&
     !activeConflict &&
@@ -306,6 +367,12 @@ export function isStrategicallyTrapped({
   hasSeaAccess: boolean;
   hostileBorders: number;
 }): boolean {
+  const rust = isStrategicallyTrappedRust(
+    hasNeutralLand,
+    hasSeaAccess,
+    hostileBorders,
+  );
+  if (rust !== null) return rust;
   return !hasNeutralLand && !hasSeaAccess && hostileBorders > 0;
 }
 
@@ -537,6 +604,15 @@ export function desiredFactoryCount({
   gold: number;
   reserveRatio: number;
 }): number {
+  const rust = desiredFactoryCountRust(
+    economicStops,
+    ownedCities,
+    ownedTiles,
+    gold,
+    reserveRatio,
+  );
+  if (rust !== null) return rust;
+
   if (economicStops < 2 || ownedCities < 2) return 0;
   if (
     ownedCities >= 10 &&
@@ -568,6 +644,14 @@ export function shouldBuildCapacityCity({
   trapped: boolean;
   railConnections: number;
 }): boolean {
+  const rust = shouldBuildCapacityCityRust(
+    reserveRatio,
+    hasNeutralLand,
+    trapped,
+    railConnections,
+  );
+  if (rust !== null) return rust;
+
   return (
     trapped || railConnections > 0 || !hasNeutralLand || reserveRatio >= 0.72
   );
@@ -595,6 +679,17 @@ export function desiredDefensiveCityCount({
   reserveRatio: number;
   incomingTroopRatio?: number;
 }): number {
+  const rust = desiredDefensiveCityCountRust(
+    enemyFronts,
+    activeWars,
+    incomingFronts,
+    ownedCities,
+    ownedTiles,
+    reserveRatio,
+    incomingTroopRatio,
+  );
+  if (rust !== null) return rust;
+
   const hostilePressure =
     Math.max(0, enemyFronts) * 1.5 +
     Math.max(0, activeWars) * 2 +
@@ -659,6 +754,11 @@ export function tribeAttackCommitmentMultiplier(
   attackerTroops: number,
   defenderTroops: number,
 ): number {
+  const rust = tribeAttackCommitmentMultiplierRust(
+    attackerTroops,
+    defenderTroops,
+  );
+  if (rust !== null) return rust;
   return attackerTroops >= Math.max(1, defenderTroops) * 2 ? 2 : 1.08;
 }
 
@@ -672,6 +772,13 @@ export function shouldTradeLandForTime({
   incomingTroopRatio: number;
   activeIncomingFronts: number;
 }): boolean {
+  const rust = shouldTradeLandForTimeRust(
+    reserveRatio,
+    incomingTroopRatio,
+    activeIncomingFronts,
+  );
+  if (rust !== null) return rust;
+
   return (
     reserveRatio <= 0.5 && incomingTroopRatio < 0.75 && activeIncomingFronts > 0
   );
@@ -684,6 +791,9 @@ export function nationFrontPolicy({
   nationFronts: number;
   activeNationWars: number;
 }): NationFrontPolicy {
+  const rust = nationFrontPolicyRust(nationFronts, activeNationWars);
+  if (rust !== null) return rust;
+
   const extraFronts = Math.max(0, nationFronts - 1);
   return {
     reserveFloor: Math.min(
@@ -722,10 +832,22 @@ export function nationLandFrontAllowed({
   activeOffensiveIDs: ReadonlySet<string>;
   maxNationOffensives: number;
 }): boolean {
+  const targetInBorderWar = activeBorderWarIDs.has(targetID);
+  const targetInOffensive = activeOffensiveIDs.has(targetID);
+  const rust = nationLandFrontAllowedRust(
+    isNation,
+    targetInBorderWar,
+    targetInOffensive,
+    activeBorderWarIDs.size,
+    activeOffensiveIDs.size,
+    maxNationOffensives,
+  );
+  if (rust !== null) return rust;
+
   return (
     !isNation ||
-    activeBorderWarIDs.has(targetID) ||
-    activeOffensiveIDs.has(targetID) ||
+    targetInBorderWar ||
+    targetInOffensive ||
     (activeBorderWarIDs.size === 0 &&
       activeOffensiveIDs.size < maxNationOffensives)
   );
@@ -751,6 +873,16 @@ export function shouldRiskDenialRaid({
   targetDistracted: boolean;
   reserveRatio: number;
 }): boolean {
+  const rust = shouldRiskDenialRaidRust(
+    isTribe,
+    nationBorders,
+    targetTroops,
+    ourTroops,
+    targetDistracted,
+    reserveRatio,
+  );
+  if (rust !== null) return rust;
+
   if (isTribe) return true;
   const targetTroopRatio = Math.max(0, targetTroops) / Math.max(1, ourTroops);
   if (nationBorders >= 4) {
@@ -788,6 +920,16 @@ export function desiredBankedTroops({
   reserveFloor: number;
   isTribe: boolean;
 }): number {
+  const rust = desiredBankedTroopsRust(
+    maxTroops,
+    enemyTroops,
+    enemyMaxTroops,
+    enemyFronts,
+    reserveFloor,
+    isTribe,
+  );
+  if (rust !== null) return rust;
+
   const safeCapacity = Math.max(0, maxTroops) * Math.max(0, reserveFloor);
   if (isTribe) {
     return Math.min(
@@ -819,6 +961,14 @@ export function desiredFleetTroopBank({
   ownWarships: number;
   hasTradeTarget: boolean;
 }): number {
+  const rust = desiredFleetTroopBankRust(
+    maxTroops,
+    nearbyHostileWarships,
+    ownWarships,
+    hasTradeTarget,
+  );
+  if (rust !== null) return rust;
+
   const base = hasTradeTarget ? 0.2 : 0.28;
   const escortPenalty = nearbyHostileWarships > ownWarships ? 0.08 : 0;
   return Math.floor(
@@ -913,6 +1063,14 @@ export function desiredWarshipCount({
   vulnerableTradeShips: number;
   navalBias: number;
 }): number {
+  const rust = desiredWarshipCountRust(
+    nearbyHostileWarships,
+    nearbyHostileTransports,
+    vulnerableTradeShips,
+    navalBias,
+  );
+  if (rust !== null) return rust;
+
   const defensiveDemand = Math.min(
     8,
     nearbyHostileWarships + Math.ceil(nearbyHostileTransports / 2),
@@ -966,6 +1124,12 @@ export function minimumDefensePostDepth(
   canCreateLandBuffer: boolean,
   defenseRange: number,
 ): number {
+  const rust = minimumDefensePostDepthRust(
+    canCreateLandBuffer,
+    defenseRange,
+  );
+  if (rust !== null) return rust;
+
   return Math.max(
     2,
     Math.floor(defenseRange * (canCreateLandBuffer ? 0.35 : 0.7)),
@@ -985,6 +1149,16 @@ export function estimateLandAttackTicks({
   combatCost,
   tilesToTake,
 }: LandAttackEstimate): number {
+  const rust = estimateLandAttackTicksRust(
+    attackerTroops,
+    defenderTroops,
+    fraction,
+    borderWidth,
+    combatCost,
+    tilesToTake,
+  );
+  if (rust !== null) return rust;
+
   const committedTroops = Math.max(1, attackerTroops * fraction);
   const relativeProgress = Math.max(
     0.01,
