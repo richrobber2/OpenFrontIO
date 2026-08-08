@@ -214,6 +214,69 @@ export function encodeTerrainTile(
   out[offset + 3] = 255;
 }
 
+/**
+ * Build `[tileRef, terrainByte, packedRGBA]` triples for sparse texture
+ * scattering. Rust owns the hot packing loop when available; the fallback
+ * preserves identical byte layout for stale Wasm assets.
+ */
+export function buildTerrainDeltaRecords(
+  refs: readonly number[],
+  terrainBytes: Uint8Array,
+  w: number,
+  h: number,
+  colors?: TerrainColorOverrides,
+): Uint32Array {
+  if (refs.length !== terrainBytes.length) {
+    throw new Error(
+      `Invalid terrain delta: ${refs.length} refs for ${terrainBytes.length} terrain bytes`,
+    );
+  }
+  if (refs.length === 0) return new Uint32Array(0);
+
+  if (rustGraphics !== null) {
+    try {
+      return rustGraphics.buildTerrainDeltaRecords(
+        refs,
+        terrainBytes,
+        w,
+        h,
+        resolvedRustTerrainPalette(colors),
+      );
+    } catch (error) {
+      rustGraphics = null;
+      if (!rustGraphicsFailureLogged) {
+        rustGraphicsFailureLogged = true;
+        console.warn(
+          "Rust terrain delta packer failed; using TypeScript fallback",
+          error,
+        );
+      }
+    }
+  }
+
+  const records = new Uint32Array(refs.length * 3);
+  const rgba = new Uint8Array(4);
+  const maxRef = w * h;
+  for (let i = 0; i < refs.length; i++) {
+    const ref = refs[i]!;
+    if (!Number.isInteger(ref) || ref < 0 || ref >= maxRef) {
+      throw new Error(`Invalid terrain delta tile reference ${ref}`);
+    }
+    const terrain = terrainBytes[i]!;
+    encodeTerrainTile(terrain, rgba, 0, colors);
+    const offset = i * 3;
+    records[offset] = ref >>> 0;
+    records[offset + 1] = terrain;
+    records[offset + 2] =
+      (rgba[0]! |
+        (rgba[1]! << 8) |
+        (rgba[2]! << 16) |
+        (rgba[3]! << 24)) >>>
+      0;
+  }
+  return records;
+}
+
 export function buildTerrainRGBA(
   terrainBytes: Uint8Array,
   w: number,
