@@ -5,6 +5,7 @@
 
 pub mod abstract_graph;
 pub mod abstract_graph_builder;
+pub mod ai_strategy;
 pub mod air_path;
 pub mod bfs_grid;
 pub mod connected_components;
@@ -28,6 +29,11 @@ pub mod water_path;
 
 pub use abstract_graph::{AbstractEdge, AbstractGraph, AbstractGraphAStar, AbstractNode, Cluster};
 pub use abstract_graph_builder::{AbstractGraphBuilder, DEFAULT_CLUSTER_SIZE};
+pub use ai_strategy::{
+    evaluate_coalition_target, model_opponent, plan_strategic_action, CoalitionHelper,
+    CoalitionTargetEvaluation, OpponentModel, PredictedChoice, StrategicAction, StrategicPlan,
+    StrategicPlanInput,
+};
 pub use air_path::{air_path, AirPathError};
 pub use bfs_grid::{BfsGrid, BfsVisit};
 pub use connected_components::{ConnectedWaterComponents, LAND_COMPONENT_MARKER};
