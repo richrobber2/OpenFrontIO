@@ -341,7 +341,7 @@ pub fn estimate_land_attack_ticks(
         .min(1.5)
         / 0.5;
     let effective_tiles_per_tick = progress_budget_per_tick / (combat_cost.max(0.5) * defender_resistance);
-    tiles_to_take.max(1.0).div_euclid(effective_tiles_per_tick).ceil()
+    (tiles_to_take.max(1.0) / effective_tiles_per_tick).ceil()
 }
 
 #[cfg(test)]
@@ -389,8 +389,14 @@ mod tests {
 
     #[test]
     fn defensive_bank_accounts_for_future_capture_threat() {
-        assert_eq!(desired_banked_troops(1_000.0, 600.0, Some(900.0), 2, 0.48, false), 720.0);
-        assert_eq!(desired_banked_troops(1_000.0, 600.0, Some(900.0), 2, 0.48, true), 480.0);
+        assert_eq!(
+            desired_banked_troops(1_000.0, 600.0, Some(900.0), 2, 0.48, false),
+            720.0
+        );
+        assert_eq!(
+            desired_banked_troops(1_000.0, 600.0, Some(900.0), 2, 0.48, true),
+            480.0
+        );
     }
 
     #[test]
@@ -402,7 +408,13 @@ mod tests {
 
     #[test]
     fn city_pressure_and_land_attack_estimate_match_policy_shape() {
-        assert_eq!(desired_defensive_city_count(2, 1, 1, 3, 4_000, 0.4, 0.8), 9);
-        assert_eq!(estimate_land_attack_ticks(1_000.0, 500.0, 0.2, 4.0, 1.0, 100.0), 17.0);
+        assert_eq!(
+            desired_defensive_city_count(2, 1, 1, 3, 4_000, 0.4, 0.8),
+            9
+        );
+        assert_eq!(
+            estimate_land_attack_ticks(1_000.0, 500.0, 0.2, 4.0, 1.0, 100.0),
+            17.0
+        );
     }
 }
