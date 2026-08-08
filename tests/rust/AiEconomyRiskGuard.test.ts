@@ -60,6 +60,9 @@ describe("growth-aware economic risk guard", () => {
     expect(threatened.scores["activate-rail"]).toBeLessThan(
       safe.scores["activate-rail"],
     );
+    expect(threatened.scores["protect-assets"]).toBeGreaterThan(
+      threatened.scores["activate-rail"],
+    );
     expect(["bank", "protect-assets"]).toContain(threatened.action);
   });
 });
