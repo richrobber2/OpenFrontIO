@@ -17,6 +17,7 @@ pub mod nuke_strip;
 pub mod nuke_trajectory;
 pub mod rail_path;
 pub mod random;
+pub mod spiral_trail;
 pub mod structure_render;
 pub mod territory;
 pub mod tile;
@@ -50,6 +51,10 @@ pub use nuke_trajectory::{
 };
 pub use rail_path::{rail_path, RailPathFinder};
 pub use random::PseudoRandom;
+pub use spiral_trail::{
+    write_spiral_segment_samples, SpiralTrailError, SPIRAL_SAMPLE_FLOATS,
+    SPIRAL_SAMPLES_PER_TILE,
+};
 pub use structure_render::{StructureRenderState, STRUCTURE_FLOATS_PER_INSTANCE};
 pub use territory::OwnerTerritoryAnalysis;
 pub use tile::{
