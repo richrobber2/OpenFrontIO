@@ -7,6 +7,7 @@ import {
   type StructureRenderInput,
   type UnitClassificationInput,
   UNIT_CLASS_ATTACK_RING,
+  UNIT_CLASS_LIGHT,
   UNIT_CLASS_MOBILE,
   UNIT_CLASS_NUKE_ACTIVE,
   UNIT_CLASS_NUKE_TELEGRAPH,
@@ -37,6 +38,23 @@ const MOBILE_TYPES = new Set<string>([
   UnitType.Train,
 ]);
 
+const LIGHT_TYPES = new Set<string>([
+  UnitType.TransportShip,
+  UnitType.TradeShip,
+  UnitType.Warship,
+  UnitType.AtomBomb,
+  UnitType.HydrogenBomb,
+  UnitType.MIRV,
+  UnitType.MIRVWarhead,
+  UnitType.City,
+  UnitType.Port,
+  UnitType.Factory,
+  UnitType.DefensePost,
+  UnitType.SAMLauncher,
+  UnitType.MissileSilo,
+  UnitType.Train,
+]);
+
 function fallbackFlags(unitType: string, isActive: boolean): number {
   if (!isActive) return 0;
 
@@ -45,6 +63,9 @@ function fallbackFlags(unitType: string, isActive: boolean): number {
     flags |= UNIT_CLASS_STRUCTURE;
   } else if (MOBILE_TYPES.has(unitType)) {
     flags |= UNIT_CLASS_MOBILE;
+  }
+  if (LIGHT_TYPES.has(unitType)) {
+    flags |= UNIT_CLASS_LIGHT;
   }
 
   switch (unitType) {
@@ -80,6 +101,7 @@ export class UnitSubsetIndex {
   readonly structures = new Map<number, UnitState>();
   readonly warships = new Map<number, UnitState>();
   readonly progressStructures = new Map<number, UnitState>();
+  readonly lights = new Map<number, UnitState>();
   readonly trails = new Map<number, UnitState>();
   readonly nukeActive = new Map<number, UnitState>();
   readonly nukeTelegraphs = new Map<number, UnitState>();
@@ -142,6 +164,7 @@ export class UnitSubsetIndex {
             update.unitType === UnitType.SAMLauncher ||
             update.unitType === UnitType.MissileSilo),
       );
+      this.sync(this.lights, update.id, state, flags & UNIT_CLASS_LIGHT);
       this.sync(this.trails, update.id, state, flags & UNIT_CLASS_TRAIL);
       this.sync(
         this.nukeActive,
