@@ -173,7 +173,7 @@ pub fn desired_defensive_city_count(
         + active_wars as f64 * 2.0
         + incoming_fronts as f64 * 2.5;
     let territory_baseline = ((owned_tiles as f64 / 1_000.0).ceil() - 1.0).max(0.0) as u32;
-    let reserve_buffer = u32::from(reserve_ratio < 0.5);
+    let reserve_buffer = if reserve_ratio < 0.5 { 1 } else { 0 };
     let overwhelming_buffer = ((incoming_troop_ratio - 0.5).max(0.0) * 2.0).ceil() as u32;
     let pressure_cities = (hostile_pressure / 2.0).ceil() as u32;
 
