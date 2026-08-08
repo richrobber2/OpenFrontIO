@@ -7,6 +7,11 @@ use openfront_core::{
     should_risk_denial_raid, should_trade_land_for_time, tribe_attack_commitment_multiplier,
 };
 
+#[inline]
+fn ai_bool(value: bool) -> u32 {
+    if value { 1 } else { 0 }
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn openfront_ai_assess_attack_capacity(
     max_troops: f64,
@@ -16,7 +21,7 @@ pub extern "C" fn openfront_ai_assess_attack_capacity(
     begin_call();
     let result = assess_attack_capacity(max_troops, target_troops, required_advantage);
     set_f64_result([result.required_troops]);
-    set_result([u32::from(result.reachable)]);
+    set_result([ai_bool(result.reachable)]);
     1
 }
 
@@ -90,7 +95,7 @@ pub extern "C" fn openfront_ai_should_accept_alliance(
     crowded_borders: u32,
 ) -> u32 {
     begin_call();
-    u32::from(should_accept_alliance(
+    ai_bool(should_accept_alliance(
         available_alliance_slots,
         active_conflict != 0,
         requestor_is_tribe != 0,
@@ -108,7 +113,7 @@ pub extern "C" fn openfront_ai_is_strategically_trapped(
     hostile_borders: u32,
 ) -> u32 {
     begin_call();
-    u32::from(is_strategically_trapped(
+    ai_bool(is_strategically_trapped(
         has_neutral_land != 0,
         has_sea_access != 0,
         hostile_borders,
@@ -141,7 +146,7 @@ pub extern "C" fn openfront_ai_should_build_capacity_city(
     rail_connections: u32,
 ) -> u32 {
     begin_call();
-    u32::from(should_build_capacity_city(
+    ai_bool(should_build_capacity_city(
         reserve_ratio,
         has_neutral_land != 0,
         trapped != 0,
@@ -188,7 +193,7 @@ pub extern "C" fn openfront_ai_should_trade_land_for_time(
     active_incoming_fronts: u32,
 ) -> u32 {
     begin_call();
-    u32::from(should_trade_land_for_time(
+    ai_bool(should_trade_land_for_time(
         reserve_ratio,
         incoming_troop_ratio,
         active_incoming_fronts,
@@ -217,7 +222,7 @@ pub extern "C" fn openfront_ai_nation_land_front_allowed(
     max_nation_offensives: u32,
 ) -> u32 {
     begin_call();
-    u32::from(nation_land_front_allowed(
+    ai_bool(nation_land_front_allowed(
         is_nation != 0,
         target_in_border_war != 0,
         target_in_offensive != 0,
@@ -237,7 +242,7 @@ pub extern "C" fn openfront_ai_should_risk_denial_raid(
     reserve_ratio: f64,
 ) -> u32 {
     begin_call();
-    u32::from(should_risk_denial_raid(
+    ai_bool(should_risk_denial_raid(
         is_tribe != 0,
         nation_borders,
         target_troops,
