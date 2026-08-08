@@ -1,3 +1,11 @@
+import {
+  chooseAidRequestRust,
+  preloadRustAllianceAi,
+  shouldCoordinateAttackRust,
+  shouldDonateGoldRust,
+  shouldDonateTroopsRust,
+} from "../rust/OpenFrontWasmAllianceAi";
+
 export type AidRequestKind = "gold" | "troops" | "defense" | null;
 
 export interface AidRequestContext {
@@ -32,7 +40,12 @@ export interface CoordinationContext {
 
 export const DIPLOMACY_MESSAGE_COOLDOWN_TICKS = 240;
 
+void preloadRustAllianceAi();
+
 export function chooseAidRequest(context: AidRequestContext): AidRequestKind {
+  const rust = chooseAidRequestRust(context);
+  if (rust !== undefined) return rust;
+
   if (!context.hasTrustedAlly) return null;
   if (context.ticksSinceLastRequest < DIPLOMACY_MESSAGE_COOLDOWN_TICKS) {
     return null;
@@ -64,6 +77,8 @@ export function chooseAidRequest(context: AidRequestContext): AidRequestKind {
 }
 
 export function shouldDonateTroops(context: DonationContext): boolean {
+  const rust = shouldDonateTroopsRust(context);
+  if (rust !== null) return rust;
   return (
     context.activeNationWars === 0 &&
     context.reserveRatio >= Math.max(0.75, context.reserveFloor + 0.2) &&
@@ -73,6 +88,8 @@ export function shouldDonateTroops(context: DonationContext): boolean {
 }
 
 export function shouldDonateGold(context: DonationContext): boolean {
+  const rust = shouldDonateGoldRust(context);
+  if (rust !== null) return rust;
   return (
     context.gold > context.emergencyGoldFloor * 1.5 &&
     context.allyIncomingTroopRatio >= 0.25 &&
@@ -83,6 +100,8 @@ export function shouldDonateGold(context: DonationContext): boolean {
 export function shouldCoordinateAttack(
   context: CoordinationContext,
 ): boolean {
+  const rust = shouldCoordinateAttackRust(context);
+  if (rust !== null) return rust;
   return (
     context.sharedEnemy &&
     context.enemyActiveWars > 0 &&
