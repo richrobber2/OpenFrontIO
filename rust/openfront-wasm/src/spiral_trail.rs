@@ -36,7 +36,7 @@ pub extern "C" fn openfront_spiral_segment_build(
     }
 
     let steps = (segment_length * SPIRAL_SAMPLES_PER_TILE).ceil();
-    let sample_count = steps + f64::from(include_start != 0);
+    let sample_count = steps + if include_start != 0 { 1.0 } else { 0.0 };
     if !sample_count.is_finite()
         || sample_count < 1.0
         || sample_count > MAX_SPIRAL_SEGMENT_SAMPLES as f64
